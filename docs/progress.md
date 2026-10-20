@@ -33,4 +33,4 @@ Public repository: the initial snapshot commit (exported from the reviewed priva
 None. Product work waits for Spike 002 (ADR-0001, ADR-0005).
 
 ## Next recommended task
-Spike 002(a) after the owner sets the memory ceiling: WPF overlay with a hit-testable dead zone (alpha ≥ 1) — DragEnter without movement and drop fall-through on a transparent pixel with Explorer underneath, plus E1 on the same host. This single run decides ADR-0001 and most of ADR-0005.
+Time-boxed Spike 002 follow-up: root-cause the 5 s WPF render stall (B1) with ETW and a PostMessage hand-off, and run the fast-release race test on both hosts. If WPF fails inside the time-box, adopt a Win32 overlay with a synchronous layered bitmap. In parallel, plan the framework-independent slice.

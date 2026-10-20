@@ -1,6 +1,6 @@
 # ADR-0003: Activation and input strategy during a drag
 
-- **Status:** Proposed — decision drafted 2026-10-20 after Spike 002, pending evaluator review
+- **Status:** Accepted with amendments (2026-10-20): Space + LL hooks on a dedicated thread with an allocation-free PostMessage hand-off. The Raw Input oracle is demoted to candidate (not in V1 slice). The +11–14 ms Raw Input latency claim is withdrawn. Pending: UIPI behaviour and the RegisterHotKey-during-drag alternative.
 - **Date:** 2026-10-19
 - **Related requirements:** UX-001, UX-002, UX-003, UX-006
 

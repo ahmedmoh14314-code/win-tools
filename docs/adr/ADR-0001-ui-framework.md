@@ -1,6 +1,6 @@
 # ADR-0001: UI framework for the overlay and tray application
 
-- **Status:** Proposed — decision drafted 2026-10-20 after Spike 002, pending evaluator review
+- **Status:** Proposed — WPF decision drafted 2026-10-20 but NOT accepted: evaluator blocker B1 (unexplained 5.0 s WPF render stalls during which drops fall through; 1/300 missed DragEnter without load). See spike-002 §Evaluator.
 - **Date:** 2026-10-19
 - **Related requirements:** PLAT-001, UX-001, UX-005, UX-006, PERF-001
 
