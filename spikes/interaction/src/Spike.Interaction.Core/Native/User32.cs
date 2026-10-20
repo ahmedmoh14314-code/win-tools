@@ -62,6 +62,7 @@ public static partial class User32
     [LibraryImport(Lib)] public static partial nint GetActiveWindow();
     [LibraryImport(Lib)] public static partial nint GetFocus();
     [LibraryImport(Lib)] public static partial nint WindowFromPoint(POINT pt);
+    [LibraryImport(Lib)] public static partial uint GetDoubleClickTime();
     [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf16)] public static partial int GetClassNameW(nint hWnd, Span<char> lpClassName, int nMaxCount);
     [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf16)] public static partial int GetWindowTextW(nint hWnd, Span<char> lpString, int nMaxCount);
     [LibraryImport(Lib)] public static partial uint GetWindowThreadProcessId(nint hWnd, out uint lpdwProcessId);

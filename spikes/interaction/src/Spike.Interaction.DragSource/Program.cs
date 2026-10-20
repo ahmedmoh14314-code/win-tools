@@ -51,13 +51,14 @@ finally
 }
 
 public sealed record HarnessOptions(string Mode, TriggerSpec Trigger, int Cycles, int FileCount, int DropOffset, bool Cancel, int HoldTriggerMs, int StartDelayMs, int SettleMs, string LogPath,
-    IReadOnlyList<POINT> TriggerAt, int HoldModifierVk, int Radius96, int ReleaseDelayMs, bool ReleaseWhileMoving, bool EarlyTrigger)
+    IReadOnlyList<POINT> TriggerAt, int HoldModifierVk, int Radius96, int ReleaseDelayMs, bool ReleaseWhileMoving, bool EarlyTrigger,
+    int FastReleaseMs = -1, bool FastFlick = false)
 {
     public static HarnessOptions Parse(string[] args)
     {
         string mode = "self", trigger = "space"; string? log = null;
         int cycles = 5, files = 3, offset = 70, hold = 40, startDelay = 1500, settle = 250, holdMod = 0, radius = 110, releaseDelay = 120;
-        bool cancel = false, releaseWhileMoving = false, earlyTrigger = false;
+        bool cancel = false, releaseWhileMoving = false, earlyTrigger = false, fastFlick = false; var fastRelease = -1;
         var triggerAt = new List<POINT>();
         for (var i = 0; i < args.Length; i++)
         {
@@ -89,12 +90,14 @@ public sealed record HarnessOptions(string Mode, TriggerSpec Trigger, int Cycles
                 case "--radius": radius = int.Parse(Next()); break; // must match the host's --radius for corner drop placement
                 case "--release-delay": releaseDelay = int.Parse(Next()); break;   // ms between reaching the drop point and releasing (default 120)
                 case "--release-while-moving": releaseWhileMoving = true; break;   // release in the middle of the glide to the drop point
+                case "--fast-release": fastRelease = int.Parse(Next()); break;     // Spike 002C: release N ms after the trigger key-down (key triggers only)
+                case "--fast-flick": fastFlick = true; break;                      // with --fast-release: jump to the sector right after the key-down
                 case "--early-trigger": earlyTrigger = true; break;                // press the trigger right after button-down, before the drag threshold
                 default: throw new ArgumentException($"Unknown option {args[i]}");
             }
         }
         log ??= Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "results", $"harness-{mode}-{DateTime.Now:yyyyMMdd-HHmmss}.jsonl");
-        return new HarnessOptions(mode, TriggerSpec.Parse(trigger), cycles, files, offset, cancel, hold, startDelay, settle, Path.GetFullPath(log), triggerAt, holdMod, radius, releaseDelay, releaseWhileMoving, earlyTrigger);
+        return new HarnessOptions(mode, TriggerSpec.Parse(trigger), cycles, files, offset, cancel, hold, startDelay, settle, Path.GetFullPath(log), triggerAt, holdMod, radius, releaseDelay, releaseWhileMoving, earlyTrigger, fastRelease, fastFlick);
     }
 }
 
@@ -118,6 +121,7 @@ public static class DragScript
             InputSimulator.GlideTo(ta.X, ta.Y, steps: 16, stepDelayMs: 10);   // long glide to the edge/corner point
         }
         Thread.Sleep(o.SettleMs);
+        if (o.FastReleaseMs >= 0) { FastRelease(o, log, cycle, t0, releaseGuard); return; }
         var tTrig = Stopwatch.GetTimestamp();
         InputSimulator.PressTrigger(o.Trigger, o.HoldTriggerMs);    // overlay should appear under the cursor
         User32.GetCursorPos(out var c);
@@ -143,7 +147,7 @@ public static class DragScript
             InputSimulator.GlideTo((c.X + dropX) / 2, (c.Y + dropY) / 2);
             var reasonMoving = releaseGuard?.Invoke((c.X + dropX) / 2, (c.Y + dropY) / 2);
             if (reasonMoving is null) { InputSimulator.LeftUp(); log.Event("script.release", new { cycle, whileMoving = true }); InputSimulator.GlideTo(dropX, dropY, 3, 5); }
-            else { log.Event("script.releaseRefused", new { cycle, reason = reasonMoving }); InputSimulator.Tap(VK.ESCAPE); Thread.Sleep(150); InputSimulator.LeftUp(); }
+            else { log.Event("script.releaseRefused", new { cycle, reason = reasonMoving }); InputSimulator.Tap(VK.ESCAPE); Thread.Sleep(150); InputSimulator.LeftUp(); Thread.Sleep((int)User32.GetDoubleClickTime() + 200); }
             if (o.HoldModifierVk != 0) { Thread.Sleep(50); InputSimulator.KeyUp(o.HoldModifierVk); }
             return;
         }
@@ -157,6 +161,7 @@ public static class DragScript
             log.Event("script.escape", new { cycle });
             Thread.Sleep(150);
             InputSimulator.LeftUp();
+            Thread.Sleep((int)User32.GetDoubleClickTime() + 200); // see FastRelease: no accidental double-click on the file
         }
         else
         {
@@ -164,6 +169,31 @@ public static class DragScript
             log.Event("script.release", new { cycle });
         }
         if (o.HoldModifierVk != 0) { Thread.Sleep(50); InputSimulator.KeyUp(o.HoldModifierVk); }
+    }
+
+    /// <summary>Spike 002C: trigger key-down, optionally jump to the sector, then release the button N ms after the key-down
+    /// (busy-wait; Sleep's default resolution is ~15.6 ms). Models a user who presses the trigger and lets go immediately.</summary>
+    private static void FastRelease(HarnessOptions o, SpikeLog log, int cycle, long t0, Func<int, int, string?>? releaseGuard)
+    {
+        var vk = o.Trigger.VirtualKey ?? throw new ArgumentException("--fast-release needs a key trigger");
+        User32.GetCursorPos(out var c);
+        var diag = (int)Math.Round(o.DropOffset * 0.7071);
+        var (rx, ry) = o.FastFlick ? (c.X + diag, c.Y + diag) : (c.X, c.Y);
+        var tTrig = Stopwatch.GetTimestamp();
+        InputSimulator.KeyDown(vk);
+        log.Event("script.trigger", new { cycle, sinceLeftDownMs = Math.Round(SpikeLog.MsBetween(t0, tTrig), 1), at = $"({c.X},{c.Y})", fastReleaseMs = o.FastReleaseMs, flick = o.FastFlick }, tTrig);
+        if (o.FastFlick) InputSimulator.MoveTo(rx, ry);
+        while (SpikeLog.MsBetween(tTrig, Stopwatch.GetTimestamp()) < o.FastReleaseMs) Thread.SpinWait(50);
+        var refuse = releaseGuard?.Invoke(rx, ry);   // Explorer mode: decided at the release instant; never release over Explorer itself
+        long tRel;
+        if (refuse is null) { tRel = Stopwatch.GetTimestamp(); InputSimulator.LeftUp(); }
+        else { tRel = Stopwatch.GetTimestamp(); InputSimulator.Tap(VK.ESCAPE); Thread.Sleep(150); InputSimulator.LeftUp(); }
+        log.Event(refuse is null ? "script.release" : "script.releaseRefused", new { cycle, sinceTriggerMs = Math.Round(SpikeLog.MsBetween(tTrig, tRel), 2), at = $"({rx},{ry})", reason = refuse }, tRel);
+        Thread.Sleep(o.HoldTriggerMs);
+        InputSimulator.KeyUp(vk);
+        // A cancelled drag ends with a plain button-up on the file; the next cycle's button-down on the same file must not
+        // complete a double-click (that opened the sample file once, 2026-10-20).
+        if (refuse is not null) Thread.Sleep((int)User32.GetDoubleClickTime() + 200);
     }
 }
 

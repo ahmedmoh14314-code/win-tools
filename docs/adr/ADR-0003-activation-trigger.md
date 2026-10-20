@@ -1,6 +1,6 @@
 # ADR-0003: Activation and input strategy during a drag
 
-- **Status:** Accepted with amendments (2026-10-20): Space + LL hooks on a dedicated thread with an allocation-free PostMessage hand-off. The Raw Input oracle is demoted to candidate (not in V1 slice). The +11–14 ms Raw Input latency claim is withdrawn. Pending: UIPI behaviour and the RegisterHotKey-during-drag alternative.
+- **Status:** Accepted with amendments (2026-10-20, confirmed 2026-10-21): Space + low-level hooks on a dedicated thread, minimal allocation-free callback, asynchronous PostMessage hand-off. Raw Input is an investigated fallback and is not implemented in V1. No Raw Input latency figure is claimed (withdrawn, evaluator M2). Open: UIPI behaviour, the RegisterHotKey-during-drag alternative.
 - **Date:** 2026-10-19
 - **Related requirements:** UX-001, UX-002, UX-003, UX-006
 
@@ -12,8 +12,8 @@ The wheel must be summoned while an OLE drag is in progress and the mouse button
 
 **Input mechanism (Spike 002B):**
 - **Low-level keyboard and mouse hooks — ADOPT (primary).** Installed together (all or nothing) on a dedicated thread that only pumps messages and posts compact events to the UI thread. Callbacks: no allocation, no I/O, no locks shared with the UI thread, `try/catch` around everything, return immediately. The trigger key is not swallowed in V1 (no measured need); if swallowing is ever added, down, auto-repeat and up are swallowed as a pair, and Esc never.
-- **Raw Input — KEEP AS FALLBACK.** Keyboard only, `RIDEV_INPUTSINK` on the host's message-only window. Used (a) as the event-driven hook-health oracle: a raw key-down that the keyboard hook did not see within ≈ 250 ms means the hook is gone; (b) as degraded-mode activation if hook installation fails (no suppression possible, +11–14 ms). Raw mouse is not registered (system-wide message per mouse move).
-- **Failure detection without polling:** keyboard hook via the Raw Input oracle; mouse hook at trigger time (left button down per `GetAsyncKeyState` but no drag seen by the mouse hook); re-check on session unlock and power resume. On evidence: re-install both hooks from the hook thread, log locally, show "trigger unavailable" if re-installation fails. Never re-install blindly or on a timer.
+- **Raw Input — investigated fallback, not implemented in V1.** Spike 002B showed keyboard Raw Input (`RIDEV_INPUTSINK`) keeps arriving during a foreign OLE drag and distinguishes injected input. It cannot suppress keys. Its latency was not established (the measurement included queueing behind overlay work and is withdrawn). It would be the basis of a future hook-health detector or a degraded activation path; it enters scope only with a demonstrated need.
+- **Hook health (future reliability requirement, not built in V1):** Windows gives no notification when it removes a low-level hook. V1 keeps the resident process allocation-light so the hook thread is not starved, logs hook installation failures, and does not re-install blindly or on a timer. Detection and recovery (e.g. a Raw Input comparison, a check at trigger time, a re-check on unlock/resume) are a recorded future requirement.
 
 ## Alternatives considered
 Measured in Spike 001 (2026-10-20, Windows 11, Explorer and shell-default drag sources, `docs/research/2026-10-19-interaction-spike.md`):
@@ -32,10 +32,10 @@ Not measured: false-positive rate in daily use, conflicts with other apps' Space
 
 ## Consequences
 - Known Windows limitations: no notification when Windows removes a hook; the default `LowLevelHooksTimeout` is undocumented (1000 ms cap); hooks and Raw Input do not see input while an elevated window is foreground (UIPI) — documented, not worked around (no UIAccess); the trigger press that reveals a removed hook is lost.
-- Measured robustness: 0 lost activations at the hook level under heavy and extreme GC pressure; no removal observed in 314 runtime suspensions up to ≈ 550 ms; the UI thread, not the hook, is the weak point (ADR-0001 rule 3).
+- Measured robustness: 0 lost activations at the hook level under heavy and extreme GC pressure; no removal observed in 314 runtime suspensions up to ≈ 550 ms, but hook-entry delay reached 489 ms under forced blocking GC and removal beyond the timeout was not tested. The GC risk is reduced (allocation-light resident process, conversion in the worker), not eliminated.
 - AV/EDR: public EDR rules flag unsigned, recently built executables calling `SetWindowsHookEx(WH_KEYBOARD_LL)`, including managed callers; sign the binaries, install per-user into a stable folder, keep the hook DLL-free (in-process, no injection). Not tested against a real EDR.
-- Event threading: hook thread → posted message → UI thread state machine (`InteractionSession`); Raw Input on the UI thread.
-- Test obligations: debug-only fault injection that stalls the hook callback beyond the timeout, to prove detection and re-installation; the Raw Input oracle comparison as a unit-testable component.
+- Event threading: hook thread → posted message → UI thread state machine.
+- Test obligations (when hook health is built): debug-only fault injection that stalls the hook callback beyond the timeout.
 
 ## Evidence / experiments
 **Spike 002 (2026-10-20):** `docs/research/2026-10-20-spike-002.md` (dead-zone hit-testing, Win32 vs WPF on identical runs, hooks under GC pressure, Raw Input during Explorer drags, 1500-cycle memory plateau).
@@ -50,4 +50,4 @@ Spike 001 (`spikes/interaction/`, results in `docs/research/2026-10-19-interacti
 - Still open before acceptance: human "feel" pass; what other foreground apps do with an unswallowed Space during their own drags (automatable via UIA selection checks); elevated sources (M12); right button; early trigger (before Explorer enters `DoDragDrop`) and trigger over another app's window.
 
 ## Evaluator review
-Pending.
+Spike 002 evaluator (2026-10-20): acceptable with amendments (Space trigger, dedicated hook thread, allocation-free hand-off, Raw Input demoted, M2 latency claim withdrawn). Amendments applied 2026-10-21.

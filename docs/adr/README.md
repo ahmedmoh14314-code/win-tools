@@ -5,9 +5,9 @@ Template: `template.md`. Numbering is sequential and never reused. Old ADRs are 
 | ADR | Title | Status | Needs |
 |---|---|---|---|
 | [ADR-0000](ADR-0000-engineering-harness.md) | Record decisions as ADRs; engineering harness before product code | Accepted | — |
-| [ADR-0001](ADR-0001-ui-framework.md) | UI framework: WPF vs WinUI 3 vs Win32/hybrid | Proposed | Spike + research |
+| [ADR-0001](ADR-0001-ui-framework.md) | UI technology for the radial drag/drop overlay | Accepted (native Win32 overlay) | — |
 | [ADR-0002](ADR-0002-supported-windows-versions.md) | Supported Windows versions and .NET target | Proposed | Product decision + API survey |
-| [ADR-0003](ADR-0003-activation-trigger.md) | Activation / input strategy during drag | Proposed | Spike (critical) |
+| [ADR-0003](ADR-0003-activation-trigger.md) | Activation / input strategy during drag | Accepted with amendments | UIPI, RegisterHotKey alternative |
 | [ADR-0004](ADR-0004-radial-overlay-implementation.md) | Radial overlay window implementation | Proposed | Spike |
 | [ADR-0005](ADR-0005-process-isolation-model.md) | Process isolation / worker model | Proposed | Design + spike |
 | [ADR-0006](ADR-0006-image-conversion-engine.md) | Image conversion engine for V1 | Proposed | License matrix + benchmark |

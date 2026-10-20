@@ -3,34 +3,34 @@
 Keep this a snapshot, not a diary. Update at the end of every session (workflow step 13).
 
 ## Current phase
-**Phase 1B — reference review + Spike 001 closure: done (2026-10-20).** Evaluator verdict: CONDITIONAL GO for the framework-independent part of the first slice once a plan is approved; overlay/tray/App host blocked on ADR-0001/0003/0005. No product code, no conversion libraries. Phase 2 (Spike 002: overlay framework + input robustness) in progress.
+**Experimental framework phase closed (2026-10-21).** ADR-0001 is Accepted: native Win32 radial/drop overlay. ADR-0003 is Accepted with amendments: Space trigger, low-level hooks on a dedicated thread, asynchronous hand-off. Next comes the first product slice on branch `feat/first-image-conversion-slice`: PNG→JPEG and JPEG→PNG, end to end.
 
 ## Last known-good commit
-Public repository: the initial snapshot commit (exported from the reviewed private engineering tree). Earlier checkpoints are kept in the private archive.
+`main`: the Spike 002C documentation commit (2026-10-21). Earlier checkpoints are kept in the private archive.
 
 ## Work completed (this phase)
-- Reference reviews in `docs/research/references/` (Action Wheel MIT, FileConverter GPL research-only + 579 issues, DragShift/Gradial/AutoHotPie MIT, WinUI 3 feasibility, input-hook robustness, Tangerine public behaviour) with a verified licensing ledger; nothing copied.
-- Decision matrix: `docs/research/reference-implementations.md`. Proposal: `docs/architecture/product-architecture-proposal.md`.
-- Spike 001 closure (`2026-10-19-interaction-spike.md` §R-K): hardened Explorer harness (location-based identity, re-verify before every injection, close own view only); Explorer release outside the ring clean; release timing, early trigger, swallow, right button (rejected); 1000/1000 cycles with one gen0 GC; external idle CPU 0.077 %.
-- Requirement ledger: 7 new requirements from the review (UX-007..009, SAFE-004/005, SEC-003, DIST-003); 34 total.
-- Repository prepared for publication: rules in `docs/engineering/rules/`, entry document `CONTRIBUTING.md`, no local tooling configuration tracked.
+- Spike 001 (interaction feasibility) and Spike 002 (dead zone, Win32 vs WPF, hooks under GC pressure, Raw Input, memory plateau). See `docs/research/`.
+- Spike 002C ran a stall probe and found the WPF overlay's 5 s blocks are UI Automation / UI-thread stalls, not the watchdog:
+  - a watchdog of 2/5/8 s did not change the stall;
+  - with UIA disabled, the run had 0 stalls and 200/200 drops.
+- Spike 002C fast release showed no host-specific loss once the overlay existed. Explorer fast release was not obtained because of harness defects; those are fixed but not re-run.
+- Reference reviews and the licensing ledger are in `docs/research/references/`. The requirement ledger holds 34 entries.
 
 ## Decisions made
-- Drag modifiers, middle and right buttons are not triggers (measured + DragShift evidence).
-- Post-release rule: wait for OLE Drop/DragLeave after DragEnter; grace only without DragEnter; Esc ignored while pending.
-- Engines only in an on-demand worker; output via temp → validate → exclusive create; WIC codecs by CLSID/Microsoft vendor.
-- WinUI 3 rejected for the V1 overlay (no public transparency API, open bugs).
-- No polling anywhere in the idle path, including hook liveness.
+- Drag modifiers, the middle button and the right button are not triggers. Space is the default trigger.
+- Post-release rule: after `DragEnter`, wait for OLE Drop/DragLeave. A short grace applies only without DragEnter. Esc is ignored while a drop is pending.
+- The overlay is a native Win32 window. WPF is not in the resident interaction path. Future settings UI is deferred.
+- Engines run only in an on-demand worker. Output goes temp → validate → exclusive create. No polling in the idle path.
+- Raw Input and hook-health recovery are deferred future reliability work.
 
 ## Open questions (each with the experiment or decision that closes it)
-- ADR-0001 framework: owner sets an idle private-bytes ceiling; Spike 002(a) (WPF dead zone alpha ≥ 1: DragEnter without movement, fall-through) decides WPF vs hybrid.
-- ADR-0005 trigger detection: E1 (hook entry latency under GC churn, in the chosen stack), E2 (Raw Input during an Explorer drag).
-- Capability at DragEnter: spike row (HDROP + bounded sniff, placeholders).
-- Memory: 1000-cycle private-bytes growth (≈2 MB native) misses the 0-growth budget; explain.
-- Not testable here: multi-monitor/mixed DPI, Windows 10, Desktop source (do in Windows Sandbox), elevated source (M12), feel pass (human).
+- Explorer fast-release behaviour: product acceptance test in the first slice.
+- Exact cause of the WPF ≈ 5 s CLR wait inside UIA: recorded as a rejected path, not pursued.
+- Overlay accessibility (own MSAA/UIA provider that cannot block the overlay thread): before V1 ships.
+- Not testable here: multi-monitor/mixed DPI, Windows 10, Desktop source (do it in Windows Sandbox), elevated source, the human feel pass.
 
 ## Current blockers
-None. Product work waits for Spike 002 (ADR-0001, ADR-0005).
+None.
 
 ## Next recommended task
-Time-boxed Spike 002 follow-up: root-cause the 5 s WPF render stall (B1) with ETW and a PostMessage hand-off, and run the fast-release race test on both hosts. If WPF fails inside the time-box, adopt a Win32 overlay with a synchronous layered bitmap. In parallel, plan the framework-independent slice.
+First product slice (PNG↔JPEG) on `feat/first-image-conversion-slice`, reviewed through a pull request.

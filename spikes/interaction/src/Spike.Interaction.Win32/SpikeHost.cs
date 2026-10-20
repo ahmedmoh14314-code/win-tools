@@ -130,7 +130,8 @@ public sealed class SpikeHost : IDisposable
                     case SessionCommand.AwaitDrop:
                     case SessionCommand.AwaitDropGrace:
                         if (_opt.HideOnRelease) { _session.NotifyGraceExpired(); _overlay.Hide("LeftButtonReleased(hideOnRelease)"); break; } // negative control
-                        User32.SetTimer(_msgWindow.Handle, GRACE_TIMER, cmd == SessionCommand.AwaitDrop ? WATCHDOG_MS : GRACE_MS, 0);
+                        User32.SetTimer(_msgWindow.Handle, GRACE_TIMER, cmd == SessionCommand.AwaitDrop ? (uint)_opt.WatchdogMs : GRACE_MS, 0);
+                        _log.Event("watchdog.armed", new { kind = cmd.ToString(), ms = cmd == SessionCommand.AwaitDrop ? _opt.WatchdogMs : (int)GRACE_MS });
                         break;
                 }
                 return 0;
@@ -139,6 +140,7 @@ public sealed class SpikeHost : IDisposable
             {
                 User32.KillTimer(_msgWindow.Handle, GRACE_TIMER);
                 var inside = _session.DragInside;
+                _log.Event("watchdog.fired", new { state = _session.State.ToString(), dragInside = inside });
                 if (_session.NotifyGraceExpired() == SessionCommand.HideOverlay) _overlay.Hide(inside ? "watchdogExpired" : "releaseGraceExpired");
                 return 0;
             }

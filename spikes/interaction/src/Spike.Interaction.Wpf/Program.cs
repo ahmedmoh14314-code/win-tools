@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
+using Spike.Interaction.Core.Diagnostics;
 using Spike.Interaction.Core.Input;
 using Spike.Interaction.Core.Native;
 using Spike.Interaction.Core.Session;
@@ -21,13 +22,13 @@ internal static class Program
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         var detector = new TriggerDetector(opt.Trigger);
         var session = new InteractionSession(opt.RequireDrag);
-        var overlay = new WpfOverlayWindow(log, opt.Radius96, opt.Sectors, opt.DeadZoneAlpha);
+        var overlay = new WpfOverlayWindow(log, opt.Radius96, opt.Sectors, opt.DeadZoneAlpha, opt.NoUia);
         var dispatcher = Dispatcher.CurrentDispatcher;
         // After the hook's button-up the overlay stays visible until OLE Drop/DragLeave or this grace period (see InteractionSession).
         // Release with a drag inside: wait for OLE Drop/DragLeave (5 s watchdog only guards a dead source). Release with
         // no drag inside: 300 ms grace. See InteractionSession.
         var grace = new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Send, (_, _) => { }, dispatcher);
-        grace.Tick += (_, _) => { grace.Stop(); var inside = session.DragInside; if (session.NotifyGraceExpired() == SessionCommand.HideOverlay) overlay.HideOverlay(inside ? "watchdogExpired" : "releaseGraceExpired"); };
+        grace.Tick += (_, _) => { grace.Stop(); var inside = session.DragInside; log.Event("watchdog.fired", new { state = session.State.ToString(), dragInside = inside }); if (session.NotifyGraceExpired() == SessionCommand.HideOverlay) overlay.HideOverlay(inside ? "watchdogExpired" : "releaseGraceExpired"); };
         grace.Stop();
         overlay.Dropped += (_, _) => { grace.Stop(); session.NotifyDropHandled(); };
         overlay.DragEntered += session.NotifyDragEntered;
@@ -52,14 +53,19 @@ internal static class Program
         void Post(TriggerDetector.Decision d, bool leftDown, bool dragging, long ts) => dispatcher.BeginInvoke(DispatcherPriority.Send, () =>
         {
             var cmd = session.Apply(d, leftDown, dragging);
-            if (d is TriggerDetector.Decision.Activate or TriggerDetector.Decision.Escape)
-                log.Event("decision", new { d = d.ToString(), leftDown, dragging, cmd = cmd.ToString(), state = session.State.ToString(), hookToUiMs = Math.Round(SpikeLog.MsBetween(ts, Stopwatch.GetTimestamp()), 3) }, ts);
+            if (d is TriggerDetector.Decision.Activate or TriggerDetector.Decision.Escape || cmd != SessionCommand.None)
+                log.Event("decision", new { d = d.ToString(), leftDown, dragging, cmd = cmd.ToString(), state = session.State.ToString(), dragInside = session.DragInside, fg = d == TriggerDetector.Decision.LeftButtonReleased ? UnderCursor.Foreground() : null, underCursor = d == TriggerDetector.Decision.LeftButtonReleased ? UnderCursor.Window() : null, hookToUiMs = Math.Round(SpikeLog.MsBetween(ts, Stopwatch.GetTimestamp()), 3) }, ts);
             if (cmd == SessionCommand.ShowOverlay) overlay.ShowAtCursor(ts);
             else if (cmd == SessionCommand.HideOverlay) { grace.Stop(); overlay.HideOverlay(d.ToString()); }
             else if (cmd is SessionCommand.AwaitDrop or SessionCommand.AwaitDropGrace)
             {
                 if (opt.HideOnRelease) { session.NotifyGraceExpired(); overlay.HideOverlay("LeftButtonReleased(hideOnRelease)"); }
-                else { grace.Interval = TimeSpan.FromMilliseconds(cmd == SessionCommand.AwaitDrop ? 5000 : 300); grace.Start(); }
+                else
+                {
+                    var ms = cmd == SessionCommand.AwaitDrop ? opt.WatchdogMs : 300;
+                    grace.Interval = TimeSpan.FromMilliseconds(ms); grace.Start();
+                    log.Event("watchdog.armed", new { kind = cmd.ToString(), ms });
+                }
             }
         });
 
@@ -70,9 +76,12 @@ internal static class Program
         hooks.Start();
         var gcp = Spike.Interaction.Core.Diagnostics.GcPressure.Start(opt.GcPressure, log);
         log.Event("hooks.installed");
+        StallProbe? probe = null;
+        if (opt.ProbeStalls) probe = new StallProbe(log, seq => dispatcher.BeginInvoke(DispatcherPriority.Send, () => probe!.OnWork(seq)));
 
         var timer = new DispatcherTimer(TimeSpan.FromSeconds(opt.StatsIntervalSeconds), DispatcherPriority.Background, (_, _) =>
         {
+            if (opt.GcOnStats) { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); } // same method as the Win32 host
             var now = ProcessSnapshot.Take();
             var hs = hooks.Stats;
             log.Event("stats", new { cpuPct = Math.Round(ProcessSnapshot.CpuPercentBetween(last, now), 3), proc = now.ToLogData(), hookKbMaxMs = Math.Round(hs.KbMaxMs, 3), hookMouseMaxMs = Math.Round(hs.MouseMaxMs, 3), hookKbCalls = hs.KbCalls, hookMouseCalls = hs.MouseCalls, overlayVisible = overlay.IsVisible, sessionState = session.State.ToString(), hookLag = hooks.LagSummary(), gcp = gcp?.Summary() });
@@ -83,6 +92,7 @@ internal static class Program
         Console.WriteLine($"WPF spike overlay running. Trigger: {opt.Trigger} (swallow={opt.SwallowTrigger}, requireDrag={opt.RequireDrag}). Log: {log.Path}");
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; dispatcher.BeginInvoke(app.Shutdown); };
         app.Run();
+        probe?.Dispose();
         log.Event("host.stop", new { stats = ProcessSnapshot.Take().ToLogData() });
         return 0;
     }

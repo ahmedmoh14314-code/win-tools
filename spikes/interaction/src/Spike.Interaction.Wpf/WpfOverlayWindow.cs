@@ -27,7 +27,7 @@ public sealed class WpfOverlayWindow : Window
     private int _hotSector = -1;
     private int _cycle;
     private long _activateTs, _showTs;
-    private bool _awaitingFrame, _awaitingEnter;
+    private bool _awaitingFrame, _awaitingEnter, _awaitingOver;
     private int _movesSinceShow;
     private double _scale = 1;
 
@@ -37,8 +37,11 @@ public sealed class WpfOverlayWindow : Window
 
     private readonly int _deadZoneAlpha;
 
-    public WpfOverlayWindow(SpikeLog log, int radius96, int sectors, int deadZoneAlpha = -1)
+    private readonly bool _noUia;
+
+    public WpfOverlayWindow(SpikeLog log, int radius96, int sectors, int deadZoneAlpha = -1, bool noUia = false)
     {
+        _noUia = noUia;
         _log = log; _radius96 = radius96; _sectors = sectors; _deadZoneAlpha = deadZoneAlpha;
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
@@ -62,6 +65,14 @@ public sealed class WpfOverlayWindow : Window
             var ex = User32.GetWindowLongPtrW(hwnd, User32.GWL_EXSTYLE);
             User32.SetWindowLongPtrW(hwnd, User32.GWL_EXSTYLE, ex | (nint)(WS.EX_NOACTIVATE | WS.EX_TOOLWINDOW));
             _log.Event("overlay.created", new { hwnd = hwnd.ToString("X") });
+            // Spike 002C diagnostic: who asks the overlay for an accessibility object, and when.
+            HwndSource.FromHwnd(hwnd)?.AddHook((nint h, int msg, nint w, nint l, ref bool handled) =>
+            {
+                if (msg != 0x003D) return 0; // WM_GETOBJECT
+                _log.Event("uia.getObject", new { cycle = _cycle, objId = (int)l, visible = IsVisible, suppressed = _noUia });
+                if (_noUia) handled = true; // A/B: no accessibility object, so UIA never calls into managed code
+                return 0;
+            });
         };
     }
 
@@ -111,7 +122,7 @@ public sealed class WpfOverlayWindow : Window
         var sizePx = OverlayPlacement.Scale(_radius96 * 2, dpi);
         var rect = OverlayPlacement.Place(cursor, work, sizePx, sizePx);
         var fgBefore = User32.GetForegroundWindow();
-        _hotSector = -1; _movesSinceShow = 0; _awaitingFrame = true; _awaitingEnter = true;
+        _hotSector = -1; _movesSinceShow = 0; _awaitingFrame = true; _awaitingEnter = true; _awaitingOver = true;
         SetHot(-1);
 
         // WPF positions in DIPs relative to the primary monitor's DPI at startup; set via SetWindowPos in pixels instead.
@@ -128,6 +139,7 @@ public sealed class WpfOverlayWindow : Window
             cycle = _cycle, cursor = cursor.ToString(), monitor = device, dpi, work = work.ToString(), rect = rect.ToString(),
             hookToShowMs = Math.Round(SpikeLog.MsBetween(activateTs, _showTs), 3),
             fgBefore = User32.ClassNameOf(fgBefore), fgAfter = User32.ClassNameOf(fgAfter), focusStolen = fgBefore != fgAfter,
+            underCursorAfterShow = UnderCursor.Window(),
         }, _showTs);
     }
 
@@ -178,6 +190,7 @@ public sealed class WpfOverlayWindow : Window
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
         _movesSinceShow++;
+        if (_awaitingOver) { _awaitingOver = false; _log.Event("drag.overFirst", new { cycle = _cycle, showToOverMs = Math.Round(SpikeLog.MsBetween(_showTs, Stopwatch.GetTimestamp()), 3) }); }
         SetHot(HitSector(e));
     }
 
