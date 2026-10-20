@@ -27,6 +27,8 @@ public sealed class SpikeHost : IDisposable
     private readonly InteractionSession _session;
     private readonly MessageWindow _msgWindow;
     private ProcessSnapshot _lastStats;
+    private Spike.Interaction.Core.Diagnostics.GcPressure? _gc;
+    private RawInputProbe? _raw;
     private int _decisionsPosted;
 
     public SpikeHost(SpikeOptions opt, SpikeLog log)
@@ -55,6 +57,7 @@ public sealed class SpikeHost : IDisposable
     {
         _log.Event("host.start", new
         {
+            processUptimeMs = Math.Round((DateTime.Now - Process.GetCurrentProcess().StartTime).TotalMilliseconds, 1),
             trigger = _opt.Trigger.Name,
             swallow = _opt.SwallowTrigger,
             requireDrag = _opt.RequireDrag,
@@ -65,6 +68,8 @@ public sealed class SpikeHost : IDisposable
             stats = _lastStats.ToLogData(),
         });
         _hooks.Start();
+        _gc = Spike.Interaction.Core.Diagnostics.GcPressure.Start(_opt.GcPressure, _log);
+        if (_opt.RawInput) _raw = new RawInputProbe(_log, _msgWindow.Handle, _opt.Trigger.VirtualKey ?? 0);
         _log.Event("hooks.installed");
         if (_opt.StatsIntervalSeconds > 0) User32.SetTimer(_msgWindow.Handle, STATS_TIMER, (uint)(_opt.StatsIntervalSeconds * 1000), 0);
 
@@ -142,6 +147,7 @@ public sealed class SpikeHost : IDisposable
                 return 0;
             case WM.TIMER when wParam == STATS_TIMER:
             {
+                if (_opt.GcOnStats) { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); }
                 var now = ProcessSnapshot.Take();
                 var hs = _hooks.Stats;
                 _log.Event("stats", new
@@ -154,10 +160,16 @@ public sealed class SpikeHost : IDisposable
                     hookMouseCalls = hs.MouseCalls,
                     overlayVisible = _overlay.IsVisible,
                     sessionState = _session.State.ToString(),
+                    hookLag = _hooks.LagSummary(),
+                    gcp = _gc?.Summary(),
+                    raw = _raw?.Summary(),
                 });
                 _lastStats = now;
                 return 0;
             }
+            case RawInputProbe.WM_INPUT:
+                _raw?.Handle(wParam, lParam);
+                return User32.DefWindowProcW(hwnd, msg, wParam, lParam);
             case WM.CLOSE:
                 User32.PostQuitMessage(0);
                 return 0;

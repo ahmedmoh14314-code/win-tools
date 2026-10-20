@@ -21,7 +21,7 @@ internal static class Program
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         var detector = new TriggerDetector(opt.Trigger);
         var session = new InteractionSession(opt.RequireDrag);
-        var overlay = new WpfOverlayWindow(log, opt.Radius96, opt.Sectors);
+        var overlay = new WpfOverlayWindow(log, opt.Radius96, opt.Sectors, opt.DeadZoneAlpha);
         var dispatcher = Dispatcher.CurrentDispatcher;
         // After the hook's button-up the overlay stays visible until OLE Drop/DragLeave or this grace period (see InteractionSession).
         // Release with a drag inside: wait for OLE Drop/DragLeave (5 s watchdog only guards a dead source). Release with
@@ -66,18 +66,19 @@ internal static class Program
         // Pre-create the HWND so first show does not pay window creation (measured separately as "overlay.created").
         overlay.Show(); overlay.Hide();
 
-        log.Event("host.start", new { host = "wpf", trigger = opt.Trigger.Name, swallow = opt.SwallowTrigger, requireDrag = opt.RequireDrag, pid = Environment.ProcessId, runtime = Environment.Version.ToString(), stats = last.ToLogData() });
+        log.Event("host.start", new { host = "wpf", processUptimeMs = Math.Round((DateTime.Now - Process.GetCurrentProcess().StartTime).TotalMilliseconds, 1), deadZoneAlpha = opt.DeadZoneAlpha, trigger = opt.Trigger.Name, swallow = opt.SwallowTrigger, requireDrag = opt.RequireDrag, pid = Environment.ProcessId, runtime = Environment.Version.ToString(), stats = last.ToLogData() });
         hooks.Start();
+        var gcp = Spike.Interaction.Core.Diagnostics.GcPressure.Start(opt.GcPressure, log);
         log.Event("hooks.installed");
 
         var timer = new DispatcherTimer(TimeSpan.FromSeconds(opt.StatsIntervalSeconds), DispatcherPriority.Background, (_, _) =>
         {
             var now = ProcessSnapshot.Take();
             var hs = hooks.Stats;
-            log.Event("stats", new { cpuPct = Math.Round(ProcessSnapshot.CpuPercentBetween(last, now), 3), proc = now.ToLogData(), hookKbMaxMs = Math.Round(hs.KbMaxMs, 3), hookMouseMaxMs = Math.Round(hs.MouseMaxMs, 3), hookKbCalls = hs.KbCalls, hookMouseCalls = hs.MouseCalls, overlayVisible = overlay.IsVisible, sessionState = session.State.ToString() });
+            log.Event("stats", new { cpuPct = Math.Round(ProcessSnapshot.CpuPercentBetween(last, now), 3), proc = now.ToLogData(), hookKbMaxMs = Math.Round(hs.KbMaxMs, 3), hookMouseMaxMs = Math.Round(hs.MouseMaxMs, 3), hookKbCalls = hs.KbCalls, hookMouseCalls = hs.MouseCalls, overlayVisible = overlay.IsVisible, sessionState = session.State.ToString(), hookLag = hooks.LagSummary(), gcp = gcp?.Summary() });
             last = now;
         }, dispatcher);
-        timer.Start();
+        if (opt.StatsIntervalSeconds > 0) timer.Start(); else timer.Stop(); // this DispatcherTimer constructor starts the timer; interval 0 would spin
 
         Console.WriteLine($"WPF spike overlay running. Trigger: {opt.Trigger} (swallow={opt.SwallowTrigger}, requireDrag={opt.RequireDrag}). Log: {log.Path}");
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; dispatcher.BeginInvoke(app.Shutdown); };

@@ -13,13 +13,17 @@ public sealed record SpikeOptions(
     string LogPath,
     bool Echo,
     int StatsIntervalSeconds,
-    bool HideOnRelease)
+    bool HideOnRelease,
+    int DeadZoneAlpha,
+    string GcPressure,
+    bool RawInput,
+    bool GcOnStats)
 {
     public static SpikeOptions Parse(string[] args, string defaultLogName)
     {
         var trigger = "space";
         bool swallow = false, requireDrag = true, echo = true;
-        int radius = 110, sectors = 4, statsInterval = 10; bool hideOnRelease = false;
+        int radius = 110, sectors = 4, statsInterval = 10, deadZoneAlpha = -1; bool hideOnRelease = false, rawInput = false, gcOnStats = false; var gcPressure = "none";
         string? log = null;
 
         for (var i = 0; i < args.Length; i++)
@@ -36,6 +40,10 @@ public sealed record SpikeOptions(
                 case "--quiet": echo = false; break;
                 case "--stats-interval": statsInterval = int.Parse(Next()); break;
                 case "--hide-on-release": hideOnRelease = true; break; // negative control: hide on the hook's button-up (the behaviour that lost drops)
+                case "--deadzone-alpha": deadZoneAlpha = int.Parse(Next()); break; // WPF: paint the dead zone with this alpha (0..255); -1 = leave it unpainted
+                case "--gc-pressure": gcPressure = Next(); break;              // none | churn | extreme (Spike 002B E1)
+                case "--raw-input": rawInput = true; break;                     // Win32 host: Raw Input probe (Spike 002B E2)
+                case "--gc-on-stats": gcOnStats = true; break;                 // full GC before each stats sample (memory-growth check only)
                 case "-h" or "--help":
                     Console.WriteLine("Options: --trigger <space|ctrl+space|mbutton|xbutton1|f8|...> --swallow --no-require-drag --radius <px96> --sectors <n> --log <path> --quiet --stats-interval <s>");
                     Environment.Exit(0); break;
@@ -44,6 +52,6 @@ public sealed record SpikeOptions(
         }
 
         log ??= Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "results", $"{defaultLogName}-{DateTime.Now:yyyyMMdd-HHmmss}.jsonl");
-        return new SpikeOptions(TriggerSpec.Parse(trigger), swallow, requireDrag, radius, sectors, Path.GetFullPath(log), echo, statsInterval, hideOnRelease);
+        return new SpikeOptions(TriggerSpec.Parse(trigger), swallow, requireDrag, radius, sectors, Path.GetFullPath(log), echo, statsInterval, hideOnRelease, deadZoneAlpha, gcPressure, rawInput, gcOnStats);
     }
 }

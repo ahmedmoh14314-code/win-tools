@@ -1,6 +1,6 @@
 # ADR-0003: Activation and input strategy during a drag
 
-- **Status:** Proposed
+- **Status:** Proposed — decision drafted 2026-10-20 after Spike 002, pending evaluator review
 - **Date:** 2026-10-19
 - **Related requirements:** UX-001, UX-002, UX-003, UX-006
 
@@ -8,7 +8,12 @@
 The wheel must be summoned while an OLE drag is in progress and the mouse button is held. During a drag the shell interprets Ctrl (copy), Shift (move), Alt or Ctrl+Shift (link) and Esc (cancel). The drag source's `IDropSource::QueryContinueDrag` and the target's `IDropTarget::DragOver` receive key state. Keyboard focus during drag belongs to the drag loop, so ordinary window-level key handling is not available; options are low-level keyboard hooks, `RegisterHotKey`, raw input, or mouse-button-based triggers (middle/X buttons). Each option has latency, reliability, interference and accessibility trade-offs. The trigger must eventually be user-configurable.
 
 ## Decision
-Not yet decided. Candidates to measure: Space while dragging; Ctrl+Space; a non-modifier key; middle mouse button; X1/X2 buttons; hover/dwell; a configurable combination.
+**Trigger:** a non-modifier key, **Space** by default, fixed in V1 (UX-003 configurable trigger stays deferred). Ctrl/Shift/Alt alone, the middle button and the right button are excluded (they change or cancel Explorer's drag; measured). Ctrl+Space and X1 work and remain candidates for configuration later.
+
+**Input mechanism (Spike 002B):**
+- **Low-level keyboard and mouse hooks — ADOPT (primary).** Installed together (all or nothing) on a dedicated thread that only pumps messages and posts compact events to the UI thread. Callbacks: no allocation, no I/O, no locks shared with the UI thread, `try/catch` around everything, return immediately. The trigger key is not swallowed in V1 (no measured need); if swallowing is ever added, down, auto-repeat and up are swallowed as a pair, and Esc never.
+- **Raw Input — KEEP AS FALLBACK.** Keyboard only, `RIDEV_INPUTSINK` on the host's message-only window. Used (a) as the event-driven hook-health oracle: a raw key-down that the keyboard hook did not see within ≈ 250 ms means the hook is gone; (b) as degraded-mode activation if hook installation fails (no suppression possible, +11–14 ms). Raw mouse is not registered (system-wide message per mouse move).
+- **Failure detection without polling:** keyboard hook via the Raw Input oracle; mouse hook at trigger time (left button down per `GetAsyncKeyState` but no drag seen by the mouse hook); re-check on session unlock and power resume. On evidence: re-install both hooks from the hook thread, log locally, show "trigger unavailable" if re-installation fails. Never re-install blindly or on a timer.
 
 ## Alternatives considered
 Measured in Spike 001 (2026-10-20, Windows 11, Explorer and shell-default drag sources, `docs/research/2026-10-19-interaction-spike.md`):
@@ -26,9 +31,15 @@ Measured in Spike 001 (2026-10-20, Windows 11, Explorer and shell-default drag s
 Not measured: false-positive rate in daily use, conflicts with other apps' Space handling during drag, keyboard layouts (Space is layout-independent; X buttons are hardware-dependent), behaviour from elevated sources (UIPI; manual protocol M12 pending).
 
 ## Consequences
-To be written with the decision.
+- Known Windows limitations: no notification when Windows removes a hook; the default `LowLevelHooksTimeout` is undocumented (1000 ms cap); hooks and Raw Input do not see input while an elevated window is foreground (UIPI) — documented, not worked around (no UIAccess); the trigger press that reveals a removed hook is lost.
+- Measured robustness: 0 lost activations at the hook level under heavy and extreme GC pressure; no removal observed in 314 runtime suspensions up to ≈ 550 ms; the UI thread, not the hook, is the weak point (ADR-0001 rule 3).
+- AV/EDR: public EDR rules flag unsigned, recently built executables calling `SetWindowsHookEx(WH_KEYBOARD_LL)`, including managed callers; sign the binaries, install per-user into a stable folder, keep the hook DLL-free (in-process, no injection). Not tested against a real EDR.
+- Event threading: hook thread → posted message → UI thread state machine (`InteractionSession`); Raw Input on the UI thread.
+- Test obligations: debug-only fault injection that stalls the hook callback beyond the timeout, to prove detection and re-installation; the Raw Input oracle comparison as a unit-testable component.
 
 ## Evidence / experiments
+**Spike 002 (2026-10-20):** `docs/research/2026-10-20-spike-002.md` (dead-zone hit-testing, Win32 vs WPF on identical runs, hooks under GC pressure, Raw Input during Explorer drags, 1500-cycle memory plateau).
+
 Spike 001 (`spikes/interaction/`, results in `docs/research/2026-10-19-interaction-spike.md`).
 - Documentation: `IDropSource::QueryContinueDrag` only receives MK_CONTROL/SHIFT/ALT and mouse buttons; a plain key such as Space is invisible to the drag source. A low-level keyboard hook on a dedicated thread sees it with < 1 ms typical callback cost (worst observed 2.75 ms).
 - Measured 2026-10-20 with real Explorer windows driven by UI Automation and with the shell's default drop source: see the table above. Esc while the overlay is shown cancels cleanly (Explorer 5/5, self 5/5: DragLeave, DRAGDROP_S_CANCEL, nothing dropped). Explorer's folder was unchanged after ≈70 Explorer-sourced drags.

@@ -34,7 +34,7 @@ public sealed class SpikeLog : IDisposable
         var ts = timestamp ?? Stopwatch.GetTimestamp();
         var t = MsSince(ts);
         var wall = _originWall.AddMilliseconds(t).ToString("HH:mm:ss.fff");
-        var line = JsonSerializer.Serialize(new { t = Math.Round(t, 3), wall, ev = name, data }, JsonOptions);
+        var line = JsonSerializer.Serialize(new { t = Math.Round(t, 3), q = ts, wall, ev = name, data }, JsonOptions);
         lock (_gate)
         {
             _writer.WriteLine(line);

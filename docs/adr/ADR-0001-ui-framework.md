@@ -1,6 +1,6 @@
 # ADR-0001: UI framework for the overlay and tray application
 
-- **Status:** Proposed
+- **Status:** Proposed — decision drafted 2026-10-20 after Spike 002, pending evaluator review
 - **Date:** 2026-10-19
 - **Related requirements:** PLAT-001, UX-001, UX-005, UX-006, PERF-001
 
@@ -8,12 +8,15 @@
 The app needs: cross-application OLE drag-and-drop target, transparent/topmost/non-activating overlay windows positioned at the cursor, per-monitor DPI, global input (hooks or hotkeys), tray icon, raw Windows messages, small idle footprint and fast cold start. C#/.NET is preferred. The brief names WPF + Win32 interop as the strong candidate and asks for a comparison with WinUI 3, direct Win32, Windows App SDK and hybrids; Electron is out unless overwhelming evidence appears.
 
 ## Decision
-Not yet decided. Questions to answer:
-1. Can each candidate host a layered, topmost, non-activating window that receives OLE drops while the drag originated in Explorer?
-2. Measured cold start, idle memory and trigger-to-first-frame for a minimal overlay in each candidate.
-3. Per-monitor-V2 DPI behaviour and mixed-DPI placement.
-4. Packaged vs unpackaged constraints (WinUI 3 has historically had limitations with transparent/topmost windows and unpackaged scenarios; verify against current Windows App SDK docs, do not assume).
-5. Maintenance risk and tooling maturity on the installed toolchain (.NET SDK 10.0.402 pinned since 2026-10-19).
+**WPF (.NET 10) for the resident application and the radial overlay, with targeted Win32 interop.** One process, one UI stack. Interop is limited to: the overlay's extended styles (`WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`, topmost), placement in physical pixels from the cursor's monitor, the low-level hooks on their own thread (ADR-0003), tray/single-instance/startup plumbing. WPF owns the OLE drop target, layout, text, animation, DPI and UI Automation.
+
+Binding rules that come with the decision (Spike 002A):
+1. Every pixel inside the ring, including the dead zone, has alpha ≥ 1 (alpha 0 is click-through for OLE: DragEnter only after a move, and a release in the dead zone drops into the window underneath, e.g. Explorer). Pixels outside the ring stay alpha 0.
+2. One pre-created overlay window, shown/hidden, never activated.
+3. The resident process stays allocation-light: engines, image decoding and thumbnails run in the worker (ADR-0005). Under heavy managed GC pressure the WPF dispatcher stalled for seconds and activations were lost; under normal load it is fine.
+4. Measure the product's resident private bytes and working set against the budget in CI-style checks; WPF sits at ≈ 95 MB private / 145 MB working set after 300 cycles, inside but close to the targets (100 / 150 MB).
+
+Rejected: WinUI 3 for the overlay (no public transparency API, open overlay bugs; Phase 1B). Rejected for V1: Win32 overlay + WPF shell (two UI stacks; the WPF shell in the same process removes most of the memory advantage, and a separate UI process adds IPC without a requirement that needs it). Kept as the fallback if a future measurement breaks the 120 MB ceiling or WPF's dispatcher latency becomes a measured problem: a Win32/Direct2D overlay host (Spike 001 code shows the interop surface).
 
 ## Alternatives considered
 - **WPF + Win32 interop**: mature, full `HwndSource` control, known DPI story; heavier base memory than raw Win32.
@@ -23,9 +26,13 @@ Not yet decided. Questions to answer:
 - **Electron**: rejected by the brief on size, memory and native integration grounds.
 
 ## Consequences
-To be written with the decision.
+- Positive: rich rendering, animation, accessibility and DPI handling without our own rendering stack; least interop code; one stack to debug and maintain.
+- Negative: ≈ 7× the Win32 host's private bytes (95 vs 9–14 MB) and ≈ 0.4–0.6 s startup (Release, no ReadyToRun); dispatcher latency is sensitive to GC pressure in the resident process.
+- Follow-ups: ReadyToRun/trimming measurement against the 500 ms cold-start budget; overlay animations must not move hit regions during a drag; budget check on every checkpoint.
 
 ## Evidence / experiments
+**Spike 002 (2026-10-20):** `docs/research/2026-10-20-spike-002.md` (dead-zone hit-testing, Win32 vs WPF on identical runs, hooks under GC pressure, Raw Input during Explorer drags, 1500-cycle memory plateau).
+
 Spike 001 (`docs/research/2026-10-19-interaction-spike.md`, §R-E) compared a raw Win32 overlay host and a WPF overlay host sharing the same hooks/session code, Release builds, identical automated scenarios on the same machine (2026-10-20):
 
 | | Win32 (C# P/Invoke, GDI) | WPF |

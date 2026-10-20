@@ -35,9 +35,11 @@ public sealed class WpfOverlayWindow : Window
     public event Action? DragLeft;
     public event Action? DragEntered;
 
-    public WpfOverlayWindow(SpikeLog log, int radius96, int sectors)
+    private readonly int _deadZoneAlpha;
+
+    public WpfOverlayWindow(SpikeLog log, int radius96, int sectors, int deadZoneAlpha = -1)
     {
-        _log = log; _radius96 = radius96; _sectors = sectors;
+        _log = log; _radius96 = radius96; _sectors = sectors; _deadZoneAlpha = deadZoneAlpha;
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true;
@@ -88,6 +90,14 @@ public sealed class WpfOverlayWindow : Window
             var label = new TextBlock { Text = ((char)('A' + i)).ToString(), Foreground = Brushes.White, FontSize = 14, IsHitTestVisible = false };
             Canvas.SetLeft(label, c + lr * Math.Cos(am) - 5); Canvas.SetTop(label, c + lr * Math.Sin(am) - 9);
             _canvas.Children.Add(label);
+        }
+        // Spike 002A: per-pixel-alpha windows are click-through where alpha == 0. Painting the dead zone with a
+        // near-invisible alpha makes it part of the window for hit-testing (and therefore for OLE DragEnter/Drop).
+        if (_deadZoneAlpha >= 0)
+        {
+            var dz = new Ellipse { Width = 2 * inner, Height = 2 * inner, Fill = new SolidColorBrush(Color.FromArgb((byte)_deadZoneAlpha, 0, 0, 0)) };
+            Canvas.SetLeft(dz, c - inner); Canvas.SetTop(dz, c - inner);
+            _canvas.Children.Add(dz);
         }
     }
 

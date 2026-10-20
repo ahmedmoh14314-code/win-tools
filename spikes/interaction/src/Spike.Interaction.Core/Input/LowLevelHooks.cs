@@ -19,6 +19,7 @@ public sealed class LowLevelHooks : IDisposable
     private nint _hKb, _hMouse;
     private long _maxKbTicks, _maxMouseTicks;
     private long _kbCalls, _mouseCalls;
+    private long _kbLagMax, _mouseLagMax, _lagOver50, _lagOver200;
     private volatile bool _swallowTriggerKey;
 
     public Func<KeyEvent, bool>? OnKey;       // return true to swallow the key
@@ -81,6 +82,7 @@ public sealed class LowLevelHooks : IDisposable
         try
         {
             var k = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+            NoteLag(k.time, mouse: false);
             var msg = (uint)wParam;
             var isDown = msg is WM.KEYDOWN or WM.SYSKEYDOWN;
             var ev = new KeyEvent((int)k.vkCode, isDown, (k.flags & LLKHF.INJECTED) != 0, t0);
@@ -103,6 +105,7 @@ public sealed class LowLevelHooks : IDisposable
         try
         {
             var m = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+            NoteLag(m.time, mouse: true);
             var msg = (uint)wParam;
             MouseButton? button = msg switch
             {
@@ -127,6 +130,19 @@ public sealed class LowLevelHooks : IDisposable
         }
         return User32.CallNextHookEx(_hMouse, nCode, wParam, lParam);
     }
+
+    // Event time is GetTickCount-based (~15.6 ms resolution): good enough to see GC-induced blocking of 50+ ms.
+    private void NoteLag(uint eventTime, bool mouse)
+    {
+        var lag = unchecked((uint)Environment.TickCount - eventTime);
+        if (lag > 60_000) return;
+        if (mouse) { if (lag > _mouseLagMax) _mouseLagMax = lag; }
+        else if (lag > _kbLagMax) _kbLagMax = lag;
+        if (lag > 50) _lagOver50++;
+        if (lag > 200) _lagOver200++;
+    }
+
+    public object LagSummary() => new { kbEntryLagMaxMs = _kbLagMax, mouseEntryLagMaxMs = _mouseLagMax, lagOver50 = _lagOver50, lagOver200 = _lagOver200 };
 
     public void Dispose()
     {
