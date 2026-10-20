@@ -1,0 +1,62 @@
+# ---- .NET build output ----
+bin/
+obj/
+out/
+artifacts/
+publish/
+*.user
+*.suo
+*.cache
+*.binlog
+*.nupkg
+*.snupkg
+TestResults/
+BenchmarkDotNet.Artifacts/
+coverage*.xml
+*.coverage
+*.trx
+
+# ---- Visual Studio / Rider / VS Code ----
+.vs/
+.idea/
+*.swp
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+
+# ---- Windows / packaging ----
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+AppPackages/
+BundleArtifacts/
+*.appx
+*.appxbundle
+*.msix
+*.msixbundle
+*.appxupload
+*.msixupload
+
+# ---- Secrets and signing material (never commit) ----
+*.pfx
+*.p12
+*.snk
+*.cer
+*.key
+*.pem
+.env
+.env.*
+secrets.json
+appsettings.*.local.json
+
+
+# ---- Node tooling ----
+node_modules/
+
+# ---- Logs / temp ----
+*.log
+*.tmp
+~$*

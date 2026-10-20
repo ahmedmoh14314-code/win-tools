@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Spike.Interaction.Wpf</RootNamespace>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Spike.Interaction.Core\Spike.Interaction.Core.csproj" />
+    <Compile Include="..\Spike.Interaction.Win32\SpikeOptions.cs" Link="SpikeOptions.cs" />
+  </ItemGroup>
+</Project>

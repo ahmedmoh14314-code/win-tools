@@ -1,0 +1,20 @@
+# Architecture Decision Records
+
+Template: `template.md`. Numbering is sequential and never reused. Old ADRs are never deleted; a new ADR supersedes them. An ADR moves to **Accepted** only after an evaluator review is recorded in it.
+
+| ADR | Title | Status | Needs |
+|---|---|---|---|
+| [ADR-0000](ADR-0000-engineering-harness.md) | Record decisions as ADRs; engineering harness before product code | Accepted | — |
+| [ADR-0001](ADR-0001-ui-framework.md) | UI framework: WPF vs WinUI 3 vs Win32/hybrid | Proposed | Spike + research |
+| [ADR-0002](ADR-0002-supported-windows-versions.md) | Supported Windows versions and .NET target | Proposed | Product decision + API survey |
+| [ADR-0003](ADR-0003-activation-trigger.md) | Activation / input strategy during drag | Proposed | Spike (critical) |
+| [ADR-0004](ADR-0004-radial-overlay-implementation.md) | Radial overlay window implementation | Proposed | Spike |
+| [ADR-0005](ADR-0005-process-isolation-model.md) | Process isolation / worker model | Proposed | Design + spike |
+| [ADR-0006](ADR-0006-image-conversion-engine.md) | Image conversion engine for V1 | Proposed | License matrix + benchmark |
+| [ADR-0007](ADR-0007-capability-and-adapter-architecture.md) | Capability resolution and conversion adapter architecture | Proposed | Design |
+| [ADR-0008](ADR-0008-packaging-strategy.md) | Packaging and private distribution for the experiment | Proposed | Research |
+| [ADR-0009](ADR-0009-dependency-license-policy.md) | Dependency and license policy | Proposed | Product owner confirmation |
+| [ADR-0010](ADR-0010-telemetry-policy.md) | Telemetry and diagnostics policy | Proposed | Product owner confirmation |
+| [ADR-0011](ADR-0011-error-result-model.md) | Error / result model across process boundaries | Proposed | Design |
+
+Decision order recommended: 0002 → 0003 → 0001/0004 (same spike) → 0005 → 0011 → 0007 → 0006 → 0008. 0009 and 0010 can be confirmed any time.

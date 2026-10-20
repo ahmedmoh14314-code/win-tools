@@ -1,0 +1,431 @@
+{
+  "$schema": "./requirements.schema.json",
+  "version": 1,
+  "updated": "2026-10-19",
+  "statuses": {
+    "unverified": "Captured; no evidence yet.",
+    "in-progress": "Work is actively targeting this requirement.",
+    "blocked": "Cannot progress; see blockedBy.",
+    "verified": "Acceptance criteria demonstrated; evidence field is mandatory.",
+    "rejected": "Will not be done; rationale is mandatory.",
+    "deferred": "Intentionally postponed to a later phase; rationale is mandatory."
+  },
+  "requirements": [
+    {
+      "id": "PLAT-001",
+      "category": "platform",
+      "description": "The product is a native Windows desktop application.",
+      "acceptanceCriteria": [
+        "Runs as a normal user-mode Windows process on the supported Windows versions decided in ADR-0002.",
+        "No browser runtime or web-view shell is required for the core interaction."
+      ],
+      "status": "unverified",
+      "source": "brief.md §Product concept, §Technology selection",
+      "relatedAdrs": [
+        "ADR-0001",
+        "ADR-0002"
+      ]
+    },
+    {
+      "id": "PLAT-002",
+      "category": "platform",
+      "description": "V1 processes files locally and works fully offline.",
+      "acceptanceCriteria": [
+        "All operations complete with the network adapter disabled.",
+        "No outbound network connection is opened by the application during normal use (verified with a network monitor)."
+      ],
+      "status": "unverified",
+      "source": "brief.md §Scope discipline"
+    },
+    {
+      "id": "PLAT-003",
+      "category": "platform",
+      "description": "The application does not require Administrator rights or UAC elevation.",
+      "acceptanceCriteria": [
+        "Installs and runs for a standard (non-admin) user account.",
+        "No manifest requests elevation; no runtime code path triggers UAC."
+      ],
+      "status": "unverified",
+      "source": "brief.md §Security model"
+    },
+    {
+      "id": "UX-001",
+      "category": "interaction",
+      "description": "Core interaction: the user drags a file from Explorer or the Desktop, activates the app with a trigger while still dragging, a radial menu appears near the cursor, the user drops the file on an action, and the operation starts immediately.",
+      "acceptanceCriteria": [
+        "Works with a drag started in Windows Explorer and on the Desktop.",
+        "The radial menu appears without the user releasing the mouse button.",
+        "Dropping on an action starts the corresponding job; dropping elsewhere or cancelling leaves the file untouched and Explorer's own drag behaviour unaffected."
+      ],
+      "status": "in-progress",
+      "source": "brief.md §Product concept",
+      "relatedAdrs": [
+        "ADR-0003",
+        "ADR-0004"
+      ],
+      "notes": "Spike 001 (2026-10-20, docs/research/2026-10-19-interaction-spike.md): Explorer-sourced drag → Space/Ctrl+Space/X1 → overlay → DragEnter → Drop with correct paths (1 and 3 files, Unicode): 44/44 drop cycles; Esc cancels cleanly. 'Explorer unaffected' supported by folder assertions for shell-source runs, by listings only for Explorer runs, with one unexplained window-switch incident open (evaluator finding 2). Not yet: release outside the ring with Explorer underneath (AC3), Desktop as source, product job start (no product code yet)."
+    },
+    {
+      "id": "UX-002",
+      "category": "interaction",
+      "description": "The activation trigger is an open engineering question; Ctrl alone must not be assumed. The chosen default must not interfere with Explorer's Copy/Move/Link modifier semantics.",
+      "acceptanceCriteria": [
+        "ADR-0003 records the evaluated options (Space, Ctrl+Space, other combos, mouse buttons, others) with measured latency, reliability and interference results.",
+        "The chosen default does not change Explorer's drop effect when the user does not activate the wheel."
+      ],
+      "status": "in-progress",
+      "source": "brief.md §Important UX requirement",
+      "relatedAdrs": [
+        "ADR-0003"
+      ],
+      "notes": "ADR-0003 now holds measured results for Space, Ctrl+Space, X1, middle button (rejected: shell cancels the drag), Esc and Shift-held. Default not chosen yet; human feel pass and elevated-source check pending."
+    },
+    {
+      "id": "UX-003",
+      "category": "interaction",
+      "description": "The activation trigger is user-configurable.",
+      "acceptanceCriteria": [
+        "A settings surface allows changing the trigger; the change takes effect without restarting the application.",
+        "Invalid or conflicting triggers are rejected with an actionable message."
+      ],
+      "status": "deferred",
+      "rationale": "Required eventually per the brief, but not needed to prove the interaction in the first prototype. Revisit after UX-001 is verified.",
+      "source": "brief.md §Important UX requirement"
+    },
+    {
+      "id": "UX-004",
+      "category": "interaction",
+      "description": "The radial menu is context-aware: it shows only operations valid for the dragged file, derived from a central capability system, not from format logic in view code.",
+      "acceptanceCriteria": [
+        "A single capability resolver answers 'what operations are valid for this input?' and has unit tests.",
+        "The radial UI contains no per-format branching.",
+        "Adding a new format or operation requires no change to the radial menu architecture (demonstrated by adding one in a test)."
+      ],
+      "status": "unverified",
+      "source": "brief.md §Context-aware radial menu",
+      "relatedAdrs": [
+        "ADR-0007"
+      ]
+    },
+    {
+      "id": "UX-005",
+      "category": "interaction",
+      "description": "The radial menu remains usable near any edge or corner of any monitor, at any DPI scaling, without hardcoded pixel offsets.",
+      "acceptanceCriteria": [
+        "Manual protocol passes at 100/125/150/200% scaling and on a two-monitor layout with mixed DPI.",
+        "Placement is computed from the physical cursor position and the monitor work area."
+      ],
+      "status": "in-progress",
+      "source": "brief.md §Radial menu engineering",
+      "relatedAdrs": [
+        "ADR-0004"
+      ],
+      "notes": "Spike 001: placement computed from physical cursor + work area, clamped correctly at all 4 corners and 4 edges at 125 % on one monitor, drop received at each. Finding: at corners the cursor starts outside the ring (design change needed). 100/150/200 % and mixed-DPI two-monitor runs not possible on this machine."
+    },
+    {
+      "id": "UX-006",
+      "category": "interaction",
+      "description": "The radial menu appears with imperceptible latency after activation.",
+      "acceptanceCriteria": [
+        "Trigger-to-first-frame latency meets the budget in docs/performance/budgets.md (p95), measured with instrumentation, not by eye."
+      ],
+      "status": "in-progress",
+      "source": "brief.md §Performance philosophy, §Radial menu engineering",
+      "notes": "Spike 001 (Release, 100 cycles, Stopwatch in hook callback vs a per-host paint proxy, not DWM presentation): hook→first paint median 11 ms / p95 ≈14 ms / max 29 ms (Win32), 7 / ≈18 / 36 ms (WPF); first show 25–60 ms. Lower bounds that sit well inside the < 50 ms p95 warm / < 120 ms first-use budget; the budget's ETW/DWM measurement is still required in the product."
+    },
+    {
+      "id": "SAFE-001",
+      "category": "file-safety",
+      "description": "Original files are never destructively overwritten by default.",
+      "acceptanceCriteria": [
+        "After any job (success, failure, cancel, timeout, worker crash) the input file's hash is unchanged.",
+        "Output is written to a temporary location, validated, then moved into place."
+      ],
+      "status": "unverified",
+      "source": "brief.md §File safety"
+    },
+    {
+      "id": "SAFE-002",
+      "category": "file-safety",
+      "description": "Filename collisions are handled safely (photo.webp, photo (1).webp, ...).",
+      "acceptanceCriteria": [
+        "Existing files are never replaced; a unique name is chosen deterministically.",
+        "Unit tests cover existing-name, multiple collisions, Unicode names, and long paths."
+      ],
+      "status": "unverified",
+      "source": "brief.md §File safety"
+    },
+    {
+      "id": "SAFE-003",
+      "category": "file-safety",
+      "description": "A failed, cancelled or timed-out job never leaves an output that looks successful; temporary files are cleaned up.",
+      "acceptanceCriteria": [
+        "After forced failure modes (kill worker, corrupt input, timeout, cancel) no partial output exists at the final path and no temp files remain.",
+        "The user sees an actionable failure state."
+      ],
+      "status": "unverified",
+      "source": "brief.md §File safety, §Reliability requirements",
+      "relatedAdrs": [
+        "ADR-0005",
+        "ADR-0011"
+      ]
+    },
+    {
+      "id": "ARCH-001",
+      "category": "architecture",
+      "description": "The application is modular: UI, Windows integration, input/activation, drag-and-drop, core commands, file type detection, capability resolution, job management, conversion adapters, worker process, settings, logging, notifications, infrastructure.",
+      "acceptanceCriteria": [
+        "Module boundaries are documented in docs/architecture and enforced by project references (UI cannot reference an engine package).",
+        "No single class or project contains the application."
+      ],
+      "status": "unverified",
+      "source": "brief.md §Architecture principles",
+      "relatedAdrs": [
+        "ADR-0007"
+      ]
+    },
+    {
+      "id": "ARCH-002",
+      "category": "architecture",
+      "description": "Conversion engines sit behind stable adapter interfaces and can be replaced without rewriting the application.",
+      "acceptanceCriteria": [
+        "The image engine is reachable only through an adapter interface.",
+        "A fake adapter is used in tests, demonstrating substitutability."
+      ],
+      "status": "unverified",
+      "source": "brief.md §Architecture principles",
+      "relatedAdrs": [
+        "ADR-0006",
+        "ADR-0007"
+      ]
+    },
+    {
+      "id": "ARCH-003",
+      "category": "architecture",
+      "description": "Expensive or unsafe conversions run outside the main UI process; the main application survives worker crash, hang or out-of-memory where practicable; the UI never freezes.",
+      "acceptanceCriteria": [
+        "Killing the worker during a job leaves the main app responsive and reports a failure.",
+        "A hanging worker is terminated at the job timeout.",
+        "UI thread shows no stalls attributable to job work (instrumented)."
+      ],
+      "status": "unverified",
+      "source": "brief.md §Process isolation",
+      "relatedAdrs": [
+        "ADR-0005"
+      ]
+    },
+    {
+      "id": "ARCH-004",
+      "category": "architecture",
+      "description": "Jobs support progress, cancellation, timeouts and clear failure states.",
+      "acceptanceCriteria": [
+        "Job state machine has unit tests for every transition.",
+        "Cancellation and timeout are exercised by lifecycle tests."
+      ],
+      "status": "unverified",
+      "source": "brief.md §Process isolation",
+      "relatedAdrs": [
+        "ADR-0011"
+      ]
+    },
+    {
+      "id": "PERF-001",
+      "category": "performance",
+      "description": "The idle application is lightweight: near-zero CPU, no filesystem scanning, no polling, no preloaded engines.",
+      "acceptanceCriteria": [
+        "Idle CPU and memory meet docs/performance/budgets.md, measured over 60 seconds with the app in the tray.",
+        "No periodic timers or filesystem watchers exist in the idle path (code review + ETW trace)."
+      ],
+      "status": "unverified",
+      "source": "brief.md §Performance philosophy"
+    },
+    {
+      "id": "PERF-002",
+      "category": "performance",
+      "description": "Performance budgets exist for idle CPU, idle memory, startup, radial latency, job start latency, UI responsiveness and installer size, and are measured rather than guessed.",
+      "acceptanceCriteria": [
+        "docs/performance/budgets.md lists each target and its measurement method.",
+        "A benchmark result file exists for each budget before the prototype is called done."
+      ],
+      "status": "in-progress",
+      "source": "brief.md §Performance philosophy",
+      "notes": "Proposed targets written 2026-10-19; none measured yet."
+    },
+    {
+      "id": "SEC-001",
+      "category": "security",
+      "description": "All input files are untrusted; type is detected by content, converters are treated as vulnerable components, process launching never builds shell strings from file paths, and paths with spaces, quotes, Unicode and >260 characters are supported.",
+      "acceptanceCriteria": [
+        "Malformed-file tests pass without crashing the main app.",
+        "No use of cmd.exe or string-built command lines (code review).",
+        "Path edge-case tests pass."
+      ],
+      "status": "unverified",
+      "source": "brief.md §Security model"
+    },
+    {
+      "id": "SEC-002",
+      "category": "security",
+      "description": "Produced files are never auto-launched; macros or embedded executable content are never executed.",
+      "acceptanceCriteria": [
+        "No code path calls ShellExecute/Process.Start on an output file without an explicit user action.",
+        "No Office automation or macro-capable engine runs in V1."
+      ],
+      "status": "unverified",
+      "source": "brief.md §Security model"
+    },
+    {
+      "id": "DEP-001",
+      "category": "dependencies",
+      "description": "Every substantial third-party dependency is documented in a dependency/license matrix before adoption; no GPL/AGPL obligations enter the shipped product.",
+      "acceptanceCriteria": [
+        "docs/architecture/dependency-matrix.md exists with one row per dependency and the fields listed in docs/engineering/rules/dependencies.md.",
+        "License review recorded for any engine (FFmpeg, ImageMagick, PDF, archive, LibreOffice, Office SDKs) before it is referenced."
+      ],
+      "status": "unverified",
+      "source": "brief.md §Dependency policy",
+      "relatedAdrs": [
+        "ADR-0009"
+      ]
+    },
+    {
+      "id": "SCOPE-001",
+      "category": "scope",
+      "description": "The first prototype is deliberately small: JPG/PNG/WebP with Convert, Compress and Resize, whose purpose is to prove the interaction is excellent.",
+      "acceptanceCriteria": [
+        "No other formats or operations are implemented before UX-001, UX-005 and UX-006 are verified.",
+        "A go/no-go review on the interaction is recorded before scope grows."
+      ],
+      "status": "unverified",
+      "source": "brief.md §Prototype scope"
+    },
+    {
+      "id": "SCOPE-002",
+      "category": "scope",
+      "description": "Arbitrary 'anything to anything' conversion.",
+      "acceptanceCriteria": [],
+      "status": "rejected",
+      "rationale": "Not a requirement and technically unsound: semantic and layout-reconstruction conversions cannot be made reliable. Every conversion path must be classified and only reliable ones are offered (see brief §Document conversion warning).",
+      "source": "brief.md §Document conversion warning"
+    },
+    {
+      "id": "SCOPE-003",
+      "category": "scope",
+      "description": "Office/document conversion (Word, PowerPoint, PDF to Word, etc.).",
+      "acceptanceCriteria": [],
+      "status": "deferred",
+      "rationale": "Explicitly excluded from the first implementation; requires separate research of Office integration, Open XML, LibreOffice headless, dedicated libraries, with licensing and fidelity analysis.",
+      "source": "brief.md §Document conversion warning"
+    },
+    {
+      "id": "SCOPE-004",
+      "category": "scope",
+      "description": "Backend, server, database server, user accounts, cloud sync, payments, subscriptions, analytics, remote processing, AI functionality.",
+      "acceptanceCriteria": [],
+      "status": "rejected",
+      "rationale": "Not part of V1 by product decision; V1 is local-first and offline. Reopen with a new requirement if the product direction changes.",
+      "source": "brief.md §Scope discipline"
+    },
+    {
+      "id": "DIST-001",
+      "category": "distribution",
+      "description": "The experimental stage uses easy private installation (portable build or simple installer); public distribution effort waits until the interaction is proven.",
+      "acceptanceCriteria": [
+        "ADR-0008 records the chosen packaging for the experimental stage with SmartScreen and signing implications.",
+        "A friend can install and run the prototype from a shared artifact without Administrator rights."
+      ],
+      "status": "unverified",
+      "source": "brief.md §Installation and distribution",
+      "relatedAdrs": [
+        "ADR-0008"
+      ]
+    },
+    {
+      "id": "DIST-002",
+      "category": "distribution",
+      "description": "Microsoft Store distribution.",
+      "acceptanceCriteria": [],
+      "status": "deferred",
+      "rationale": "Not part of the initial experiment per the brief. Revisit after the prototype is proven.",
+      "source": "brief.md §Installation and distribution"
+    },
+    {
+      "id": "UX-007",
+      "category": "interaction",
+      "description": "A keyboard-accessible alternative exists for users who cannot hold a mouse drag and press a key at the same time.",
+      "acceptanceCriteria": [
+        "An alternative path (e.g. select files in Explorer, press a shortcut, choose the action with the keyboard) reaches the same commands.",
+        "The overlay exposes its sectors to UI Automation."
+      ],
+      "status": "unverified",
+      "source": "Phase 1B evaluator finding M5 (accessibility gap)",
+      "relatedAdrs": [
+        "ADR-0003",
+        "ADR-0004"
+      ]
+    },
+    {
+      "id": "UX-008",
+      "category": "interaction",
+      "description": "Drags whose data object has no CF_HDROP (virtual files from zip folders, Outlook, browsers) are handled explicitly.",
+      "acceptanceCriteria": [
+        "The overlay shows an explanation instead of empty sectors, or does not appear; nothing is written.",
+        "Behaviour is covered by a test with a non-HDROP data object."
+      ],
+      "status": "unverified",
+      "source": "Phase 1B evaluator finding M5"
+    },
+    {
+      "id": "UX-009",
+      "category": "interaction",
+      "description": "Folders included in a drop are handled explicitly in V1.",
+      "acceptanceCriteria": [
+        "V1 rejects folders with an actionable message or processes only the supported files inside, as decided in an ADR; never silently."
+      ],
+      "status": "unverified",
+      "source": "Phase 1B evaluator finding M5"
+    },
+    {
+      "id": "SAFE-004",
+      "category": "file-safety",
+      "description": "Cloud placeholders (OneDrive files-on-demand) are never hydrated by content sniffing or capability resolution.",
+      "acceptanceCriteria": [
+        "Files with FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS or FILE_ATTRIBUTE_OFFLINE are not opened at DragEnter; the user gets an explicit reason.",
+        "A test covers the attribute check."
+      ],
+      "status": "unverified",
+      "source": "Phase 1B evaluator finding M4"
+    },
+    {
+      "id": "SAFE-005",
+      "category": "file-safety",
+      "description": "An unwritable output location (read-only folder, protected location, removable media removed) produces an explicit failure or a documented fallback, never a partial file.",
+      "acceptanceCriteria": [
+        "Lifecycle test with a read-only output folder: job fails with an actionable reason, no temp file left behind."
+      ],
+      "status": "unverified",
+      "source": "Phase 1B evaluator finding M5"
+    },
+    {
+      "id": "SEC-003",
+      "category": "security",
+      "description": "Image decoding loads only Microsoft-provided WIC codecs selected from our own content sniff; third-party codecs installed on the machine are never fed untrusted input.",
+      "acceptanceCriteria": [
+        "Decoders are created by CLSID or with vendor GUID_VendorMicrosoft; a test asserts the decoder vendor.",
+        "The threat model records the codec-loading risk."
+      ],
+      "status": "unverified",
+      "source": "Phase 1B evaluator finding M8"
+    },
+    {
+      "id": "DIST-003",
+      "category": "distribution",
+      "description": "Uninstall removes everything the app created outside the user's files.",
+      "acceptanceCriteria": [
+        "After uninstall: no HKCU Run entry, no %LOCALAPPDATA% folder (or the user is asked about settings), no running process, no registered window classes left by a stale process."
+      ],
+      "status": "unverified",
+      "source": "Phase 1B evaluator finding M5"
+    }
+  ]
+}

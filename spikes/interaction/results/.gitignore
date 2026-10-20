@@ -1,0 +1,4 @@
+# Raw spike logs are not committed; summaries go to docs/research.
+*.jsonl
+!.gitignore
+*.txt

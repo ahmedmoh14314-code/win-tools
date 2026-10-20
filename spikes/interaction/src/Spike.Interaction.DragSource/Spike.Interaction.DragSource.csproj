@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Spike.Interaction.DragSource</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- UI Automation (System.Windows.Automation) ships with the WPF reference set; used only to locate Explorer items. -->
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Spike.Interaction.Core\Spike.Interaction.Core.csproj" />
+  </ItemGroup>
+</Project>

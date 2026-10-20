@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Spike.Interaction.Core/Spike.Interaction.Core.csproj" />
+    <Project Path="src/Spike.Interaction.Win32/Spike.Interaction.Win32.csproj" />
+    <Project Path="src/Spike.Interaction.Wpf/Spike.Interaction.Wpf.csproj" />
+    <Project Path="src/Spike.Interaction.DragSource/Spike.Interaction.DragSource.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Spike.Interaction.Core.Tests/Spike.Interaction.Core.Tests.csproj" />
+  </Folder>
+</Solution>

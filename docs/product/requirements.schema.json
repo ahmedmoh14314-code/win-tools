@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "win-tools requirement ledger",
+  "type": "object",
+  "required": ["version", "updated", "statuses", "requirements"],
+  "properties": {
+    "version": { "type": "integer" },
+    "updated": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "statuses": { "type": "object" },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "category", "description", "acceptanceCriteria", "status", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Z]+-\\d{3}$" },
+          "category": {
+            "type": "string",
+            "enum": ["platform", "interaction", "file-safety", "architecture", "performance", "security", "dependencies", "scope", "distribution", "testing"]
+          },
+          "description": { "type": "string", "minLength": 10 },
+          "acceptanceCriteria": { "type": "array", "items": { "type": "string" } },
+          "status": {
+            "type": "string",
+            "enum": ["unverified", "in-progress", "blocked", "verified", "rejected", "deferred"]
+          },
+          "source": { "type": "string" },
+          "rationale": { "type": "string", "description": "Mandatory when status is rejected or deferred." },
+          "evidence": { "type": "string", "description": "Mandatory when status is verified: test names, benchmark file, or manual protocol record with commit." },
+          "blockedBy": { "type": "string", "description": "Mandatory when status is blocked." },
+          "relatedAdrs": { "type": "array", "items": { "type": "string", "pattern": "^ADR-\\d{4}$" } },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  }
+}
