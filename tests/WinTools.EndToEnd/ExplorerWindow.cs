@@ -52,8 +52,6 @@ internal sealed class ExplorerWindow : IDisposable
     /// </summary>
     public bool EnsureForeground(int x, int y)
     {
-        Desktop.Nudge(); // without it, a harness started right after another one cannot raise the window
-        Thread.Sleep(30);
         var before = Desktop.ClassOf(Desktop.GetForegroundWindow());
         var raised = Desktop.SetWindowPos(Hwnd, Desktop.HwndTopmost, 0, 0, 0, 0, Desktop.SwpNoMove | Desktop.SwpNoSize | Desktop.SwpNoActivate);
         LastRaise = $"foregroundBefore={before} setWindowPos={raised} error={(raised ? 0 : Marshal.GetLastPInvokeError())} {Desktop.StateOf(Hwnd)}";

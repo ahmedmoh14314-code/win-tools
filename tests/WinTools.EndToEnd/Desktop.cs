@@ -93,12 +93,6 @@ internal static partial class Desktop
         for (var i = 1; i <= steps; i++) { MoveTo(p.X + (x - p.X) * i / steps, p.Y + (y - p.Y) * i / steps); Thread.Sleep(stepMs); }
     }
 
-    /// <summary>
-    /// A relative mouse move of zero: harmless, but it makes this process the one that received the last input, which
-    /// Windows requires before it lets a background process raise another process's window (the foreground lock).
-    /// </summary>
-    public static void Nudge() => Mouse(0x0001);
-
     public static void LeftDown() => Mouse(0x0002);
     public static void LeftUp() => Mouse(0x0004);
     public static void KeyDown(int vk) => Key(vk, 0);

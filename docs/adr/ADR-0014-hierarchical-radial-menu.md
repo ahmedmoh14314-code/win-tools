@@ -29,7 +29,7 @@ The roadmap asks for protection against accidental activation (a minimum visible
 - **Opening needs depth:** a category or Back opens only from deep in its sector, never from a graze.
 - **Minimum visible time:** a drop runs a command only if its ring has been on screen for at least `ArmDelay` = 150 ms. A drop on a category, on Back, in the centre or outside the ring runs nothing. A release on a command before the delay plays the information sound, so "nothing ran" is never silent.
 - **Re-check at drop time:** the drop's own data object is resolved again, and the command runs only if it is still offered.
-- **What the menu sees:** the overlay follows the pointer from OLE's first DragEnter on. In Explorer that came 24 ms after the trigger at the median and up to 96 ms (the first drag of a fresh host). A movement made before that is not seen; the first position counts as a straight stroke from the centre. A hand that has already turned towards a command in that time opens the category its pointer is in, and the ring re-centres there, so nothing runs (Explorer finding 6).
+- **What the menu sees:** the overlay follows the pointer from OLE's first DragEnter on. In Explorer that came 23 ms after the trigger at the median and up to 118 ms. A movement made before that is not seen; the first position counts as a straight stroke from the centre. A hand that has already turned towards a command in that time opens the category its pointer is in, and the ring re-centres there. Nothing runs from that stroke; a command of the ring that opened still needs the arm delay (Explorer finding 6).
 
 **Drop effect:**
 - The effect is COPY whenever a command is under the pointer, even before the arm delay has passed. The drop is judged when it happens.
@@ -61,7 +61,7 @@ The roadmap asks for protection against accidental activation (a minimum visible
   - fast releases at 25, 100 and 400 ms, which held the arm rule per drop;
   - a trigger in the bottom-right screen corner, where nothing opened until the pointer had reached the pushed-aside ring's centre.
 
-  The trigger → overlay latency was p95 16.4 ms warm and at most 36.9 ms on first activation.
+  The trigger → overlay latency was p95 13.6 ms warm and at most 34.0 ms on first activation.
 
 ## Evaluator review
 First pass (2026-10-21): MERGE AFTER FIXES, with no blocker and no safety failure. The findings:
@@ -81,4 +81,4 @@ Re-check (2026-10-21): MERGE AFTER FIXES, with no blocker or major finding.
   - **N5:** a release before the delay has a sound, and the ADR claim is reworded.
   - **N6:** clamped re-centring is now a Core test (`Clamped_recentring_near_edges_never_arms_a_wrong_command`).
 
-Explorer runs (2026-10-21): all green on the final harness. Three harness defects were found and fixed on the way, with the host logs as evidence: the foreground rights of a second harness, the fast path's moves before the first DragEnter, and an "outside" scenario that never left the ring. None of them was a product defect.
+Explorer runs (2026-10-21): all 22 scenarios green, run again in full on the committed harness after a quick evaluator confirmation (MERGE AFTER FIXES, minor findings only, all applied). Three harness defects were found and fixed on the way, with the host logs as evidence: the foreground rights of a second harness, the fast path's moves before the first DragEnter, and an "outside" scenario that never left the ring. None of them was a product defect.

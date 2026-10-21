@@ -12,26 +12,27 @@ The navigation is the product's own: point at the category, move out to the comm
 5. **The foreground guard stopped the suite at its second scenario (harness).**
    - Diagnosis: the Explorer window was visible at the right place, but `SetWindowPos(HWND_TOPMOST)` returned TRUE without making it topmost. The terminal stayed in front.
    - Cause: the first harness started from a fresh shell opens Explorer in the foreground. The next one, started from the same shell, has no foreground rights, and Windows ignores the raise.
-   - Fix: every scenario runs from its own shell. The harness retries the check five times and records the window state on each refusal. It still injects nothing while the window is covered.
+   - Fix: every scenario runs from its own shell. The harness retries the check five times and records the window state on each refusal. It clicks or injects nothing while the window is covered. A zero mouse move tried first did not help and was removed.
 6. **fast 100 ms, first cycle: Tools opened instead of Convert (harness).**
    - The host log shows the overlay at 31.6 ms and OLE's first `DragEnter` at 71.8 ms, on the first drag after the host started. The harness's move to the category and its move to the command both came before that.
    - The drop target therefore saw one sample, 120 px straight up from the centre, which is a stroke into Tools. Nothing ran.
    - The harness now waits, within the same release time, until the host has opened the category before it turns to the command. A release before that is made on the category.
    - Any category that opens must be the wanted one. A drop is required whenever the host had opened the category.
+   - The host must have seen the stroke whenever there was time for it: from 200 ms on, it must have opened the category, and from 300 ms on, the drop must have run.
    - Product limitation, recorded in ADR-0014: movement before the first `DragEnter` is not visible to the drop target.
 7. **"outside" did not release outside (harness, criterion too weak).**
    - On the top ring every deep stroke opens a category. The straight path down opened Resize, and the re-centred ring was still under the release point.
    - The harness refused to release there and cancelled with Escape. The old criterion (nothing ran) still passed.
    - The scenario now opens the category and leaves its ring through a command, to a point checked to be the folder's empty background. It requires the release to have happened over Explorer.
-   - "escape", "category" and "unsupported" now also require where the release happened.
+   - "category" and "unsupported" now also require that the release happened over the overlay and that no category opened. "escape" requires that the host hid the overlay because of the Escape.
 8. **No scenario reached Remove metadata.** For `--op metadata.strip` the harness gives its JPEG copy a comment segment, and checks that the output no longer contains it.
 
 ## Results (current design, final harness)
-71 of 71 cycles passed in 22 scenarios. Every producing cycle had a valid output (by signature and container check) and a clean folder, and its sources were unchanged by hash. No cycle left the button or Space down, and no host process remained.
+All 22 scenarios were run again after the evaluator's last review, on the committed harness, each from its own shell. 71 of 71 cycles passed. Per-cycle records, without local paths, are in `2026-10-21-hierarchical-menu-runs.jsonl`. Every producing cycle had a valid output (by signature and container check) and a clean folder, and its sources were unchanged by hash. No cycle left the button or Space down, and no host process remained.
 
 | Scenario | Command | Cycles | Result |
 |---|---|---|---|
-| png | Convert → To JPEG | 5 | 5/5; drop accepted after the command ring had been open 574–578 ms |
+| png | Convert → To JPEG | 5 | 5/5; drop accepted after the command ring had been open 569–590 ms |
 | jpg | Convert → To PNG | 3 | 3/3 |
 | bmp | Convert → To WebP | 3 | 3/3 |
 | tif | Convert → To JPEG | 3 | 3/3 |
@@ -49,9 +50,9 @@ The navigation is the product's own: point at the category, move out to the comm
 | unsupported (`notes.txt`) | release on "No actions" | 3 | 3/3: nothing ran |
 | escape | Escape during the drag | 3 | 3/3: nothing ran |
 | outside | open Convert, leave through a command, release over the folder | 3 | 3/3: released over Explorer, nothing ran |
-| fast 25 ms | release as fast as possible | 5 | 5/5: released 40–71 ms after the trigger (the harness cannot be faster), refused as not armed |
-| fast 100 ms | | 5 | 5/5: released 100–116 ms, one drop each, refused as not armed (command ring open 47–92 ms) |
-| fast 400 ms | | 5 | 5/5: released 400–401 ms, accepted (command ring open 305–385 ms), valid output |
+| fast 25 ms | release as fast as possible | 5 | 5/5: released 38–55 ms after the trigger (the harness cannot be faster). 4 drops refused as not armed (command ring open 23–29 ms); in the first cycle the category had not opened yet, so the release was on the category, with no drop |
+| fast 100 ms | | 5 | 5/5: released 100.1–100.3 ms, one drop each, refused as not armed (command ring open 25–87 ms) |
+| fast 400 ms | | 5 | 5/5: released 400.1–400.7 ms, accepted (command ring open 335–397 ms), valid output |
 | edge (bottom-right corner) | Convert → To JPEG | 3 | 3/3, see below |
 
 The fast runs check the rule exactly, per drop:
@@ -65,12 +66,14 @@ The fast runs check the rule exactly, per drop:
 ## Measurements (host log, all 22 runs)
 | Metric | Result | Budget |
 |---|---|---|
-| Trigger → overlay shown, warm (n = 49) | p50 12.1 ms, p95 16.4 ms, max 19.7 ms | ≤ 50 ms p95 |
-| Trigger → overlay shown, first activation of a host (n = 22) | p50 28.2 ms, p95 34.1 ms, max 36.9 ms | ≤ 120 ms |
-| Trigger → first OLE DragEnter on the overlay (n = 71) | p50 23.7 ms, p95 90.0 ms, max 96.2 ms | — (see finding 6) |
-| Host private bytes at the end of a run | 9.4–16.1 MB | ≤ 100 MB |
-| Host working set at the end of a run | 39.2–50.4 MB | ≤ 150 MB |
+| Trigger → overlay shown, warm (n = 49) | p50 11.0 ms, p95 13.6 ms, max 15.0 ms | ≤ 50 ms p95 |
+| Trigger → overlay shown, first activation of a host (n = 22) | p50 28.6 ms, p95 33.5 ms, max 34.0 ms | ≤ 120 ms |
+| Trigger → first OLE DragEnter on the overlay (n = 71) | p50 22.6 ms, p95 88.8 ms, max 118.2 ms | — (see finding 6) |
+| Host private bytes at the end of a run | 9.5–16.2 MB | ≤ 100 MB |
+| Host working set at the end of a run | 39.2–50.6 MB | ≤ 150 MB |
 
 The memory figures are taken right after the last cycle, not after 2 minutes idle, so they are an upper bound for the budget's measurement.
+
+Observed and harmless: in one fast cycle a DragOver that OLE delivered after the button was already up still opened the category and moved the ring, 7 ms before the DragLeave hid it. Nothing ran.
 
 Not covered: multi-monitor and mixed DPI (one monitor), the Desktop as the drag source, other DPI settings in Explorer. These remain on the manual protocol.

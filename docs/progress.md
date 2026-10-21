@@ -11,7 +11,7 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 | 1. Formats and capability matrix | Done (PR #2 merged) |
 | 2. Resize, compress, rotate | Done (PR #3 merged) |
 | 3. Metadata, image info, batch, settings, output folder | Done (PR #4 merged) |
-| 4. Hierarchical radial menu | Done (PR #5) |
+| 4. Hierarchical radial menu | Done (PR #5, merged with this file) |
 | 5. V1 hardening | Next |
 | 6. Final acceptance gate | Pending |
 

@@ -365,7 +365,8 @@ using (var explorer = ExplorerWindow.Open(folder))
             var ruleHeld = drops.All(e => Is(e, "accepted", true) == ((Data(e).TryGetProperty("op", out _) || (Data(e).TryGetProperty("hot", out var h) && h.ValueKind == JsonValueKind.String))
                 && Data(e).TryGetProperty("openMs", out var ms) && ms.GetDouble() >= MenuNavigator.ArmDelay.TotalMilliseconds));
             // The drag ended on the overlay: a Drop, or a DragLeave after the release over a spot that offers nothing.
-            var endedOnOverlay = drops.Length > 0 || ev.Any(e => Ev(e) == "overlay.hide" && Data(e).TryGetProperty("reason", out var r) && r.GetString() == "dragLeave");
+            bool HiddenFor(string why) => ev.Any(e => Ev(e) == "overlay.hide" && Data(e).TryGetProperty("reason", out var r) && r.GetString() == why);
+            var endedOnOverlay = drops.Length > 0 || HiddenFor("dragLeave");
             var expectedFiles = output is null ? [sourceName] : new[] { sourceName, Path.GetFileName(output) }.Order(StringComparer.Ordinal).ToArray();
             var cleanFolder = files.SequenceEqual(expectedFiles);
             var menuOpens = ev.Where(e => Ev(e) == "menu.open").Select(e => Data(e).TryGetProperty("group", out var gr) ? gr.GetString() : null).ToArray();
@@ -385,11 +386,13 @@ using (var explorer = ExplorerWindow.Open(folder))
                 // refused one nothing.
                 "fast" => (enters == 0 || endedOnOverlay) && ruleHeld && (accepted == 0) == (output is null) && (output is null || outputValid)
                           && (menuOpens.Length == 0 || menuOpens.SequenceEqual([menu[groupIndex].Label])) // never a wrong category
-                          && (releasedOver != "overlay" || categorySeen != true || drops.Length == 1),
+                          && (releasedOver != "overlay" || categorySeen != true || drops.Length == 1)
+                          // With time to spare the stroke must have been seen, and a release well after the delay must run.
+                          && (fastMs < 200 || categorySeen == true) && (fastMs < 300 || accepted == 1),
                 "worker-crash" => output is null && accepted == 1, // the drop ran; the crashed job left nothing behind
                 // Nothing runs, and the release really happened where the scenario says.
                 "outside" => output is null && accepted == 0 && releasedOver == "explorer" && menuOpens.SequenceEqual([menu[groupIndex].Label]),
-                "escape" => output is null && accepted == 0 && releasedOver == "escape",
+                "escape" => output is null && accepted == 0 && HiddenFor("escape"), // the host saw the Escape
                 _ => output is null && accepted == 0 && releasedOver == "overlay" && menuOpens.Length == 0, // unsupported, category
             };
             if (ok) passed++; else exitCode = 1;
