@@ -90,8 +90,11 @@
         "Invalid or conflicting triggers are rejected with an actionable message."
       ],
       "status": "deferred",
-      "rationale": "Required eventually per the brief, but not needed to prove the interaction in the first prototype. Revisit after UX-001 is verified.",
-      "source": "brief.md §Important UX requirement"
+      "rationale": "The data layer exists (ADR-0013): the trigger is read from settings.json (Space or F8-F12, invalid values repaired to Space). A settings surface and a live change without restart belong to the UI phase, so the requirement stays deferred until then.",
+      "source": "brief.md §Important UX requirement",
+      "relatedAdrs": [
+        "ADR-0013"
+      ]
     },
     {
       "id": "UX-004",
@@ -445,6 +448,68 @@
       ],
       "status": "unverified",
       "source": "Phase 1B evaluator finding M5"
+    },
+    {
+      "id": "OPS-001",
+      "category": "operations",
+      "description": "Remove metadata: a copy without EXIF, GPS, XMP or text metadata, with the pixels unchanged where the format allows.",
+      "acceptanceCriteria": [
+        "JPEG, PNG and WebP are stripped without re-encoding; TIFF is re-encoded pixel-identically. ICC and the displayed orientation are kept.",
+        "The result is verified (same displayed pixels, nothing removable left); a file without metadata reports NothingToDo.",
+        "Reachable from the radial menu in Explorer."
+      ],
+      "status": "in-progress",
+      "source": "V1 roadmap TASK 3",
+      "relatedAdrs": [
+        "ADR-0006"
+      ],
+      "evidence": "MetadataTests (Core), MetadataOperationTests.Remove_metadata_from_a_jpeg_is_lossless_and_keeps_the_orientation, Remove_metadata_from_png_and_webp, File_without_metadata_reports_nothing_to_do, TiffMetadataTests. Not yet in the menu (hierarchical menu, TASK 4)."
+    },
+    {
+      "id": "OPS-002",
+      "category": "operations",
+      "description": "Image info: format, size, DPI, transparency, bit depth, orientation and which metadata is present, without writing a file.",
+      "acceptanceCriteria": [
+        "No file is written.",
+        "Reachable from the radial menu in Explorer."
+      ],
+      "status": "in-progress",
+      "source": "V1 roadmap TASK 3",
+      "relatedAdrs": [
+        "ADR-0006"
+      ],
+      "evidence": "MetadataOperationTests.Image_info_reports_facts_and_writes_nothing. Shown in a plain message box; not yet in the menu (TASK 4)."
+    },
+    {
+      "id": "OPS-003",
+      "category": "operations",
+      "description": "Batch: one drop of many files runs one operation on each, with a result per file.",
+      "acceptanceCriteria": [
+        "Only operations valid for every file are offered; up to 1000 files per drop.",
+        "Bounded parallelism; one corrupt file or a worker crash fails only that file.",
+        "Duplicate names never collide; an Explorer multi-selection works end to end."
+      ],
+      "status": "verified",
+      "source": "V1 roadmap TASK 3",
+      "relatedAdrs": [
+        "ADR-0005"
+      ],
+      "evidence": "BatchTests.Hundred_small_files_convert_in_parallel_with_one_result_each_in_order, One_corrupt_file_does_not_affect_the_others, Same_stem_in_one_folder_gets_distinct_outputs_even_in_parallel, A_worker_crash_on_one_file_fails_only_that_file; CapabilityResolver intersection tests. Explorer harness 'batch': 12 files 3/3 runs passed, 60 files 1/1 passed (job.done ok=60), 2026-10-21."
+    },
+    {
+      "id": "OPS-004",
+      "category": "settings",
+      "description": "Persisted settings: trigger key, output location, JPEG/WebP quality, resize defaults.",
+      "acceptanceCriteria": [
+        "Versioned schema; invalid values repaired to safe defaults; atomic save; a corrupt file is moved aside; a newer schema is never overwritten.",
+        "The output folder and qualities are honoured by the worker."
+      ],
+      "status": "verified",
+      "source": "V1 roadmap TASK 3",
+      "relatedAdrs": [
+        "ADR-0013"
+      ],
+      "evidence": "AppSettingsTests (Core); SettingsStoreTests.Missing_file_gives_defaults_and_save_round_trips, Corrupt_file_is_moved_aside_and_defaults_are_used, Newer_schema_is_read_but_never_overwritten, Save_replaces_atomically; BatchTests.Configured_output_folder_receives_the_outputs, Jpeg_quality_from_the_settings_changes_the_output. No settings UI (UX-003)."
     }
   ]
 }
