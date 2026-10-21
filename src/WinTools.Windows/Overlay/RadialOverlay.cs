@@ -7,7 +7,7 @@ namespace WinTools.Windows.Overlay;
 /// <summary>
 /// Callbacks from the overlay to its owner, on the overlay thread. Positions are offsets in physical pixels from the
 /// ring centre (down is positive). The owner decides what is under the pointer and answers with
-/// <see cref="RadialOverlay.SetView"/>; the return value says whether a drop there would run a command.
+/// <see cref="RadialOverlay.SetView"/>; the return value says whether a command is under the pointer (drop effect COPY).
 /// </summary>
 public interface IOverlayEvents
 {
@@ -23,10 +23,9 @@ public readonly record struct OverlayPlacement(int CentreX, int CentreY, uint Dp
 
 /// <summary>
 /// The native radial overlay (ADR-0001): a pre-created topmost, non-activating tool-window popup clipped with
-/// SetWindowRgn, painted with GDI and registered as an OLE drop target. The window is the full command circle, but its
-/// region is the category ring plus the arc of the open category, so only what is painted takes the drop. It paints a
-/// <see cref="MenuView"/> and knows nothing about operations. Create, use and dispose on one STA thread that called
-/// OleInitialize.
+/// SetWindowRgn to a circle, painted with GDI and registered as an OLE drop target. It shows one ring at a time and is
+/// moved by its owner when the menu changes level. It paints a <see cref="MenuView"/> and knows nothing about
+/// operations. Create, use and dispose on one STA thread that called OleInitialize.
 /// </summary>
 public sealed class RadialOverlay : IDisposable
 {
@@ -67,8 +66,8 @@ public sealed class RadialOverlay : IDisposable
     public bool IsVisible => _hwnd != 0 && User32.IsWindowVisible(_hwnd);
 
     /// <summary>
-    /// Shows the ring centred on (x, y) — the pointer position when the trigger was pressed — clamped so the whole
-    /// command circle fits that monitor's work area, without activating it.
+    /// Shows the ring centred on (x, y) — the pointer, when the trigger was pressed or when the menu changed level —
+    /// clamped to that monitor's work area, without activating it. Also used to move an already visible ring.
     /// </summary>
     public OverlayPlacement ShowAt(int x, int y)
     {
@@ -77,7 +76,7 @@ public sealed class RadialOverlay : IDisposable
         var info = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
         User32.GetMonitorInfoW(monitor, ref info);
         _dpi = Shcore.GetDpiForMonitor(monitor, 0 /* MDT_EFFECTIVE_DPI */, out var dpiX, out _) == 0 ? dpiX : 96;
-        _size = RingGeometry.Scale(RingGeometry.CommandRadius96 * 2, _dpi);
+        _size = RingGeometry.Scale(RingGeometry.OuterRadius96 * 2, _dpi);
         (_left, _top) = RingGeometry.Place(cursor.X, cursor.Y, _size, info.rcWork.Left, info.rcWork.Top, info.rcWork.Right, info.rcWork.Bottom);
         _view = null;
         ApplyRegion();
@@ -93,13 +92,11 @@ public sealed class RadialOverlay : IDisposable
         _view = null;
     }
 
-    /// <summary>Paints <paramref name="view"/> if it differs from what is shown; the region follows the open category.</summary>
+    /// <summary>Paints <paramref name="view"/> if it differs from what is shown.</summary>
     public void SetView(MenuView view)
     {
         if (view == _view) return;
-        var regionChanged = _view?.ActiveGroup != view.ActiveGroup || _view?.Commands.Count != view.Commands.Count;
         _view = view;
-        if (regionChanged) ApplyRegion();
         Repaint();
     }
 
@@ -127,37 +124,9 @@ public sealed class RadialOverlay : IDisposable
 
     private void ApplyRegion()
     {
-        var c = _size / 2;
-        var ring = RingGeometry.Scale(RingGeometry.OuterRadius96, _dpi);
-        var region = Gdi32.CreateEllipticRgn(c - ring, c - ring, c + ring + 1, c + ring + 1);
-        if (_view is { ActiveGroup: >= 0, Commands.Count: > 0 } v)
-        {
-            var band = RingGeometry.Scale(RingGeometry.CommandRadius96, _dpi);
-            var outline = ArcPolygon(c, ring - 2, band + 1, v.ArcStart, v.ArcSweep * v.Commands.Count);
-            var arc = Gdi32.CreatePolygonRgn(outline, outline.Length, Gdi32.WINDING);
-            if (arc != 0)
-            {
-                _ = Gdi32.CombineRgn(region, region, arc, Gdi32.RGN_OR);
-                Gdi32.DeleteObject(arc);
-            }
-        }
-        User32.SetWindowRgn(_hwnd, region, IsVisible); // the system owns the region from here
-    }
-
-    /// <summary>Outline of the band between two radii over an arc, in window pixels (angles clockwise from 12 o'clock).</summary>
-    private static POINT[] ArcPolygon(int c, int inner, int outer, double start, double sweep)
-    {
-        var steps = Math.Max(2, (int)Math.Ceiling(sweep / (Math.PI / 90))); // one point every 2°
-        var points = new POINT[2 * (steps + 1)];
-        for (var i = 0; i <= steps; i++)
-        {
-            var a = start + sweep * i / steps;
-            var (ox, oy) = RingGeometry.PointAt(a, outer);
-            var (ix, iy) = RingGeometry.PointAt(a, inner);
-            points[i] = new POINT { X = c + (int)Math.Round(ox), Y = c + (int)Math.Round(oy) };
-            points[points.Length - 1 - i] = new POINT { X = c + (int)Math.Round(ix), Y = c + (int)Math.Round(iy) };
-        }
-        return points;
+        var region = Gdi32.CreateEllipticRgn(0, 0, _size + 1, _size + 1);
+        if (region == 0) return; // keep the previous region; drops outside a command are refused anyway
+        if (User32.SetWindowRgn(_hwnd, region, IsVisible) == 0) Gdi32.DeleteObject(region); // on success the system owns it
     }
 
     private void Repaint()
@@ -202,22 +171,19 @@ public sealed class RadialOverlay : IDisposable
             var size = Math.Max(_size, 1);
             var c = size / 2;
             var dead = RingGeometry.Scale(RingGeometry.InnerRadius96, _dpi);
-            var ring = RingGeometry.Scale(RingGeometry.OuterRadius96, _dpi);
-            var band = RingGeometry.Scale(RingGeometry.CommandRadius96, _dpi);
-            var view = _view ?? new MenuView([], -1, [], 0, 0, -1, false);
+            var view = _view ?? new MenuView([], 0, -1, false, "");
             var mem = Gdi32.CreateCompatibleDC(hdc);
             var bmp = Gdi32.CreateCompatibleBitmap(hdc, size, size);
             var oldBmp = Gdi32.SelectObject(mem, bmp);
             var background = Gdi32.CreateSolidBrush(Gdi32.Rgb(32, 34, 40));
             var normal = Gdi32.CreateSolidBrush(Gdi32.Rgb(52, 56, 66));
-            var open = Gdi32.CreateSolidBrush(Gdi32.Rgb(62, 82, 112));     // the category whose commands are shown
-            var command = Gdi32.CreateSolidBrush(Gdi32.Rgb(44, 48, 58));
-            var pending = Gdi32.CreateSolidBrush(Gdi32.Rgb(58, 94, 140));  // under the pointer, not yet armed
+            var back = Gdi32.CreateSolidBrush(Gdi32.Rgb(40, 42, 50));
+            var pending = Gdi32.CreateSolidBrush(Gdi32.Rgb(58, 94, 140));  // under the pointer, not (yet) a drop that runs
             var armed = Gdi32.CreateSolidBrush(Gdi32.Rgb(70, 140, 220));
             var centre = Gdi32.CreateSolidBrush(Gdi32.Rgb(24, 25, 30));
             var pen = Gdi32.CreatePen(Gdi32.PS_SOLID, Math.Max(1, RingGeometry.Scale(2, _dpi)), Gdi32.Rgb(90, 94, 110));
-            var font = Gdi32.CreateFontW(-RingGeometry.Scale(14, _dpi), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5 /* CLEARTYPE_QUALITY */, 0, "Segoe UI");
-            var small = Gdi32.CreateFontW(-RingGeometry.Scale(13, _dpi), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
+            var font = Gdi32.CreateFontW(-RingGeometry.Scale(13, _dpi), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5 /* CLEARTYPE_QUALITY */, 0, "Segoe UI");
+            var small = Gdi32.CreateFontW(-RingGeometry.Scale(10, _dpi), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
             var oldPen = Gdi32.SelectObject(mem, pen);
             var oldFont = Gdi32.SelectObject(mem, font);
             var oldBrush = Gdi32.SelectObject(mem, normal);
@@ -225,35 +191,38 @@ public sealed class RadialOverlay : IDisposable
             {
                 User32.FillRect(mem, new RECT { Right = size, Bottom = size }, background);
                 _ = Gdi32.SetBkMode(mem, Gdi32.TRANSPARENT);
-                var lineHalf = RingGeometry.Scale(12, _dpi);
-
-                // Outer band first: the open category's commands, one sector each, overdrawn inside by the category ring.
-                for (var i = 0; i < view.Commands.Count; i++)
+                var n = view.Labels.Count;
+                var isLevel = view.Hub.Length > 0; // a category's ring: sector 0 is Back
+                var w = n == 0 ? 0 : 2 * Math.PI / n;
+                for (var i = 0; i < n; i++)
                 {
-                    Gdi32.SelectObject(mem, i != view.HotCommand ? command : view.Armed ? armed : pending);
-                    Sector(mem, c, band, view.ArcStart + i * view.ArcSweep, view.ArcStart + (i + 1) * view.ArcSweep);
-                }
-                var n = view.Groups.Count;
-                for (var g = 0; g < n; g++)
-                {
-                    Gdi32.SelectObject(mem, g == view.ActiveGroup ? open : normal);
-                    Sector(mem, c, ring, 2 * Math.PI * g / n, 2 * Math.PI * (g + 1) / n);
+                    Gdi32.SelectObject(mem, i == view.Hot ? (view.Armed ? armed : pending) : isLevel && i == 0 ? back : normal);
+                    Sector(mem, c, c, view.Start + i * w, view.Start + (i + 1) * w);
                 }
                 if (n == 0)
                 {
                     Gdi32.SelectObject(mem, normal);
-                    Gdi32.Ellipse(mem, c - ring, c - ring, c + ring, c + ring);
+                    Gdi32.Ellipse(mem, 0, 0, size, size);
                 }
                 Gdi32.SelectObject(mem, centre);
                 Gdi32.Ellipse(mem, c - dead, c - dead, c + dead, c + dead);
 
+                var lineHalf = RingGeometry.Scale(12, _dpi);
                 _ = Gdi32.SetTextColor(mem, n == 0 ? Gdi32.Rgb(150, 152, 160) : Gdi32.Rgb(240, 240, 245));
-                if (n == 0) Label(mem, "No actions", c, 0, (dead + ring) / 2.0, RingGeometry.Scale(48, _dpi), lineHalf);
-                for (var g = 0; g < n; g++)
-                    Label(mem, view.Groups[g], c, RingGeometry.SectorCentre(g, n), (dead + ring) / 2.0, RingGeometry.Scale(40, _dpi), lineHalf);
-                Gdi32.SelectObject(mem, small);
-                for (var i = 0; i < view.Commands.Count; i++)
-                    Label(mem, view.Commands[i], c, RingGeometry.CommandCentre(view.ArcStart, view.ArcSweep, i), (ring + band) / 2.0, RingGeometry.Scale(56, _dpi), lineHalf);
+                if (n == 0) Label(mem, "No actions", c, 0, (dead + c) / 2.0, RingGeometry.Scale(48, _dpi), lineHalf);
+                // Narrow sectors get narrower label boxes so neighbours never overlap.
+                var half = RingGeometry.Scale(n > 6 ? 30 : 40, _dpi);
+                for (var i = 0; i < n; i++)
+                {
+                    _ = Gdi32.SetTextColor(mem, isLevel && i == 0 ? Gdi32.Rgb(170, 172, 180) : Gdi32.Rgb(240, 240, 245));
+                    Label(mem, view.Labels[i], c, RingGeometry.SectorCentre(i, n, view.Start), (dead + c) / 2.0 + RingGeometry.Scale(4, _dpi), half, lineHalf);
+                }
+                if (isLevel)
+                {
+                    Gdi32.SelectObject(mem, small);
+                    _ = Gdi32.SetTextColor(mem, Gdi32.Rgb(170, 172, 180));
+                    Label(mem, view.Hub, c, 0, 0, dead, lineHalf);
+                }
                 Gdi32.BitBlt(hdc, 0, 0, size, size, mem, 0, 0, Gdi32.SRCCOPY);
             }
             finally
@@ -262,7 +231,7 @@ public sealed class RadialOverlay : IDisposable
                 Gdi32.SelectObject(mem, oldPen);
                 Gdi32.SelectObject(mem, oldBrush);
                 Gdi32.SelectObject(mem, oldBmp);
-                foreach (var o in new[] { font, small, pen, background, normal, open, command, pending, armed, centre, bmp }) Gdi32.DeleteObject(o);
+                foreach (var o in new[] { font, small, pen, background, normal, back, pending, armed, centre, bmp }) Gdi32.DeleteObject(o);
                 Gdi32.DeleteDC(mem);
             }
         }

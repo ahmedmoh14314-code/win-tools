@@ -2,105 +2,117 @@ using WinTools.Core.Capabilities;
 
 namespace WinTools.Core.Interaction;
 
-/// <summary>What the overlay paints: category labels, the active one, its command arc, and the command under the pointer.</summary>
-public sealed record MenuView(
-    IReadOnlyList<string> Groups,
-    int ActiveGroup,
-    IReadOnlyList<string> Commands,
-    double ArcStart,
-    double ArcSweep,
-    int HotCommand,
-    bool Armed);
+/// <summary>What the overlay paints: one ring of labelled sectors, the one under the pointer, and a label for the hub.</summary>
+/// <param name="Start">Where sector 0 begins (radians clockwise from 12 o'clock).</param>
+/// <param name="Hot">Sector under the pointer, or -1.</param>
+/// <param name="Armed">The hot sector is a command that a drop would run now.</param>
+/// <param name="Hub">Text for the centre: the open category, or empty at the top level.</param>
+public sealed record MenuView(IReadOnlyList<string> Labels, double Start, int Hot, bool Armed, string Hub);
 
 /// <summary>
-/// Navigation of the two-level radial menu during a drag, driven only by pointer offsets from the ring centre and the
-/// time since the overlay appeared. No button can be clicked while dragging, so pointing is the whole interaction:
+/// Navigation of the two-level radial menu during a drag, driven only by pointer offsets from the centre of the ring
+/// on screen and the time since that ring appeared. No button can be clicked while dragging, so pointing is the whole
+/// interaction, and only one level is on screen at a time (a compound marking menu):
 /// <list type="bullet">
-/// <item>Entering a category in the inner ring makes it active and shows its commands in the outer band. It stays
-/// active while the pointer is in the dead zone or the outer band. A command arc can be wider than its category, so
-/// the way out to it may cross a neighbouring category: that neighbour opens only near the hub (inside
-/// <see cref="SwitchFraction"/> of the ring) or in a direction outside the open arc, never on the way to it.</item>
-/// <item>A drop runs a command only if the pointer is on a command of the active category and that category has been
-/// visible for at least <see cref="ArmDelay"/>. A drop on a category, the dead zone or a gap runs nothing.</item>
-/// <item>The commands appear outside the pointer, never under it, so reaching one always takes a deliberate outward
-/// movement.</item>
+/// <item>The top level shows the categories. Moving deep into one (<see cref="RingGeometry.OpenRadius96"/>) opens it:
+/// the owner re-centres the ring on the pointer, which shows that category's commands plus a Back sector pointing the
+/// way the stroke came. Moving deep into Back returns to the categories, re-centred the same way.</item>
+/// <item>Movement threshold: a ring reacts only after the pointer has been inside its dead zone. Each ring appears
+/// centred on the pointer, so this holds at once, except near a screen edge where the ring is pushed aside; there the
+/// pointer has to come to the centre first.</item>
+/// <item>Minimum visible time: a drop runs a command only if the ring has been on screen for <see cref="ArmDelay"/>.
+/// A drop anywhere else (a category, Back, the dead zone, outside) runs nothing.</item>
 /// </list>
 /// Single-threaded: every call comes from the overlay thread.
 /// </summary>
 public sealed class MenuNavigator
 {
-    /// <summary>
-    /// Minimum time the command arc must have been visible before a drop on it runs. It rejects a release that
-    /// happens while the pointer is still sweeping outward through a category that just opened.
-    /// </summary>
+    /// <summary>Minimum time a ring of commands must have been on screen before a drop on it runs.</summary>
     public static readonly TimeSpan ArmDelay = TimeSpan.FromMilliseconds(150);
 
-    /// <summary>While a category is open, another one inside the open arc's directions opens only this far out into the ring (0 = hub edge, 1 = ring edge).</summary>
-    public const double SwitchFraction = 0.4;
+    public const string BackLabel = "Back";
 
     private readonly IReadOnlyList<MenuGroup> _groups;
     private readonly string[] _groupLabels;
-    private readonly string[][] _commandLabels; // cached, so equal views compare equal and repaint only on change
-    private readonly int _dead, _ring, _band, _switch;
-    private int _active = -1, _hot = -1;
-    private TimeSpan _activeSince;
+    private readonly string[][] _levelLabels; // per category: Back, then its commands (cached so equal views compare equal)
+    private int _dead, _ring, _open;
+    private int _level = -1, _hot = -1;
+    private bool _hubVisited;
+    private TimeSpan _shownAt;
 
     public MenuNavigator(IReadOnlyList<MenuGroup> groups, uint dpi)
     {
         _groups = groups;
         _groupLabels = groups.Select(g => g.Label).ToArray();
-        _commandLabels = groups.Select(g => g.Commands.Select(c => c.Label).ToArray()).ToArray();
-        _dead = RingGeometry.Scale(RingGeometry.InnerRadius96, dpi);
-        _ring = RingGeometry.Scale(RingGeometry.OuterRadius96, dpi);
-        _band = RingGeometry.Scale(RingGeometry.CommandRadius96, dpi);
-        _switch = _dead + (int)Math.Round((_ring - _dead) * SwitchFraction);
+        _levelLabels = groups.Select(g => new[] { BackLabel }.Concat(g.Commands.Select(c => c.Label)).ToArray()).ToArray();
+        SetDpi(dpi);
     }
 
     public IReadOnlyList<MenuGroup> Groups => _groups;
 
-    /// <summary>The active category, or null before the pointer has entered one.</summary>
-    public MenuGroup? Active => _active >= 0 ? _groups[_active] : null;
+    /// <summary>The open category, or null at the top level.</summary>
+    public MenuGroup? Open => _level >= 0 ? _groups[_level] : null;
 
     /// <summary>The command under the pointer, armed or not.</summary>
-    public Operation? Hot => _active >= 0 && _hot >= 0 ? _groups[_active].Commands[_hot] : null;
+    public Operation? Hot => _level >= 0 && _hot >= 1 ? _groups[_level].Commands[_hot - 1] : null;
 
-    /// <summary>Feeds the pointer offset from the ring centre at <paramref name="now"/> (time since the overlay appeared).</summary>
-    public void Move(int dx, int dy, TimeSpan now)
+    /// <summary>
+    /// Where sector 0 (Back) of category <paramref name="group"/>'s ring begins: Back is centred on the direction
+    /// opposite to the category, so retracing the stroke goes back. Commands follow clockwise.
+    /// </summary>
+    public static double LevelStart(int group, int groupCount, int commandCount) =>
+        RingGeometry.Normalize(RingGeometry.SectorCentre(group, groupCount) + Math.PI - Math.PI / (commandCount + 1));
+
+    private int SectorCount => _level < 0 ? _groups.Count : _groups[_level].Commands.Count + 1;
+
+    private double Start => _level < 0 ? 0 : LevelStart(_level, _groups.Count, _groups[_level].Commands.Count);
+
+    /// <summary>
+    /// Feeds the pointer offset from the centre of the ring on screen at <paramref name="now"/>. Returns true when the
+    /// level changed: the owner must re-centre the ring on the pointer and call <see cref="Shown"/>.
+    /// </summary>
+    public bool Move(int dx, int dy, TimeSpan now)
     {
-        var group = RingGeometry.HitSector(dx, dy, _dead, _ring, _groups.Count);
-        if (group >= 0)
-        {
-            if (group != _active && (_active < 0 || NearHub(dx, dy) || !InOpenArc(dx, dy))) { _active = group; _activeSince = now; }
-            _hot = -1;
-            return;
-        }
-        if (_active < 0) { _hot = -1; return; }
-        var (start, sweep) = Arc();
-        _hot = RingGeometry.HitCommand(dx, dy, _ring, _band, start, sweep, _groups[_active].Commands.Count);
+        var d2 = (double)dx * dx + (double)dy * dy;
+        if (d2 < (double)_dead * _dead) { _hubVisited = true; _hot = -1; return false; }
+        if (!_hubVisited) { _hot = -1; return false; } // pushed aside near an edge: come to the centre first
+        _hot = RingGeometry.HitSector(dx, dy, _dead, _ring, SectorCount, Start);
+        if (_hot < 0 || d2 < (double)_open * _open) return false;
+        if (_level < 0) _level = _hot;          // into a category
+        else if (_hot == 0) _level = -1;        // into Back
+        else return false;                      // deep on a command: just stay there
+        _hot = -1;
+        _hubVisited = false;
+        _shownAt = now;
+        return true;
+    }
+
+    /// <summary>
+    /// The new ring is on screen: <paramref name="dx"/>/<paramref name="dy"/> is the pointer's offset from its centre
+    /// (zero unless it was pushed aside near an edge), measured on a monitor of <paramref name="dpi"/>.
+    /// </summary>
+    public void Shown(int dx, int dy, TimeSpan now, uint dpi)
+    {
+        SetDpi(dpi);
+        _shownAt = now;
+        _hot = -1;
+        _hubVisited = (double)dx * dx + (double)dy * dy < (double)_dead * _dead;
     }
 
     /// <summary>The command a drop at this moment would run, or null.</summary>
-    public Operation? Armed(TimeSpan now) => Hot is { } op && now - _activeSince >= ArmDelay ? op : null;
+    public Operation? Armed(TimeSpan now) => Hot is { } op && now - _shownAt >= ArmDelay ? op : null;
 
-    /// <summary>How long the active category has been open (zero when none is).</summary>
-    public TimeSpan ActiveFor(TimeSpan now) => _active >= 0 ? now - _activeSince : TimeSpan.Zero;
+    /// <summary>How long the current ring has been on screen.</summary>
+    public TimeSpan ShownFor(TimeSpan now) => now - _shownAt;
 
-    public MenuView View(TimeSpan now)
+    public MenuView View(TimeSpan now) => _level < 0
+        ? new MenuView(_groupLabels, 0, _hot, false, "")
+        : new MenuView(_levelLabels[_level], Start, _hot, Armed(now) is not null, _groups[_level].Label);
+
+    private void SetDpi(uint dpi)
     {
-        if (_active < 0) return new MenuView(_groupLabels, -1, [], 0, 0, -1, false);
-        var (start, sweep) = Arc();
-        return new MenuView(_groupLabels, _active, _commandLabels[_active], start, sweep, _hot, Armed(now) is not null);
+        _dead = RingGeometry.Scale(RingGeometry.InnerRadius96, dpi);
+        _ring = RingGeometry.Scale(RingGeometry.OuterRadius96, dpi);
+        _open = RingGeometry.Scale(RingGeometry.OpenRadius96, dpi);
     }
-
-    private bool NearHub(int dx, int dy) => (double)dx * dx + (double)dy * dy < (double)_switch * _switch;
-
-    private bool InOpenArc(int dx, int dy)
-    {
-        var (start, sweep) = Arc();
-        var span = sweep * _groups[_active].Commands.Count;
-        var rel = (RingGeometry.Angle(dx, dy) - start) % (2 * Math.PI);
-        return (rel < 0 ? rel + 2 * Math.PI : rel) < span;
-    }
-
-    private (double Start, double Sweep) Arc() => RingGeometry.CommandArc(_active, _groups.Count, _groups[_active].Commands.Count);
 }

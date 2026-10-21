@@ -21,7 +21,7 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 ## Work completed
 - Formats: PNG, JPEG, WebP, BMP, TIFF in every direction (ADR-0006). SVG and HEIC deferred (ADR-0012).
 - Operations: convert; resize (percent and boxes); compress (three levels, PNG lossless); rotate; remove metadata; image info. Batch up to 1000 files through a pool of at most 4 workers (ADR-0005). Settings data layer (ADR-0013).
-- The radial menu has two levels: categories (Convert, Compress, Resize, Rotate, Tools) in the inner ring and the commands of the open category in an outer arc (ADR-0014). Every operation is reachable from Explorer.
+- The radial menu has two levels, shown one at a time and centred on the pointer: the categories (Convert, Compress, Resize, Rotate, Tools), then the commands of the open category plus Back (ADR-0014). Every operation has a place in the menu; the Explorer runs are recorded in `docs/performance/2026-10-21-hierarchical-menu.md`.
 - Measurements: `docs/performance/2026-10-21-first-slice.md`, `docs/performance/2026-10-21-batch.md`. Threat model: `docs/security/threat-model.md`. Dependency matrix: `docs/architecture/dependency-matrix.md` (SkiaSharp for WebP, worker only).
 
 ## Decisions made
@@ -32,7 +32,7 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 ## Open questions (each with the experiment or decision that closes it)
 - Multi-monitor and mixed DPI; the Desktop as drag source; Windows 10. These need the manual protocol or Windows Sandbox.
 - A user-visible failure state (notifications or a tray icon). Today a failure gives only the error sound and a log entry.
-- Accidental activation: a 28 px dead zone and a 150 ms minimum open time are implemented and unit-tested (ADR-0014). The Explorer `fast` and `category` runs that measure them are still to be recorded.
+- Accidental activation: a movement threshold (each ring reacts only after the pointer was at its centre), opening by depth, and a 150 ms minimum visible time are implemented and unit-tested (ADR-0014). The Explorer `fast` and `category` runs that measure them are still to be recorded.
 - JPEGs with benign codec warnings are refused; not yet measured on a real-world photo set (TASK 5).
 - Image limits (100 MP) are high for 4 parallel workers; lower limits and a job-object memory cap (TASK 5).
 - Overlay accessibility: its own provider, which must not block the overlay thread.

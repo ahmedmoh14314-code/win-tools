@@ -36,8 +36,12 @@ public static class RadialMenu
     /// (<see cref="Settings.AppSettings.CustomResizeId"/>), unless that size already is a preset. Grouping keeps catalog
     /// order, so the exact size ends up last in Resize.
     /// </summary>
-    public static IReadOnlyList<Operation> Catalog(string? customResizeId) =>
-        OperationCatalog.Find(customResizeId) is { } custom && OperationCatalog.All.All(o => o.Id != custom.Id)
-            ? [.. OperationCatalog.All, custom]
-            : OperationCatalog.All;
+    public static IReadOnlyList<Operation> Catalog(string? customResizeId)
+    {
+        if (OperationCatalog.Find(customResizeId) is not { } custom || OperationCatalog.All.Any(o => o.Id == custom.Id)) return OperationCatalog.All;
+        // Same size as a preset but different behaviour (stretch, enlarge): the label must tell them apart.
+        if (OperationCatalog.All.Any(o => o.Label == custom.Label))
+            custom = custom with { Label = custom.Label + (custom.Resize is { KeepAspect: false } ? " (stretch)" : " (enlarge)") };
+        return [.. OperationCatalog.All, custom];
+    }
 }

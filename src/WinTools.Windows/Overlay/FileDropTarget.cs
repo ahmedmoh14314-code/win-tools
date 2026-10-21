@@ -5,15 +5,16 @@ namespace WinTools.Windows.Overlay;
 
 /// <summary>
 /// The overlay's OLE drop target. Accepts only CF_HDROP, from sources that allow COPY. The effect is DROPEFFECT_COPY over
-/// an armed command and DROPEFFECT_NONE everywhere else; it is never DROPEFFECT_MOVE, which would let a shell source
-/// delete the originals. Callbacks run on the overlay's (STA) thread.
+/// a command and DROPEFFECT_NONE everywhere else; it is never DROPEFFECT_MOVE, which would let a shell source delete the
+/// originals. Whether a drop on a command runs it is decided at the drop (the arm delay). Callbacks run on the
+/// overlay's (STA) thread.
 /// </summary>
 public sealed class FileDropTarget(RadialOverlay overlay) : IDropTarget
 {
     private bool _hasFiles, _copyAllowed;
 
-    // COPY over an armed command, and only if the source allows COPY; NONE everywhere else.
-    private uint Effect(bool armed) => _hasFiles && _copyAllowed && armed ? Ole32.DROPEFFECT_COPY : Ole32.DROPEFFECT_NONE;
+    // COPY over a command, and only if the source allows COPY; NONE everywhere else.
+    private uint Effect(bool overCommand) => _hasFiles && _copyAllowed && overCommand ? Ole32.DROPEFFECT_COPY : Ole32.DROPEFFECT_NONE;
 
     public int DragEnter(IDataObject dataObject, uint keyState, POINTL pt, ref uint effect)
     {

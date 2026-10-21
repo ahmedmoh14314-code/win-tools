@@ -112,12 +112,12 @@ static string Ev(JsonElement e) => e.TryGetProperty("ev", out var v) ? v.GetStri
 // Host log lines are {"t","wall","ev","data":{...}}: event fields live under "data".
 static JsonElement Data(JsonElement e) => e.TryGetProperty("data", out var d) && d.ValueKind == JsonValueKind.Object ? d : default;
 static bool Is(JsonElement e, string name, bool value) => Data(e) is { ValueKind: JsonValueKind.Object } d && d.TryGetProperty(name, out var v) && v.ValueKind == (value ? JsonValueKind.True : JsonValueKind.False);
-// The centre and DPI the host used for the overlay shown in this cycle, from its log.
+// The centre and DPI of the ring on screen in this cycle, from the host log: the menu re-centres when it changes level.
 (int X, int Y, uint Dpi)? LastOverlay()
 {
     foreach (var l in HostLines().Skip(hostLogLines).Reverse())
     {
-        if (!l.Contains("\"ev\":\"overlay.show\"", StringComparison.Ordinal)) continue;
+        if (!l.Contains("\"ev\":\"overlay.show\"", StringComparison.Ordinal) && !l.Contains("\"ev\":\"menu.open\"", StringComparison.Ordinal)) continue;
         var e = Data(JsonDocument.Parse(l).RootElement);
         if (e.ValueKind != JsonValueKind.Object || !e.TryGetProperty("centre", out var centre) || !e.TryGetProperty("dpi", out var dpi)) return null;
         var c = centre.GetString()!.Split(',');
@@ -161,18 +161,22 @@ using (var explorer = ExplorerWindow.Open(folder))
             Thread.Sleep(250);
             Desktop.GetCursorPos(out var at);
 
-            // Points of the wanted category and command, as the product lays them out around the overlay's centre.
-            (int X, int Y) CategoryPoint((int X, int Y, uint Dpi) o)
+            // Points of the wanted category and command, as the product lays them out around the centre of the ring on screen.
+            (int X, int Y) Around((int X, int Y, uint Dpi) o, double angle, double radius96)
             {
-                var (dx, dy) = RingGeometry.PointAt(RingGeometry.SectorCentre(Math.Max(0, groupIndex), Math.Max(1, menu.Count)), (RingGeometry.InnerRadius96 + RingGeometry.OuterRadius96) / 2.0 * o.Dpi / 96);
+                var (dx, dy) = RingGeometry.PointAt(angle, radius96 * o.Dpi / 96);
                 return (o.X + (int)Math.Round(dx), o.Y + (int)Math.Round(dy));
             }
+            var categoryAngle = RingGeometry.SectorCentre(Math.Max(0, groupIndex), Math.Max(1, menu.Count));
+            // Deep into the category opens it; halfway only points at it (the "category" drop that must run nothing).
+            (int X, int Y) CategoryOpenPoint((int X, int Y, uint Dpi) o) => Around(o, categoryAngle, (RingGeometry.OpenRadius96 + RingGeometry.OuterRadius96) / 2.0);
+            (int X, int Y) CategoryPoint((int X, int Y, uint Dpi) o) => Around(o, categoryAngle, (RingGeometry.InnerRadius96 + RingGeometry.OpenRadius96) / 2.0);
+            // On the open category's ring (re-centred on the pointer): sector 0 is Back, commands follow.
             (int X, int Y) CommandPoint((int X, int Y, uint Dpi) o)
             {
                 if (groupIndex < 0) return CategoryPoint(o);
-                var (start, sweep) = RingGeometry.CommandArc(groupIndex, menu.Count, menu[groupIndex].Commands.Count);
-                var (dx, dy) = RingGeometry.PointAt(RingGeometry.CommandCentre(start, sweep, commandIndex), (RingGeometry.OuterRadius96 + RingGeometry.CommandRadius96) / 2.0 * o.Dpi / 96);
-                return (o.X + (int)Math.Round(dx), o.Y + (int)Math.Round(dy));
+                var count = menu[groupIndex].Commands.Count;
+                return Around(o, RingGeometry.SectorCentre(commandIndex + 1, count + 1, MenuNavigator.LevelStart(groupIndex, menu.Count, count)), 62);
             }
             var assumed = (at.X, at.Y, Desktop.GetDpiForWindow(explorer.Hwnd));
             (int X, int Y) release = (at.X, at.Y);
@@ -186,9 +190,10 @@ using (var explorer = ExplorerWindow.Open(folder))
                 // As fast as a hand can: category and command right after the overlay appears, release at --fast-ms.
                 while (Desktop.ClassOf(Desktop.RootAt(at.X, at.Y)) != "WinTools.RadialOverlay" && Stopwatch.GetElapsedTime(tKey).TotalMilliseconds < fastMs) Thread.SpinWait(50);
                 var o = LastOverlay() ?? assumed;
-                var cat = CategoryPoint(o);
+                var cat = CategoryOpenPoint(o);
                 Desktop.MoveTo(cat.X, cat.Y); Thread.Sleep(8);
-                release = CommandPoint(o);
+                var level = LastOverlay() is { } lv && (lv.X, lv.Y) != (o.X, o.Y) ? lv : (cat.X, cat.Y, o.Dpi); // re-centred on the pointer
+                release = CommandPoint(level);
                 Desktop.MoveTo(release.X, release.Y);
                 while (Stopwatch.GetElapsedTime(tKey).TotalMilliseconds < fastMs) Thread.SpinWait(50);
                 releasedOver = explorer.ReleaseTarget(release.X, release.Y); // what was under the pointer just before the release
@@ -212,14 +217,15 @@ using (var explorer = ExplorerWindow.Open(folder))
                 else
                 {
                     if (scenario == "outside")
-                        release = (o.X, o.Y + (int)Math.Round(240.0 * o.Dpi / 96)); // beyond the whole menu, over the folder background
+                        release = (o.X, o.Y + (int)Math.Round(160.0 * o.Dpi / 96)); // beyond the ring, over the folder background
+                    else if (scenario is "category" or "unsupported")
+                        release = CategoryPoint(o); // pointing at a category (or at "No actions"): a drop there must run nothing
                     else
                     {
-                        var cat = CategoryPoint(o);
+                        var cat = CategoryOpenPoint(o);
                         Desktop.GlideTo(cat.X, cat.Y);
                         Thread.Sleep(120);
-                        // "category" and "unsupported" release on the category itself: that must run nothing.
-                        release = scenario is "category" or "unsupported" ? cat : CommandPoint(o);
+                        release = CommandPoint(LastOverlay() ?? (cat.X, cat.Y, o.Dpi)); // the category's ring, centred where it opened
                     }
                     Desktop.GlideTo(release.X, release.Y);
                     Thread.Sleep(scenario == "outside" ? 120 : (int)MenuNavigator.ArmDelay.TotalMilliseconds + 150);
@@ -270,7 +276,10 @@ using (var explorer = ExplorerWindow.Open(folder))
             var enters = ev.Count(e => Ev(e) == "drag.enter");
             var drops = ev.Where(e => Ev(e) == "drop").ToArray();
             var accepted = drops.Count(e => Is(e, "accepted", true));
-            double? openMs = drops.FirstOrDefault(e => Is(e, "accepted", true)) is { ValueKind: JsonValueKind.Object } d && Data(d).TryGetProperty("openMs", out var om) ? om.GetDouble() : null;
+            double? openMs = drops.FirstOrDefault() is { ValueKind: JsonValueKind.Object } d && Data(d).TryGetProperty("openMs", out var om) ? om.GetDouble() : null;
+            // The rule, per drop: it runs exactly when a command was under the pointer and its ring had been open for the arm delay.
+            var ruleHeld = drops.All(e => Is(e, "accepted", true) == ((Data(e).TryGetProperty("op", out _) || (Data(e).TryGetProperty("hot", out var h) && h.ValueKind == JsonValueKind.String))
+                && Data(e).TryGetProperty("openMs", out var ms) && ms.GetDouble() >= MenuNavigator.ArmDelay.TotalMilliseconds));
             // The drag ended on the overlay: a Drop, or a DragLeave after the release over a spot that offers nothing.
             var endedOnOverlay = drops.Length > 0 || ev.Any(e => Ev(e) == "overlay.hide" && Data(e).TryGetProperty("reason", out var r) && r.GetString() == "dragLeave");
             var expectedFiles = output is null ? [sourceName] : new[] { sourceName, Path.GetFileName(output) }.Order(StringComparer.Ordinal).ToArray();
@@ -279,16 +288,17 @@ using (var explorer = ExplorerWindow.Open(folder))
             {
                 "png" or "jpg" or "bmp" or "tif" when op is { WritesFile: false } => output is null && infoShown && accepted == 1,
                 "png" or "jpg" or "bmp" or "tif" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
-                // Fast release, judged by the host: a drag that reached the overlay ends there (no drop lost to the window
-                // below), a command runs only once its category has been open for the arm delay, and an accepted drop must
-                // produce a valid output while a refused one produces nothing.
-                "fast" => (enters == 0 || endedOnOverlay) && (accepted == 0) == (output is null) && (output is null || outputValid)
-                          && (accepted == 0 || openMs >= MenuNavigator.ArmDelay.TotalMilliseconds),
+                // Fast release, judged by the host. A pointer on a command gets COPY, so a drag that reached a command must
+                // end in a Drop on the overlay (none lost to the window below, none silently cancelled); the drop runs
+                // exactly when the ring had been open for the arm delay; an accepted drop produces a valid output and a
+                // refused one nothing.
+                "fast" => (enters == 0 || endedOnOverlay) && ruleHeld && (accepted == 0) == (output is null) && (output is null || outputValid)
+                          && (releasedOver != "overlay" || drops.Length == 1),
                 "worker-crash" => output is null && accepted == 1, // the drop ran; the crashed job left nothing behind
                 _ => output is null && accepted == 0,              // escape, outside, unsupported, category: nothing runs
             };
             if (ok) passed++; else exitCode = 1;
-            Record(new { scenario, cycle, op = op?.Id, releasedOver, releaseAfterMs, hostEnters = enters, hostAccepted = accepted, openMs, endedOnOverlay, infoShown,
+            Record(new { scenario, cycle, op = op?.Id, releasedOver, releaseAfterMs, hostEnters = enters, hostDrops = drops.Length, hostAccepted = accepted, openMs, ruleHeld, endedOnOverlay, infoShown,
                 triggerAt = $"{at.X},{at.Y}", releaseAt = $"{release.X},{release.Y}", output = output is null ? null : Path.GetFileName(output), outputValid, sourceIntact, cleanFolder, files, ok });
             if (output is not null) File.Delete(output); // the harness's own result file, so the next cycle starts clean
             Thread.Sleep((int)Desktop.GetDoubleClickTime() + 300);
