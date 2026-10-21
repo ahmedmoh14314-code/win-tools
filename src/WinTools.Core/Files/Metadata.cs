@@ -67,6 +67,21 @@ public static class Metadata
         _ => [],
     };
 
+    /// <summary>
+    /// True for a JPEG that carries a further image: an MPF index (APP2 "MPF\0") or a second JPEG after EOI, as Ultra
+    /// HDR gain maps, Motion Photos and multi-picture files do. Removal would silently drop that image, so it is refused.
+    /// </summary>
+    public static bool HasSecondaryImage(ReadOnlySpan<byte> d, ImageFormat format)
+    {
+        if (format != ImageFormat.Jpeg) return false;
+        foreach (var (kind, m, s, e) in JpegElements(d))
+        {
+            if (kind == JpegKind.Marker && m == 0xE2 && Payload(d, s, e).StartsWith("MPF\0"u8)) return true;
+            if (kind == JpegKind.Trailing && d[s..e].IndexOf([(byte)0xFF, (byte)0xD8, (byte)0xFF]) >= 0) return true;
+        }
+        return false;
+    }
+
     /// <summary>A TIFF block ("II*\0", IFD0 with one entry: Orientation) — the minimal EXIF that keeps the orientation.</summary>
     public static byte[] OrientationOnlyExif(int orientation) =>
     [

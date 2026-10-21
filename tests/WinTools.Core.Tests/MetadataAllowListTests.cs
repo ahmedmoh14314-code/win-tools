@@ -140,6 +140,16 @@ public sealed class MetadataAllowListTests
         Assert.Empty(Metadata.Residue(MetadataTests.Jpeg(twoOrientations), ImageFormat.Jpeg));
     }
 
+    [Fact]
+    public void Jpeg_with_a_second_image_is_recognised()
+    {
+        var plain = MetadataTests.Jpeg(MetadataTests.Segment(0xFE, "c"u8));
+        Assert.False(Metadata.HasSecondaryImage(plain, ImageFormat.Jpeg));
+        Assert.True(Metadata.HasSecondaryImage([.. plain, .. MetadataTests.Jpeg()], ImageFormat.Jpeg));                       // gain map / video after EOI
+        Assert.True(Metadata.HasSecondaryImage(MetadataTests.Jpeg(MetadataTests.Segment(0xE2, [.. "MPF\0"u8, 1, 2])), ImageFormat.Jpeg)); // MPF index
+        Assert.False(Metadata.HasSecondaryImage([.. plain, .. "plain trailing text"u8], ImageFormat.Jpeg));
+    }
+
     [Theory]
     [InlineData(@"\??\Volume{00000000-0000-0000-0000-000000000000}\dir\x.png")]
     [InlineData(@"\??\GLOBALROOT\Device\HarddiskVolume3\dir\x.png")]

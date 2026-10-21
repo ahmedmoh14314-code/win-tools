@@ -44,6 +44,16 @@ public sealed class MetadataHardeningTests : IDisposable
     }
 
     [Fact]
+    public void Photo_with_an_appended_second_image_is_refused_not_silently_flattened()
+    {
+        var jpeg = Sample("quadrants-64x48.jpg");
+        var src = _dir.Write("hdr.jpg", [.. jpeg, .. jpeg]); // stands in for an Ultra HDR gain map after EOI
+        var r = ConversionJob.Run(new ConversionRequest("h5", "metadata.strip", src));
+        Assert.Equal(ErrorCode.UnsupportedContent, r.Error);
+        Assert.Equal(["hdr.jpg"], _dir.Names());
+    }
+
+    [Fact]
     public void Image_info_reports_other_metadata()
     {
         var png = PngWriter.InsertChunkAfterIhdr(Sample("quadrants-64x48.png"), "prVW", [1, 2, 3]);

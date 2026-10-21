@@ -62,6 +62,8 @@ Pipeline (`ImagePipeline`):
   - TIFF is re-encoded pixel-identically through the pipeline, with ICC and DPI kept and the orientation applied.
   - The EXIF orientation is kept as a minimal EXIF block holding only that tag, so the image does not suddenly display rotated. For PNG, an orientation found in eXIf becomes an orientation-only eXIf before the image data.
   - A file whose structure cannot be followed to its end is refused, not "cleaned".
+  - A JPEG carrying a second image is refused, because removal would silently drop that image. This covers an MPF index, or a JPEG after EOI as in Ultra HDR gain maps and Motion Photos.
+  - Known limitation: a camera file that declares Adobe RGB only through EXIF (ColorSpace / InteropIndex "R03") and has no ICC profile loses that declaration, so colour-managed viewers show it as sRGB. Embedding a matching profile is future work.
 - **Verification** (two independent checks):
   - The decoded pixels must be the same as displayed before.
   - `Metadata.Residue` walks the whole output, separately from the removal: every byte must belong to an allowed element, and an EXIF block must be exactly the orientation-only one.

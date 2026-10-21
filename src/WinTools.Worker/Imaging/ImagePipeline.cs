@@ -100,6 +100,8 @@ internal static class ImagePipeline
     {
         if (!Metadata.Inspect(input, source).AnyRemovable)
             throw new ImagingException(ErrorCode.NothingToDo, "This file has no metadata to remove.");
+        if (Metadata.HasSecondaryImage(input, source))
+            throw new ImagingException(ErrorCode.UnsupportedContent, "This photo contains a second image (HDR gain map, motion photo or multi-picture); removing metadata would drop it, so no copy was written.");
         var stripped = source == ImageFormat.Tiff ? Encode(shown, source)
             : Metadata.Strip(input, source, orientation)
               ?? throw new ImagingException(ErrorCode.DecodeFailed, "The file's structure could not be followed to its end, so metadata cannot be removed safely.");
