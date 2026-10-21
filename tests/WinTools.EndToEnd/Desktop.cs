@@ -23,13 +23,39 @@ internal static partial class Desktop
     [LibraryImport("user32.dll")] private static partial short GetAsyncKeyState(int vk);
     /// <summary>Whether a key or button is down right now (VK_LBUTTON = 1).</summary>
     public static bool IsDown(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
-    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool SetWindowPos(nint hwnd, nint after, int x, int y, int cx, int cy, uint flags);
+    [LibraryImport("user32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool SetWindowPos(nint hwnd, nint after, int x, int y, int cx, int cy, uint flags);
     [LibraryImport("user32.dll")] public static partial uint GetDpiForWindow(nint hwnd);
     [LibraryImport("user32.dll")] private static unsafe partial int GetClassNameW(nint hwnd, char* name, int max);
     [LibraryImport("user32.dll")] private static partial uint GetWindowThreadProcessId(nint hwnd, out uint pid);
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool PostMessageW(nint hwnd, uint msg, nuint w, nint l);
     [LibraryImport("user32.dll")] private static partial nint FindWindowExW(nint parent, nint after, nint className, nint title);
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool IsWindowVisible(nint hwnd);
+
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)] private struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
+    [LibraryImport("user32.dll")] private static partial nint MonitorFromWindow(nint hwnd, uint flags);
+    [LibraryImport("user32.dll", EntryPoint = "GetMonitorInfoW")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool GetMonitorInfo(nint monitor, ref MONITORINFO info);
+
+    /// <summary>Work area of the monitor that holds most of <paramref name="hwnd"/> (the area the overlay is clamped to).</summary>
+    public static RECT WorkAreaOf(nint hwnd)
+    {
+        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        if (!GetMonitorInfo(MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */), ref info)) throw new InvalidOperationException("GetMonitorInfo failed.");
+        return info.rcWork;
+    }
+
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool IsIconic(nint hwnd);
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool GetWindowRect(nint hwnd, out RECT rect);
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowLongW")] private static partial int GetWindowLong(nint hwnd, int index);
+    [LibraryImport("dwmapi.dll")] private static partial int DwmGetWindowAttribute(nint hwnd, int attribute, out int value, int size);
+
+    /// <summary>Diagnostics for a refused injection: is the window there at all, and where.</summary>
+    public static string StateOf(nint hwnd)
+    {
+        GetWindowRect(hwnd, out var r);
+        _ = DwmGetWindowAttribute(hwnd, 14 /* DWMWA_CLOAKED */, out var cloaked, sizeof(int));
+        return $"visible={IsWindowVisible(hwnd)} iconic={IsIconic(hwnd)} cloaked={cloaked} topmost={(GetWindowLong(hwnd, -20) & 0x8) != 0} rect={r.Left},{r.Top},{r.Right},{r.Bottom}";
+    }
 
     public static readonly nint HwndTopmost = -1, HwndNoTopmost = -2;
     public const uint SwpNoMove = 0x2, SwpNoSize = 0x1, SwpNoActivate = 0x10, SwpNoZOrder = 0x4;
@@ -66,6 +92,12 @@ internal static partial class Desktop
         GetCursorPos(out var p);
         for (var i = 1; i <= steps; i++) { MoveTo(p.X + (x - p.X) * i / steps, p.Y + (y - p.Y) * i / steps); Thread.Sleep(stepMs); }
     }
+
+    /// <summary>
+    /// A relative mouse move of zero: harmless, but it makes this process the one that received the last input, which
+    /// Windows requires before it lets a background process raise another process's window (the foreground lock).
+    /// </summary>
+    public static void Nudge() => Mouse(0x0001);
 
     public static void LeftDown() => Mouse(0x0002);
     public static void LeftUp() => Mouse(0x0004);

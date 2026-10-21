@@ -9,13 +9,17 @@ using WinTools.Core.Settings;
 using WinTools.EndToEnd;
 
 // Explorer end-to-end harness for the product host (local and interactive only; it drives the real mouse and keyboard).
-// Usage: WinTools.EndToEnd <png|jpg|bmp|tif|batch|escape|outside|unsupported|category|fast|worker-crash>
+// Usage: WinTools.EndToEnd <png|jpg|bmp|tif|webp|batch|escape|outside|unsupported|category|fast|edge|worker-crash>
 //          [--op <operation id>] [--target jpeg|png|webp|bmp|tiff] [--batch N] [--cycles N] [--fast-ms N] [--results file.jsonl]
 // Each scenario: fresh folder with copies of the committed samples, fresh host with its own log and default settings,
 // one Explorer window on that folder. Before every injection the window is re-verified; a release happens only over our
 // overlay or over the folder's own background, otherwise the drag is cancelled with Escape. After every cycle the folder
 // must contain exactly the expected files, the source must be byte-identical, and no temporary file may remain.
 // Navigation follows the product's two-level menu: point at the category, then move out to the command and wait.
+// Start each run from a fresh shell: a second harness started from the same shell has no foreground rights, Windows
+// ignores its raise of the Explorer window, and the guard (correctly) refuses to inject.
+// "edge": the window sits in the bottom-right corner of its monitor's work area and the trigger comes deep inside a
+// sector of the ring that the corner pushed aside; nothing may open until the pointer has been to the ring's centre.
 
 var scenario = args.Length > 0 ? args[0] : "png";
 var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; string? opArg = null; var batchSize = 12;
@@ -38,6 +42,7 @@ var (sample, sourceName, defaultTarget) = scenario switch
     "jpg" => ("quadrants-64x48.jpg", "photo.jpg", ImageFormat.Png),
     "bmp" => ("quadrants-64x48.bmp", "photo.bmp", ImageFormat.WebP),
     "tif" => ("quadrants-64x48.tif", "photo.tif", ImageFormat.Jpeg),
+    "webp" => ("quadrants-64x48.webp", "photo.webp", ImageFormat.Png),
     "unsupported" => ("", "notes.txt", ImageFormat.Unknown),
     _ => ("quadrants-64x48.png", "photo.png", ImageFormat.Jpeg),
 };
@@ -49,7 +54,7 @@ if (opArg is not null && op is null) { Console.Error.WriteLine($"Unknown operati
 var sourceFormat = FormatHint.FromPath(sourceName);
 var outputFormat = op is null || !op.WritesFile ? ImageFormat.Unknown : op.OutputFormat(sourceFormat);
 string? OutputNameFor(string path) => outputFormat == ImageFormat.Unknown ? null : Path.GetFileName(OutputNaming.Candidates(path, outputFormat, op!.NameSuffix).First());
-var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "batch";
+var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "webp" or "batch" or "edge";
 var expectOutput = producing && outputFormat != ImageFormat.Unknown;
 var stamp = DateTime.Now.ToString("HHmmss", System.Globalization.CultureInfo.InvariantCulture);
 var folder = Path.Combine(Path.GetTempPath(), "wintools-e2e", $"{scenario}-{stamp}");
@@ -57,6 +62,15 @@ Directory.CreateDirectory(folder);
 var source = Path.Combine(folder, sourceName);
 if (sample.Length > 0) File.Copy(Path.Combine(AppContext.BaseDirectory, "samples", sample), source);
 else File.WriteAllText(source, "plain text, not an image");
+// Remove metadata on a JPEG: give the copy a comment segment right after SOI, which the allow-list must drop.
+var metadataMarker = "wintools-e2e comment"u8.ToArray();
+var strip = op is { Kind: OperationKind.StripMetadata } && sourceFormat == ImageFormat.Jpeg;
+if (strip)
+{
+    var original = File.ReadAllBytes(source);
+    var len = metadataMarker.Length + 2;
+    File.WriteAllBytes(source, [.. original[..2], 0xFF, 0xFE, (byte)(len >> 8), (byte)len, .. metadataMarker, .. original[2..]]);
+}
 var sourceHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source)));
 var outputName = OutputNameFor(source);
 // Batch: the source plus copies with Unicode names, all selected with Ctrl+A and dragged together.
@@ -130,6 +144,12 @@ using (var explorer = ExplorerWindow.Open(folder))
 {
     var explorerScale = Math.Max(Desktop.GetDpiForWindow(explorer.Hwnd), 96u) / 96.0;
     int Px(int v) => (int)Math.Round(v * explorerScale);
+    var work = Desktop.WorkAreaOf(explorer.Hwnd);
+    if (scenario == "edge")
+    {
+        Desktop.SetWindowPos(explorer.Hwnd, 0, work.Right - Px(900), work.Bottom - Px(620), Px(900), Px(620), Desktop.SwpNoZOrder);
+        Thread.Sleep(800);
+    }
     for (var cycle = 1; cycle <= cycles; cycle++)
     {
         try
@@ -138,7 +158,17 @@ using (var explorer = ExplorerWindow.Open(folder))
             var grabName = scenario == "batch" ? Path.GetFileName(batchSources[1]) : sourceName;
             if (explorer.ItemCentre(grabName) is not { } item) { Record(new { cycle, abort = "item not found", items = explorer.DescribeItems() }); exitCode = 4; break; }
             var (cx, cy) = item;
-            if (!explorer.EnsureForeground(cx, cy))
+            // A window that is in front for a moment gets a few chances to go away; every
+            // refusal is recorded, and nothing is injected unless this window is in front and uncovered.
+            var foreground = false;
+            for (var attempt = 1; attempt <= 5 && !(foreground = explorer.EnsureForeground(cx, cy)); attempt++)
+            {
+                Record(new { cycle, attempt, refused = "covered", underPoint = Desktop.ClassOf(Desktop.RootAt(cx, cy)), foreground = Desktop.ClassOf(Desktop.GetForegroundWindow()),
+                    explorer = Desktop.StateOf(explorer.Hwnd), raise = explorer.LastRaise, stillShowsFolder = explorer.StillShowsFolder(), item = $"{cx},{cy}" });
+                Thread.Sleep(1000);
+            }
+            if (cycle == 1) Record(new { cycle, foregroundOk = foreground, raise = explorer.LastRaise });
+            if (!foreground)
             {
                 Record(new { cycle, abort = "Explorer window not foreground or covered; refusing to inject",
                     underPoint = Desktop.ClassOf(Desktop.RootAt(cx, cy)), foreground = Desktop.ClassOf(Desktop.GetForegroundWindow()), at = $"{cx},{cy}" });
@@ -158,6 +188,18 @@ using (var explorer = ExplorerWindow.Open(folder))
             Desktop.MoveTo(cx, cy); Thread.Sleep(60);
             Desktop.LeftDown(); Thread.Sleep(80);
             Desktop.GlideTo(cx + Px(40), cy + Px(30));
+            if (scenario == "edge")
+            {
+                // Into the corner, still over this window (its list or status bar), never released there.
+                Desktop.GlideTo(work.Right - Px(30), work.Bottom - Px(45), steps: 12);
+                Desktop.GetCursorPos(out var c);
+                if (Desktop.RootAt(c.X, c.Y) != explorer.Hwnd)
+                {
+                    Desktop.Tap(Desktop.VkEscape); Thread.Sleep(150); Desktop.LeftUp();
+                    Record(new { cycle, abort = "corner is not over the harness window", underPoint = Desktop.ClassOf(Desktop.RootAt(c.X, c.Y)), at = $"{c.X},{c.Y}" });
+                    exitCode = 4; break;
+                }
+            }
             Thread.Sleep(250);
             Desktop.GetCursorPos(out var at);
 
@@ -182,6 +224,10 @@ using (var explorer = ExplorerWindow.Open(folder))
             (int X, int Y) release = (at.X, at.Y);
             string? releasedOver;
             double? releaseAfterMs = null;
+            // edge: the trigger's offset from the pushed-aside centre, menu changes before the pointer reached it, and
+            // whether the category's ring was pushed aside too.
+            double? startOffset = null; int? opensBeforeCentre = null; bool? levelPushed = null;
+            bool? categorySeen = null; // fast: the host had opened the category before the move to the command
 
             var tKey = Stopwatch.GetTimestamp();
             Desktop.KeyDown(Desktop.VkSpace);
@@ -191,10 +237,20 @@ using (var explorer = ExplorerWindow.Open(folder))
                 while (Desktop.ClassOf(Desktop.RootAt(at.X, at.Y)) != "WinTools.RadialOverlay" && Stopwatch.GetElapsedTime(tKey).TotalMilliseconds < fastMs) Thread.SpinWait(50);
                 var o = LastOverlay() ?? assumed;
                 var cat = CategoryOpenPoint(o);
-                Desktop.MoveTo(cat.X, cat.Y); Thread.Sleep(8);
-                var level = LastOverlay() is { } lv && (lv.X, lv.Y) != (o.X, o.Y) ? lv : (cat.X, cat.Y, o.Dpi); // re-centred on the pointer
-                release = CommandPoint(level);
-                Desktop.MoveTo(release.X, release.Y);
+                Desktop.MoveTo(cat.X, cat.Y);
+                // The overlay sees the pointer only from OLE's first DragEnter on (up to ~70 ms after it appears on a cold
+                // first drag); a move before that is never seen, so wait (within the same budget) until the host has
+                // opened the category before turning to the command.
+                Thread.Sleep(8);
+                while (Stopwatch.GetElapsedTime(tKey).TotalMilliseconds < fastMs && !HostLines().Skip(hostLogLines).Any(l => l.Contains("\"ev\":\"menu.open\"", StringComparison.Ordinal))) Thread.Sleep(2);
+                categorySeen = HostLines().Skip(hostLogLines).Any(l => l.Contains("\"ev\":\"menu.open\"", StringComparison.Ordinal));
+                if (categorySeen == true)
+                {
+                    var level = LastOverlay() is { } lv && (lv.X, lv.Y) != (o.X, o.Y) ? lv : (cat.X, cat.Y, o.Dpi); // re-centred on the pointer
+                    release = CommandPoint(level);
+                    Desktop.MoveTo(release.X, release.Y);
+                }
+                else release = cat; // not seen in time: released on the category, where nothing may run
                 while (Stopwatch.GetElapsedTime(tKey).TotalMilliseconds < fastMs) Thread.SpinWait(50);
                 releasedOver = explorer.ReleaseTarget(release.X, release.Y); // what was under the pointer just before the release
                 releaseAfterMs = Math.Round(Stopwatch.GetElapsedTime(tKey).TotalMilliseconds, 2);
@@ -217,15 +273,42 @@ using (var explorer = ExplorerWindow.Open(folder))
                 else
                 {
                     if (scenario == "outside")
-                        release = (o.X, o.Y + (int)Math.Round(160.0 * o.Dpi / 96)); // beyond the ring, over the folder background
+                    {
+                        // Every deep stroke on the categories opens one, so the way out is through the open category's ring:
+                        // open it, then leave through a command, beyond the ring, to a point over the folder's empty background
+                        // (checked before moving; the nearest to straight down first).
+                        var cat = CategoryOpenPoint(o);
+                        Desktop.GlideTo(cat.X, cat.Y);
+                        Thread.Sleep(120);
+                        var lv = LastOverlay() ?? (cat.X, cat.Y, o.Dpi);
+                        var count = menu[groupIndex].Commands.Count;
+                        var exits = Enumerable.Range(1, count)
+                            .Select(i => RingGeometry.SectorCentre(i, count + 1, MenuNavigator.LevelStart(groupIndex, menu.Count, count), MenuNavigator.BackSweep(menu.Count, count)))
+                            .OrderBy(a => Math.Abs(a - Math.PI))
+                            .Select(a => Around(lv, a, 160)).ToList();
+                        release = exits.FirstOrDefault(p => explorer.ReleaseTarget(p.X, p.Y) == "explorer", exits[0]);
+                    }
                     else if (scenario is "category" or "unsupported")
                         release = CategoryPoint(o); // pointing at a category (or at "No actions"): a drop there must run nothing
                     else
                     {
+                        var dead = RingGeometry.Scale(RingGeometry.InnerRadius96, o.Dpi);
+                        if (scenario == "edge")
+                        {
+                            startOffset = Math.Round(Math.Sqrt(Math.Pow(at.X - o.X, 2) + Math.Pow(at.Y - o.Y, 2)), 1);
+                            // Stay deep in the sector under the pointer for a while (DragOver keeps coming), then come to the centre.
+                            Desktop.MoveTo(at.X - 2, at.Y - 2); Thread.Sleep(80); Desktop.MoveTo(at.X, at.Y); Thread.Sleep(200);
+                            opensBeforeCentre = HostLines().Skip(hostLogLines).Count(l => l.Contains("\"ev\":\"menu.", StringComparison.Ordinal));
+                            Desktop.GlideTo(o.X, o.Y, steps: 8);
+                            Thread.Sleep(120);
+                        }
                         var cat = CategoryOpenPoint(o);
                         Desktop.GlideTo(cat.X, cat.Y);
                         Thread.Sleep(120);
-                        release = CommandPoint(LastOverlay() ?? (cat.X, cat.Y, o.Dpi)); // the category's ring, centred where it opened
+                        var lv = LastOverlay() ?? (cat.X, cat.Y, o.Dpi); // the category's ring, centred where it opened
+                        levelPushed = Math.Pow(cat.X - lv.X, 2) + Math.Pow(cat.Y - lv.Y, 2) >= (double)dead * dead;
+                        if (scenario == "edge" && levelPushed == true) { Desktop.GlideTo(lv.X, lv.Y); Thread.Sleep(120); } // pushed aside: centre first
+                        release = CommandPoint(lv);
                     }
                     Desktop.GlideTo(release.X, release.Y);
                     Thread.Sleep(scenario == "outside" ? 120 : (int)MenuNavigator.ArmDelay.TotalMilliseconds + 150);
@@ -271,7 +354,8 @@ using (var explorer = ExplorerWindow.Open(folder))
             Thread.Sleep(300);
             var files = Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
             var sourceIntact = File.Exists(source) && Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source))) == sourceHash;
-            var outputValid = output is not null && File.ReadAllBytes(output) is var bytes && FileSignature.Detect(bytes) == outputFormat && ContainerCheck.IsComplete(bytes, outputFormat, out _);
+            var outputValid = output is not null && File.ReadAllBytes(output) is var bytes && FileSignature.Detect(bytes) == outputFormat && ContainerCheck.IsComplete(bytes, outputFormat, out _)
+                && (!strip || bytes.AsSpan().IndexOf(metadataMarker) < 0); // the comment is gone
             var ev = HostEventsSinceLastCycle();
             var enters = ev.Count(e => Ev(e) == "drag.enter");
             var drops = ev.Where(e => Ev(e) == "drop").ToArray();
@@ -284,21 +368,33 @@ using (var explorer = ExplorerWindow.Open(folder))
             var endedOnOverlay = drops.Length > 0 || ev.Any(e => Ev(e) == "overlay.hide" && Data(e).TryGetProperty("reason", out var r) && r.GetString() == "dragLeave");
             var expectedFiles = output is null ? [sourceName] : new[] { sourceName, Path.GetFileName(output) }.Order(StringComparer.Ordinal).ToArray();
             var cleanFolder = files.SequenceEqual(expectedFiles);
+            var menuOpens = ev.Where(e => Ev(e) == "menu.open").Select(e => Data(e).TryGetProperty("group", out var gr) ? gr.GetString() : null).ToArray();
+            var menuBacks = ev.Count(e => Ev(e) == "menu.back");
             var ok = sourceIntact && cleanFolder && scenario switch
             {
-                "png" or "jpg" or "bmp" or "tif" when op is { WritesFile: false } => output is null && infoShown && accepted == 1,
-                "png" or "jpg" or "bmp" or "tif" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
+                "png" or "jpg" or "bmp" or "tif" or "webp" when op is { WritesFile: false } => output is null && infoShown && accepted == 1,
+                "png" or "jpg" or "bmp" or "tif" or "webp" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
+                // Corner: the trigger really was off-centre and deep in a sector, nothing opened before the centre was
+                // reached, then exactly the wanted category opened and the wanted command ran.
+                "edge" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1
+                          && startOffset >= RingGeometry.Scale(RingGeometry.OpenRadius96, assumed.Item3) && opensBeforeCentre == 0
+                          && menuOpens.SequenceEqual([menu[groupIndex].Label]) && menuBacks == 0,
                 // Fast release, judged by the host. A pointer on a command gets COPY, so a drag that reached a command must
                 // end in a Drop on the overlay (none lost to the window below, none silently cancelled); the drop runs
                 // exactly when the ring had been open for the arm delay; an accepted drop produces a valid output and a
                 // refused one nothing.
                 "fast" => (enters == 0 || endedOnOverlay) && ruleHeld && (accepted == 0) == (output is null) && (output is null || outputValid)
-                          && (releasedOver != "overlay" || drops.Length == 1),
+                          && (menuOpens.Length == 0 || menuOpens.SequenceEqual([menu[groupIndex].Label])) // never a wrong category
+                          && (releasedOver != "overlay" || categorySeen != true || drops.Length == 1),
                 "worker-crash" => output is null && accepted == 1, // the drop ran; the crashed job left nothing behind
-                _ => output is null && accepted == 0,              // escape, outside, unsupported, category: nothing runs
+                // Nothing runs, and the release really happened where the scenario says.
+                "outside" => output is null && accepted == 0 && releasedOver == "explorer" && menuOpens.SequenceEqual([menu[groupIndex].Label]),
+                "escape" => output is null && accepted == 0 && releasedOver == "escape",
+                _ => output is null && accepted == 0 && releasedOver == "overlay" && menuOpens.Length == 0, // unsupported, category
             };
             if (ok) passed++; else exitCode = 1;
             Record(new { scenario, cycle, op = op?.Id, releasedOver, releaseAfterMs, hostEnters = enters, hostDrops = drops.Length, hostAccepted = accepted, openMs, ruleHeld, endedOnOverlay, infoShown,
+                startOffset, opensBeforeCentre, levelPushed, categorySeen, menuOpens, menuBacks,
                 triggerAt = $"{at.X},{at.Y}", releaseAt = $"{release.X},{release.Y}", output = output is null ? null : Path.GetFileName(output), outputValid, sourceIntact, cleanFolder, files, ok });
             if (output is not null) File.Delete(output); // the harness's own result file, so the next cycle starts clean
             Thread.Sleep((int)Desktop.GetDoubleClickTime() + 300);
