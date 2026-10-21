@@ -17,7 +17,7 @@ internal static class InfoText
             sb.AppendLine(CultureInfo.InvariantCulture, $"Resolution: {i.DpiX:0.#} × {i.DpiY:0.#} dpi");
             sb.AppendLine(CultureInfo.InvariantCulture, $"Transparency: {YesNo(i.HasTransparency)}    More than 8 bits per channel: {YesNo(i.DeeperThan8Bits)}");
             sb.AppendLine(CultureInfo.InvariantCulture, $"Orientation tag: {i.Orientation}    Colour profile (ICC): {YesNo(i.HasIccProfile)}");
-            sb.Append(CultureInfo.InvariantCulture, $"EXIF: {YesNo(i.HasExif)}    GPS location: {YesNo(i.HasGps)}    XMP: {YesNo(i.HasXmp)}    Text/comments: {YesNo(i.HasTextOrComments)}");
+            sb.Append(CultureInfo.InvariantCulture, $"EXIF: {YesNo(i.HasExif)}    GPS location: {YesNo(i.HasGps)}    XMP: {YesNo(i.HasXmp)}    Text/comments: {YesNo(i.HasTextOrComments)}    Other: {YesNo(i.HasOtherMetadata)}");
         }
         if (items.Count > 10) sb.AppendLine().AppendLine().Append(CultureInfo.InvariantCulture, $"… and {items.Count - 10} more files.");
         return sb.ToString();

@@ -12,7 +12,7 @@ public sealed record ConversionRequest(string Id, string OperationId, string Sou
 
 /// <summary>What "Image info" reports. Facts read from the file; nothing is written.</summary>
 public sealed record ImageInfo(string Format, int Width, int Height, long FileBytes, double DpiX, double DpiY, bool HasTransparency,
-    int Orientation, bool HasExif, bool HasGps, bool HasXmp, bool HasIccProfile, bool HasTextOrComments, bool DeeperThan8Bits);
+    int Orientation, bool HasExif, bool HasGps, bool HasXmp, bool HasIccProfile, bool HasTextOrComments, bool DeeperThan8Bits, bool HasOtherMetadata = false);
 
 /// <summary>
 /// Why a job did not produce an output. Stable names: they cross the process boundary and appear in logs.
@@ -42,6 +42,7 @@ public enum ErrorCode
     WorkerCrashed,
     WorkerTimeout,
     WorkerProtocolError,
+    Cancelled,
     Internal,
 }
 

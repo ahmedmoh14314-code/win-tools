@@ -20,7 +20,8 @@ Converters parse untrusted input and may crash, hang or exhaust memory. The main
   | 8 | 4.1 s |
 
   4 lanes give a 3.4× speed-up; more add little and multiply the worst-case memory.
-- **Failure containment:** a crash, hang or protocol violation fails only the current file. The lane kills its worker, deletes that file's temporary file, and starts a new worker for the next file (at most 3 restarts per lane; anything left is reported as not run). One invalid file never takes down the rest of the batch.
+- **Failure containment:** a crash, hang or protocol violation fails only the current file. The lane kills its worker, deletes that file's temporary file, and starts a new worker for the next file. A lane stops after 3 failures in a row (a success resets the count) and reports what is left as not run, so scattered bad files never end a long batch. One invalid file never takes down the rest of the batch.
+- **Cancellation:** lanes stop taking files; unfinished files are reported as `Cancelled`, never as crashes.
 - The host starts `WinTools.Worker.exe` (next to the host) when a drop runs a command. It uses `ProcessStartInfo` with no arguments, no shell, no window, a working directory it owns, and below-normal priority. The worker exits when its stdin closes. Nothing runs while idle.
 - Protocol: one `ConversionRequest {id, operationId, sourcePath}` per line in, one `ConversionResult {id, success, error, message, outputPath}` per line out. Non-ASCII is JSON-escaped, so the pipe is ASCII. Lines are limited to 64 KiB. Stderr is kept, bounded to 4 KiB.
 - Failure handling in the host (`WorkerClient`):

@@ -14,6 +14,7 @@ public static class PathPolicy
     {
         if (string.IsNullOrEmpty(path) || !Path.IsPathFullyQualified(path)) return false;
         if (path.StartsWith(@"\\?\", StringComparison.Ordinal) || path.StartsWith(@"\\.\", StringComparison.Ordinal)) return false;
+        if (path[0] == '\\' && path[1] != '\\') return false; // "\??\..." (NT device namespace): only drive and UNC paths
         if (path.IndexOf(':', 2) >= 0) return false; // "file.png:stream" names an alternate data stream
         for (var i = 0; i < path.Length; i++)
         {

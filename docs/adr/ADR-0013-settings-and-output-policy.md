@@ -24,7 +24,9 @@ V1 needs persisted preferences: the trigger key, where outputs go, encoder quali
 - **Store (`WinTools.Host.SettingsStore`):** the file is `%APPDATA%\WinTools\settings.json`; `--settings <path>` overrides it for tests.
   - **Atomic save:** the new file is written and flushed to `settings.<guid>.tmp` in the same folder, then swapped in with `File.Replace`, or moved into place the first time.
   - **Corrupt file:** it is moved aside to `settings.corrupt-<timestamp>.json` and defaults are used.
-  - **Newer schema:** the fields this version knows are read, and the file is never overwritten (the store becomes read-only).
+  - **Newer schema:** the store becomes read-only, and the file is never moved aside or overwritten, even when this version cannot parse it. The `schema` field is read case-insensitively, as a number or a numeric string. The fields this version understands are used if they parse; otherwise defaults are used.
+  - **Unwritable path:** `Save` never throws. A folder at the settings path, a read-only or locked file, or a parent that is a file makes it return false; the host logs that and runs on with the settings in memory.
+  - **Invalid output folder:** it is repaired to the same folder, and the load note in the log says so. There is no UI yet to tell the user directly.
   - **First run:** the defaults are written out, so the file can be edited by hand.
 - **Output policy:**
   - Requests carry `OutputDirectory` (null means the same folder).
@@ -47,4 +49,9 @@ V1 needs persisted preferences: the trigger key, where outputs go, encoder quali
 - `tests/WinTools.Worker.Tests/MetadataBatchSettingsTests.cs` (`SettingsStoreTests`): missing file, a corrupt file moved aside, a newer schema left untouched, and 20 atomic saves with no temp file left. `BatchTests` covers the output folder, a missing folder, and JPEG quality.
 
 ## Evaluator review
-Covered by the evaluator of the metadata/batch/settings PR.
+Independent evaluator of PR #4 (2026-10-21): MERGE AFTER FIXES. The settings findings are fixed and pinned by `SettingsHardeningTests`:
+- The newer-schema protection could be bypassed (a value this version cannot parse, other casing).
+- A failed first-run save crashed the host.
+- The invalid-folder fallback was silent.
+
+Also fixed: NT device paths (`\??\`) were accepted as an output folder.

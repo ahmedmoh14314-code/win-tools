@@ -29,7 +29,8 @@ internal static class Program
         var store = settingsPath is null ? SettingsStore.Default() : new SettingsStore(settingsPath);
         var settings = store.Load();
         log.Event("settings", new { store.LastLoad, store.ReadOnly, settings.TriggerKey, output = settings.OutputPolicy.ToString(), settings.JpegQuality, settings.WebPQuality });
-        if (store.LastLoad == "defaults (no file)") store.Save(settings); // first run: write the defaults so the file can be edited
+        if (store.LastLoad == "defaults (no file)") // first run: write the defaults so the file can be edited
+            log.Event("settings.save", new { ok = store.Save(settings) });
         OleApartment.Initialize();
         try
         {

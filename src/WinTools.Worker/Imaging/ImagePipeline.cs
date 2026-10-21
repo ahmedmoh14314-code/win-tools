@@ -91,26 +91,28 @@ internal static class ImagePipeline
     };
 
     /// <summary>
-    /// Removes EXIF, GPS, XMP, comments and text without re-encoding: byte-level for JPEG, PNG and WebP (keeping the
-    /// orientation as a minimal EXIF tag), a pixel-identical re-encode for TIFF (orientation applied). The result is
-    /// verified: same pixels as shown before, and no removable metadata left.
+    /// Keeps only what the image needs and drops the rest without re-encoding: byte-level from an allow-list for JPEG,
+    /// PNG and WebP (the orientation kept as a minimal EXIF tag), a pixel-identical re-encode for TIFF (orientation
+    /// applied). The result is verified: the same pixels as shown before, and every byte of the file belongs to an
+    /// allowed element (<see cref="Metadata.Residue"/>, a walk of the output independent of the removal).
     /// </summary>
     private static Encoded StripMetadata(byte[] input, ImageFormat source, RasterImage shown, int orientation)
     {
-        if (!Metadata.Inspect(input, source).AnyRemovable && !(source == ImageFormat.Jpeg && HasOtherAppSegments(input)))
+        if (!Metadata.Inspect(input, source).AnyRemovable)
             throw new ImagingException(ErrorCode.NothingToDo, "This file has no metadata to remove.");
-        var stripped = Metadata.Strip(input, source, orientation) ?? Encode(shown, source);
+        var stripped = source == ImageFormat.Tiff ? Encode(shown, source)
+            : Metadata.Strip(input, source, orientation)
+              ?? throw new ImagingException(ErrorCode.DecodeFailed, "The file's structure could not be followed to its end, so metadata cannot be removed safely.");
         var (decoded, storedOrientation) = Decode(stripped, source);
         var after = Orientation.Apply(decoded, storedOrientation);
         if (after.Width != shown.Width || after.Height != shown.Height || !EqualIgnoringHiddenColour(after.Bgra, shown.Bgra))
             throw new ImagingException(ErrorCode.OutputValidationFailed, "Removing metadata changed the image.");
+        if (Metadata.Residue(stripped, source) is { Count: > 0 } residue)
+            throw new ImagingException(ErrorCode.OutputValidationFailed, $"Metadata is still present after removal ({residue[0]}).");
         if (Metadata.Inspect(stripped, source).AnyRemovable)
             throw new ImagingException(ErrorCode.OutputValidationFailed, "Metadata is still present after removal.");
         return new Encoded(stripped, decoded.Width, decoded.Height, source);
     }
-
-    /// <summary>JPEG APPn segments Inspect does not classify (vendor data) still count as something to remove.</summary>
-    private static bool HasOtherAppSegments(byte[] jpeg) => Metadata.Strip(jpeg, ImageFormat.Jpeg, 1)!.Length < jpeg.Length;
 
     /// <summary>Facts for "Image info": nothing is written.</summary>
     public static ImageInfo Describe(byte[] input, ImageFormat format)
@@ -119,7 +121,7 @@ internal static class ImagePipeline
         var shown = Orientation.Apply(image, orientation);
         var meta = Metadata.Inspect(input, format);
         return new ImageInfo(ImageFormats.DisplayName(format), shown.Width, shown.Height, input.LongLength, Math.Round(image.DpiX, 1), Math.Round(image.DpiY, 1),
-            image.HasTransparency(), orientation, meta.Exif, meta.Gps, meta.Xmp, meta.Icc || image.IccProfile is not null, meta.Text, BitDepth.MoreThan8(input, format));
+            image.HasTransparency(), orientation, meta.Exif, meta.Gps, meta.Xmp, meta.Icc || image.IccProfile is not null, meta.Text, BitDepth.MoreThan8(input, format), meta.Other);
     }
 
     /// <summary>JPEG and WebP: lossy at High 90 / Balanced 80 / Smallest 65. PNG: lossless only, verified pixel for pixel.</summary>

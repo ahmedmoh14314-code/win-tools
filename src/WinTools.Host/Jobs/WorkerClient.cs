@@ -15,8 +15,9 @@ namespace WinTools.Host.Jobs;
 /// <item>Lanes (at most <see cref="DefaultParallelism"/>, never more than the number of files) take files from one queue,
 /// each with its own worker.</item>
 /// <item>A crash, a hang past the per-job timeout or a protocol violation fails only the file being processed: its worker
-/// is killed, its known temporary file is deleted, and the lane starts a new worker for the next file (at most
-/// <see cref="MaxRestartsPerLane"/> times).</item>
+/// is killed, its known temporary file is deleted, and the lane starts a new worker for the next file. A lane gives up
+/// after <see cref="MaxRestartsPerLane"/> failures in a row (a success resets the count); what is left is reported as not run.</item>
+/// <item>Cancellation stops taking new files; the unfinished ones are reported as Cancelled.</item>
 /// <item>The host re-checks every success claim (allowed name, real format, SHA-256).</item>
 /// </list>
 /// </summary>
@@ -46,7 +47,9 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
         }, CancellationToken.None))).ConfigureAwait(false);
         JobObjectAssigned = allAssigned;
         for (var i = 0; i < results.Length; i++)
-            results[i] ??= ConversionResult.Fail(requests[i].Id, ErrorCode.WorkerCrashed, "Not run: the workers kept failing.");
+            results[i] ??= cancellationToken.IsCancellationRequested
+                ? ConversionResult.Fail(requests[i].Id, ErrorCode.Cancelled, "Cancelled before it ran.")
+                : ConversionResult.Fail(requests[i].Id, ErrorCode.WorkerCrashed, "Not run: the workers kept failing.");
         return results!;
     }
 
@@ -59,7 +62,7 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
         var assigned = true;
         try
         {
-            while (queue.TryDequeue(out var i))
+            while (!cancellationToken.IsCancellationRequested && queue.TryDequeue(out var i))
             {
                 var request = requests[i];
                 if (process is null)
@@ -69,13 +72,14 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
                     if (process is null) { results[i] = ConversionResult.Fail(request.Id, ErrorCode.WorkerCrashed, "The conversion worker could not be started."); return assigned; }
                 }
                 var attempt = await RunOneAsync(process, request, cancellationToken).ConfigureAwait(false);
-                if (attempt.Result is { } ok) { results[i] = ok; continue; }
+                if (attempt.Result is { } ok) { results[i] = ok; restarts = 0; continue; }
 
                 Kill(process);
                 process.Dispose();
                 process = null;
                 DeleteTemp(request);
                 results[i] = attempt.Error!;
+                if (cancellationToken.IsCancellationRequested) return assigned;
                 if (++restarts > MaxRestartsPerLane) return assigned; // the remaining files are reported as not run
             }
             return assigned;
@@ -143,7 +147,7 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
         }
         catch (OperationCanceledException)
         {
-            return new(null, ConversionResult.Fail(request.Id, ErrorCode.WorkerCrashed, "Cancelled."));
+            return new(null, ConversionResult.Fail(request.Id, ErrorCode.Cancelled, "Cancelled."));
         }
         catch (IOException)
         {
@@ -189,7 +193,7 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
             file.Position = 0;
             return string.Equals(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(file)), claimed, StringComparison.OrdinalIgnoreCase);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return false; } // incl. empty or NUL-containing paths
     }
 
     /// <summary>The source's real format from its header (the hint from its name if it can no longer be read).</summary>

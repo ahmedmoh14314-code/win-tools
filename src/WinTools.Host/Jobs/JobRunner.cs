@@ -29,7 +29,7 @@ internal sealed class JobRunner(WorkerClient client, HostLog log, AppSettings se
             log.Event("job.done", new { op = operation.Id, ok = results.Count(r => r.Success), nothingToDo = results.Count(r => r.Error == ErrorCode.NothingToDo),
                 failed = results.Count(r => !r.Success && r.Error != ErrorCode.NothingToDo), ms = Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 1), jobObject = client.JobObjectAssigned });
             var facts = results.Where(r => r.Info is not null).Select(r => r.Info!).ToArray();
-            if (facts.Length > 0) showInfo(facts);
+            if (facts.Length > 0) _ = Task.Run(() => showInfo(facts)); // a modal box must not hold the next drop back
             if (results.Any(r => !r.Success && r.Error != ErrorCode.NothingToDo)) onFailure();
             else if (results.Any(r => r.Error == ErrorCode.NothingToDo)) onNothingToDo(); // "already fits": a different, gentler cue
         }

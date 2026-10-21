@@ -229,7 +229,7 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
-    public void Save_replaces_atomically()
+    public void Repeated_saves_leave_one_file_and_no_temp()
     {
         var store = new SettingsStore(PathOf);
         for (var i = 1; i <= 20; i++) Assert.True(store.Save(new AppSettings { JpegQuality = i }));

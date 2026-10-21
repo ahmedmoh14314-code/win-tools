@@ -49,15 +49,31 @@ Pipeline (`ImagePipeline`):
   - If the result would not be smaller than the input, the job reports `NothingToDo` and writes nothing.
 
 **Metadata operations:**
-- **Remove metadata** (`metadata.strip`, output `photo (no metadata).jpg`) never re-encodes pixels where the format allows:
-  - JPEG: segments are dropped (EXIF, XMP, other APPn, comments). JFIF, Adobe and ICC are kept.
-  - PNG: tEXt, zTXt, iTXt, eXIf and tIME are dropped. Colour chunks and pHYs are kept.
-  - WebP: the EXIF and XMP chunks are dropped and the VP8X flags updated. ICCP is kept.
-  - TIFF: re-encoded pixel-identically through the pipeline, with ICC and DPI kept and the orientation applied.
-  - The EXIF orientation is kept as a minimal EXIF block holding only that tag, so the image does not suddenly display rotated.
-  - The result is verified: the same pixels as displayed before, and no removable metadata left. A file without metadata gives `NothingToDo`; BMP is not offered.
-  - This is not a forensic anonymiser: pixel content, file-system timestamps and the file name are untouched.
-- **Image info** (`metadata.info`) writes nothing. It reports format, displayed size, file size, DPI, transparency, more-than-8-bit depth, orientation, ICC, EXIF, GPS, XMP and text. The host shows it in a plain message box until the UI phase designs a surface.
+- **Remove metadata** (`metadata.strip`, output `photo (no metadata).jpg`) never re-encodes pixels where the format allows. It works from an allow-list: what decoding and colour need is kept, and every other segment, chunk and trailing byte is dropped.
+  - JPEG keeps:
+    - the frame, tables, scans and restart markers;
+    - JFIF, rewritten without its thumbnail;
+    - the Adobe colour-transform marker (its 12 standard bytes only);
+    - ICC.
+
+    It drops EXIF, XMP (including extended XMP), comments (also those between scans), other APPn, unknown markers and data after EOI.
+  - PNG keeps IHDR, PLTE, IDAT, IEND, tRNS, gAMA, cHRM, sRGB, iCCP, sBIT, pHYs, cICP, mDCV and cLLI. Everything else is dropped: text, eXIf, tIME, caBX (C2PA), private chunks, and anything after IEND.
+  - WebP keeps VP8X (flags updated), VP8, VP8L, ALPH and ICCP. Chunks are read only inside the declared RIFF size.
+  - TIFF is re-encoded pixel-identically through the pipeline, with ICC and DPI kept and the orientation applied.
+  - The EXIF orientation is kept as a minimal EXIF block holding only that tag, so the image does not suddenly display rotated. For PNG, an orientation found in eXIf becomes an orientation-only eXIf before the image data.
+  - A file whose structure cannot be followed to its end is refused, not "cleaned".
+- **Verification** (two independent checks):
+  - The decoded pixels must be the same as displayed before.
+  - `Metadata.Residue` walks the whole output, separately from the removal: every byte must belong to an allowed element, and an EXIF block must be exactly the orientation-only one.
+- A file with nothing outside the allow-list gives `NothingToDo`. BMP is not offered.
+- This is not a forensic anonymiser: pixel content, file-system timestamps and the file name are untouched.
+- **Image info** (`metadata.info`) writes nothing. It reports:
+  - format, displayed size, file size and DPI;
+  - transparency, more-than-8-bit depth and orientation;
+  - ICC, EXIF, GPS, XMP and text;
+  - "other" metadata: vendor or private elements, thumbnails, content credentials, trailing data.
+
+  The host shows it in a plain message box (outside the job queue) until the UI phase designs a surface.
 
 **What carries over, and what does not (all operations):**
 - **ICC colour profiles are kept** when they are well-formed **RGB** profiles: WIC colour contexts for PNG, JPEG and TIFF; the original bytes in an ICCP chunk for WebP. BMP output has none.

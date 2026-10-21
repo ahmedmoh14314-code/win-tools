@@ -454,8 +454,8 @@
       "category": "operations",
       "description": "Remove metadata: a copy without EXIF, GPS, XMP or text metadata, with the pixels unchanged where the format allows.",
       "acceptanceCriteria": [
-        "JPEG, PNG and WebP are stripped without re-encoding; TIFF is re-encoded pixel-identically. ICC and the displayed orientation are kept.",
-        "The result is verified (same displayed pixels, nothing removable left); a file without metadata reports NothingToDo.",
+        "JPEG, PNG and WebP keep only an allow-list of elements without re-encoding (everything else, including vendor chunks, C2PA and trailing data, is dropped); TIFF is re-encoded pixel-identically. ICC and the displayed orientation are kept.",
+        "The result is verified independently of the removal: the same displayed pixels, and a walk of the whole output finds only allowed elements; a file with nothing to remove reports NothingToDo.",
         "Reachable from the radial menu in Explorer."
       ],
       "status": "in-progress",
@@ -463,7 +463,7 @@
       "relatedAdrs": [
         "ADR-0006"
       ],
-      "evidence": "MetadataTests (Core), MetadataOperationTests.Remove_metadata_from_a_jpeg_is_lossless_and_keeps_the_orientation, Remove_metadata_from_png_and_webp, File_without_metadata_reports_nothing_to_do, TiffMetadataTests. Not yet in the menu (hierarchical menu, TASK 4)."
+      "evidence": "MetadataTests and MetadataAllowListTests (Core: C2PA/private/legacy PNG chunks, data after IEND/EOI/RIFF, comments between JPEG scans, vendor APP14, JFIF thumbnails, padded orientation EXIF, truncated input refused); MetadataOperationTests, MetadataHardeningTests, TiffMetadataTests (Worker). Not yet in the menu (hierarchical menu, TASK 4)."
     },
     {
       "id": "OPS-002",
@@ -494,7 +494,7 @@
       "relatedAdrs": [
         "ADR-0005"
       ],
-      "evidence": "BatchTests.Hundred_small_files_convert_in_parallel_with_one_result_each_in_order, One_corrupt_file_does_not_affect_the_others, Same_stem_in_one_folder_gets_distinct_outputs_even_in_parallel, A_worker_crash_on_one_file_fails_only_that_file; CapabilityResolver intersection tests. Explorer harness 'batch': 12 files 3/3 runs passed, 60 files 1/1 passed (job.done ok=60), 2026-10-21."
+      "evidence": "BatchTests.Hundred_small_files_convert_in_parallel_with_one_result_each_in_order, One_corrupt_file_does_not_affect_the_others, Same_stem_in_one_folder_gets_distinct_outputs_even_in_parallel, A_worker_crash_on_one_file_fails_only_that_file; CapabilityResolver intersection tests. Explorer harness 'batch': 12 files 3/3 runs passed, 60 files 1/1 passed (job.done ok=60), 2026-10-21. PoolHardeningTests: cancellation reported as Cancelled, scattered crashes do not end a batch, failures in a row end the lane with the rest reported not run, a hang times out only its file with no temp left in the output folder."
     },
     {
       "id": "OPS-004",
@@ -509,7 +509,7 @@
       "relatedAdrs": [
         "ADR-0013"
       ],
-      "evidence": "AppSettingsTests (Core); SettingsStoreTests.Missing_file_gives_defaults_and_save_round_trips, Corrupt_file_is_moved_aside_and_defaults_are_used, Newer_schema_is_read_but_never_overwritten, Save_replaces_atomically; BatchTests.Configured_output_folder_receives_the_outputs, Jpeg_quality_from_the_settings_changes_the_output. No settings UI (UX-003)."
+      "evidence": "AppSettingsTests (Core); SettingsStoreTests (Missing_file_gives_defaults_and_save_round_trips, Corrupt_file_is_moved_aside_and_defaults_are_used, Newer_schema_is_read_but_never_overwritten, Repeated_saves_leave_one_file_and_no_temp); SettingsHardeningTests (newer schema unparsable, other casing or as a string never moved or overwritten; folder or file in the way and read-only or locked file make Save return false with the old content intact; invalid output folder reported); BatchTests.Configured_output_folder_receives_the_outputs, Jpeg_quality_from_the_settings_changes_the_output. Evaluator findings of PR #4 fixed. No settings UI (UX-003)."
     }
   ]
 }
