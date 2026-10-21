@@ -76,9 +76,24 @@ public partial class MainWindow : Window
             foreach (var c in new Control[] { TriggerKey, UiSounds, SameFolder, CustomFolder, Browse, JpegQuality, WebPQuality, ResizeWidth, ResizeHeight, KeepAspect, NoUpscale, Animations })
                 c.IsEnabled = false;
         }
-        Footer.Text = _store.Path;
-        Footer.ToolTip = "Settings file";
+        Footer.Text = "Saved in " + Shorten(_store.Path);
+        Footer.ToolTip = "The settings file";
         _loading = false;
+    }
+
+    /// <summary>The path with the user's own folders written as %APPDATA%, %LOCALAPPDATA%, %TEMP% or %USERPROFILE%.</summary>
+    private static string Shorten(string path)
+    {
+        foreach (var (name, folder) in new[]
+        {
+            ("%TEMP%", Path.TrimEndingDirectorySeparator(Path.GetTempPath())),
+            ("%APPDATA%", Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)),
+            ("%LOCALAPPDATA%", Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)),
+            ("%USERPROFILE%", Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)),
+        })
+            if (folder.Length > 0 && path.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                return name + path[folder.Length..];
+        return path;
     }
 
     private void LoadStartup()

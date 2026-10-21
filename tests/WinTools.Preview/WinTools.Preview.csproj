@@ -1,8 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Local tool: renders the product's native surfaces (radial menu states, toasts, info panel) off screen to PNG files
-       for design review and documentation. Shows no window and injects no input. Not run in CI. -->
+       for design review and documentation, and captures the settings window. Injects no input. Not run in CI. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Only for the UI Automation client (scrolling the settings window for its screenshot); nothing here ships. -->
+    <UseWPF>true</UseWPF>
     <ApplicationManifest>..\..\src\WinTools.Host\app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>

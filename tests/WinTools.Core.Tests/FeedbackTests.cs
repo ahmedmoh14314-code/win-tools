@@ -306,3 +306,21 @@ public sealed class RingAnimationTests
     public void The_animation_setting_overrides_windows_only_when_set(string setting, bool windowsReduced, bool expected) =>
         Assert.Equal(expected, new AppSettings { Animations = setting }.ReducedMotion(windowsReduced));
 }
+
+public sealed class TriggerKeyChangeTests
+{
+    [Fact]
+    public void A_new_trigger_key_takes_effect_at_once_and_the_old_one_stops_triggering()
+    {
+        var d = new TriggerDetector(TriggerDetector.VkSpace);
+        d.OnMouseButton(MouseButton.Left, true, 0, 0);
+        d.OnMouseMove(20, 0);
+        Assert.Equal(InputSignal.Trigger, d.OnKey(TriggerDetector.VkSpace, true));
+        d.OnKey(TriggerDetector.VkSpace, false);
+        d.TriggerVirtualKey = 0x78; // F9, from the settings window
+        Assert.Equal(InputSignal.None, d.OnKey(TriggerDetector.VkSpace, true));
+        d.OnKey(TriggerDetector.VkSpace, false);
+        Assert.Equal(InputSignal.Trigger, d.OnKey(0x78, true));
+        Assert.True(d.IsTriggerKey(0x78) && !d.IsTriggerKey(TriggerDetector.VkSpace));
+    }
+}

@@ -13,6 +13,7 @@ using WinTools.Windows.Rendering;
 if (args.Length == 2 && args[0] == "--icon") { ProductIcon.Write(Path.GetFullPath(args[1])); return 0; }
 if (args.Length >= 1 && args[0] == "--bench") { Bench.Run(args.Length > 1 ? uint.Parse(args[1]) : 120); return 0; }
 if (args.Length >= 1 && args[0] == "--live") { Live.Run(); return 0; }
+if (args.Length == 3 && args[0] == "--settings-shot") return SettingsShot.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
 if (args.Length < 1) { Console.Error.WriteLine("Usage: WinTools.Preview <output folder> [dpi ...] | --icon <file.ico>"); return 64; }
 var outDir = Path.GetFullPath(args[0]);
 Directory.CreateDirectory(outDir);
@@ -206,4 +207,58 @@ internal static class Live
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool PeekMessageW(out MSG m, nint h, uint a, uint b, uint remove);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool TranslateMessage(in MSG m);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern nint DispatchMessageW(in MSG m);
+}
+
+/// <summary>
+/// Starts the settings window with a temporary settings file, captures it with PrintWindow and closes it. The window
+/// appears on screen for about two seconds; no input is injected.
+/// </summary>
+internal static partial class SettingsShot
+{
+    public static int Run(string exe, string png)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"wintools-shot-{Environment.ProcessId}");
+        Directory.CreateDirectory(dir);
+        var file = Path.Combine(dir, "settings.json");
+        File.WriteAllText(file, new AppSettings { OutputPolicy = OutputPolicy.Folder, OutputFolder = @"D:\Pictures\Converted" }.ToJson());
+        using var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false, ArgumentList = { "--settings", file } })!;
+        nint hwnd = 0;
+        for (var i = 0; i < 100 && hwnd == 0; i++) { Thread.Sleep(100); hwnd = FindWindowW(null, "WinTools Settings"); }
+        if (hwnd == 0) { Console.Error.WriteLine("Settings window not found."); p.Kill(); return 1; }
+        Thread.Sleep(1500);
+        Capture(hwnd, png);
+        // The lower half: scrolled to the end through UI Automation's scroll pattern (no input is injected).
+        var root = System.Windows.Automation.AutomationElement.FromHandle(hwnd);
+        var scroller = root.FindFirst(System.Windows.Automation.TreeScope.Descendants,
+            new System.Windows.Automation.PropertyCondition(System.Windows.Automation.AutomationElement.IsScrollPatternAvailableProperty, true));
+        if (scroller?.GetCurrentPattern(System.Windows.Automation.ScrollPattern.Pattern) is System.Windows.Automation.ScrollPattern scroll)
+        {
+            scroll.SetScrollPercent(System.Windows.Automation.ScrollPattern.NoScroll, 100);
+            Thread.Sleep(600);
+            Capture(hwnd, Path.ChangeExtension(png, null) + "-end.png");
+        }
+        PostMessageW(hwnd, 0x0010, 0, 0);
+        p.WaitForExit(5000);
+        Directory.Delete(dir, recursive: true);
+        Console.WriteLine($"Saved {png}");
+        return 0;
+    }
+
+    private static void Capture(nint hwnd, string png)
+    {
+        GetWindowRect(hwnd, out var r);
+        using var surface = new Surface();
+        using (surface.Begin(r.Right - r.Left, r.Bottom - r.Top, 96)) { }
+        PrintWindow(hwnd, surface.Dc, 2 /* PW_RENDERFULLCONTENT */);
+        surface.MakeOpaque(0, 0, surface.Width, surface.Height);
+        surface.SavePng(png);
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
+    [System.Runtime.InteropServices.LibraryImport("user32.dll", StringMarshalling = System.Runtime.InteropServices.StringMarshalling.Utf16)] private static partial nint FindWindowW(string? c, string t);
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")] [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)] private static partial bool GetWindowRect(nint h, out RECT r);
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")] [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)] private static partial bool PrintWindow(nint h, nint dc, uint flags);
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")] [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)] private static partial bool SetWindowPos(nint h, nint after, int x, int y, int cx, int cy, uint flags);
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")] [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)] private static partial bool PostMessageW(nint h, uint m, nuint w, nint l);
 }
