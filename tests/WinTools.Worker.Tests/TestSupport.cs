@@ -87,6 +87,15 @@ public static class PngWriter
         return Build(width, height, z[..(int)(z.Length * fraction)]);
     }
 
+    /// <summary>Inserts an extra chunk (with a valid CRC) right after IHDR.</summary>
+    public static byte[] InsertChunkAfterIhdr(byte[] png, string type, byte[] data)
+    {
+        var chunk = new MemoryStream();
+        Chunk(chunk, type, data);
+        const int afterIhdr = 8 + 25;
+        return [.. png[..afterIhdr], .. chunk.ToArray(), .. png[afterIhdr..]];
+    }
+
     /// <summary>A PNG whose header claims the given size but carries only a token of image data.</summary>
     public static byte[] HeaderOnly(int width, int height) => Build(width, height, [0x78, 0x9C, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01]);
 

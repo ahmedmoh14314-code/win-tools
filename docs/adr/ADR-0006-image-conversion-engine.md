@@ -23,8 +23,8 @@ Pipeline (`ImagePipeline`):
    - PNG: chunks, CRCs, and the zlib stream inflating to exactly the size IHDR implies.
    - JPEG: markers and scans through to EOI.
    - WebP: RIFF size and chunks.
-   - BMP: the pixel array fits the file.
-   - TIFF: no structural walk (offsets can point anywhere); it relies on a full decode plus the codec diagnostics.
+   - BMP: the pixel array fits the file. **RLE BMP is refused**, because the decoder fills runs that end early with black.
+   - TIFF (`TiffCheck`): from IFD0, every strip or tile must lie inside the file. Uncompressed data must have at least the byte count implied by the dimensions; Deflate, PackBits and LZW data must decompress to at least that count. The Windows TIFF decoder fills short strips with black and reports success, so this check is the only defence. JPEG-in-TIFF and CCITT get the bounds check only (a residual risk).
 4. **One sequential decode to BGRA.** For WIC, any codec diagnostic on the worker's stderr pipe means `DecodeFailed`. For Skia, `IncompleteInput` and other non-success results fail.
 5. **EXIF orientation** (JPEG, TIFF, WebP) is applied to the pixels in managed code. The flip-rotator is not used, because of its per-pixel re-reads (evaluator B1).
 6. **Encode:**
@@ -34,7 +34,11 @@ Pipeline (`ImagePipeline`):
    - JPEG uses the WIC default quality (0.9); `ImageQuality` can be set through the encoder property bag.
 7. **Validation:** the written temp file is read back, and its signature, structure, full decode and dimensions are checked.
 
-**Not handled:** only the first frame is converted, including for animated WebP. Metadata (EXIF, GPS, ICC) is not copied.
+**Multi-page and animated inputs are refused** with `UnsupportedContent` (multi-page TIFF, animated WebP, APNG), rather than silently converting the first frame (decision 2026-10-21). Metadata (EXIF, GPS, ICC) is not copied.
+
+**Encoder output stream:** encoders write into a managed `IStream` over a `MemoryStream` that grows by doubling. With an HGLOBAL stream, the TIFF encoder's many small writes made encoding quadratic: 25 MP of photographic content took 132 s, and now takes 1.4 s. TIFF output uses Deflate compression, which is lossless.
+
+**Known limit:** WebP has no checksum over its payload, so damage inside a structurally complete WebP can decode to wrong pixels undetected. The same applies to JPEG-in-TIFF and CCITT TIFF strips.
 
 ## Alternatives considered (to be completed in the dependency matrix)
 - **WPF imaging:** pulls WPF into the worker and hides codec selection.
@@ -50,12 +54,19 @@ Pipeline (`ImagePipeline`):
 - Adding an output format means one row in `ImageFormats` and an encoder branch; the menu and resolver need no change.
 
 ## Evidence / experiments
-- `FormatMatrixTests`: all 20 source→target pairs on real files, checked per quadrant against GDI+-generated samples (PNG, JPEG, BMP, TIFF). The WebP source is made losslessly from the PNG sample.
+- `FormatMatrixTests`: all 20 source→target pairs on real files, checked per quadrant against samples from independent encoders: GDI+ for PNG, JPEG, BMP and TIFF (LZW); Pillow for lossless WebP.
   - Alpha is kept for WebP and TIFF and composited onto white for JPEG and BMP.
   - A PNG→TIFF→PNG round trip is lossless.
   - Truncated WebP, BMP and TIFF are refused.
   - WebP content in a `.png` file is handled by content.
   - Also covered: Arabic and emoji names, 4000×3000 → WebP, TIFF and BMP in bounded time, and portrait shape.
+- `StructureAndContentTests` (evaluator findings):
+  - Skia's WebP decode matches the Pillow sample pixel for pixel, and lossless WebP round-trips exactly.
+  - Short TIFF strips (uncompressed, PackBits, Deflate, GDI+ LZW, product-written Deflate) and a TIFF cut in its last strip are refused.
+  - RLE BMP, a 3-page TIFF and APNG are refused.
+  - The JPEG quality option reaches the encoder.
+  - 9 MP of noise converts to TIFF in under 10 s.
+  - The host references neither SkiaSharp nor the worker.
 - `ConversionJobTests` (PNG/JPEG safety cases), plus `CodecVendorTests` covering eight WIC codecs.
 - Explorer end-to-end (Release, 2026-10-21): PNG→JPEG/WebP/BMP/TIFF, JPEG→PNG/WebP, BMP→WebP and TIFF→JPEG all 5/5; unsupported 3/3; Escape 3/3; fast release (25 ms) to WebP 10/10.
 

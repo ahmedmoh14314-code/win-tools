@@ -16,15 +16,9 @@ public sealed class FormatMatrixTests : IDisposable
     private static ConversionResult Run(ImageFormat target, string source) =>
         ConversionJob.Run(new ConversionRequest($"m{Interlocked.Increment(ref _seq)}", OperationCatalog.Convert(target).Id, source));
 
-    /// <summary>The quadrant sample in the given format (WebP is made from the PNG sample with the WebP encoder, losslessly).</summary>
-    private string Sample(ImageFormat format, string stem = "q")
-    {
-        var name = stem + ImageFormats.Extension(format);
-        if (format != ImageFormat.WebP) return _dir.CopySample("quadrants-64x48" + ImageFormats.Extension(format), name);
-        var png = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "samples", "quadrants-64x48.png"));
-        var image = ImagePipeline.Decode(png, ImageFormat.Png).Image;
-        return _dir.Write(name, SkiaCodec.EncodeWebP(image, 100, lossless: true));
-    }
+    /// <summary>The quadrant sample in the given format, all made by independent encoders (GDI+, and Pillow for WebP).</summary>
+    private string Sample(ImageFormat format, string stem = "q") =>
+        _dir.CopySample("quadrants-64x48" + ImageFormats.Extension(format), stem + ImageFormats.Extension(format));
 
     private static bool Lossy(ImageFormat f) => f is ImageFormat.Jpeg or ImageFormat.WebP;
 

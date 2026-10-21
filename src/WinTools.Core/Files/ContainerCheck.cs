@@ -5,7 +5,7 @@ namespace WinTools.Core.Files;
 /// fills the rows of a truncated IDAT without reporting an error, which would turn a damaged file into a believable
 /// but wrong output. PNG: every chunk fits in the file, every CRC matches, IHDR comes first, IDAT is present, IEND
 /// is reached, and the image data inflates to exactly the size IHDR implies. WebP: the RIFF size and chunk walk are
-/// consistent. BMP: the uncompressed pixel array fits in the file. JPEG: the marker segments and entropy-coded scans can be walked from SOI to an EOI.
+/// consistent. BMP: the uncompressed pixel array fits in the file; RLE is refused. TIFF: see <see cref="TiffCheck"/>. JPEG: the marker segments and entropy-coded scans can be walked from SOI to an EOI.
 /// Bytes after the end marker are ignored (some cameras append trailers).
 /// </summary>
 public static class ContainerCheck
@@ -18,9 +18,7 @@ public static class ContainerCheck
             ImageFormat.Jpeg => CheckJpeg(data),
             ImageFormat.WebP => CheckWebP(data),
             ImageFormat.Bmp => CheckBmp(data),
-            // TIFF strips and tiles are located through offsets anywhere in the file; a structural walk would mean
-            // re-implementing the format. TIFF relies on the full decode and the codec's own diagnostics.
-            ImageFormat.Tiff => FileSignature.Detect(data) == ImageFormat.Tiff ? null : "not a TIFF signature",
+            ImageFormat.Tiff => TiffCheck.Check(data),
             _ => "unsupported format",
         } ?? "";
         return reason.Length == 0;
@@ -171,10 +169,28 @@ public static class ContainerCheck
         var height = Math.Abs((long)I32(d, 22));
         var bitCount = d[28] | d[29] << 8;
         var compression = I32(d, 30);
+        // RLE streams may end early or skip pixels, and the decoder fills the gaps with black: refused rather than guessed.
+        if (compression is 1 or 2) return "RLE-compressed BMP is not supported";
+        if (compression is 4 or 5) return null; // embedded JPEG/PNG: that decoder validates its own stream
         if (width <= 0 || height == 0 || bitCount is not (1 or 4 or 8 or 16 or 24 or 32)) return "invalid header";
-        if (compression is not (0 or 3 or 6)) return null; // RLE/JPEG/PNG payloads: sizes are not implied by the header
+        if (compression is not (0 or 3 or 6)) return "unsupported BMP compression";
         var stride = (width * bitCount + 31) / 32 * 4;
         return pixelOffset + stride * height <= d.Length ? null : "truncated pixel data";
+    }
+
+    /// <summary>True if a PNG declares an animation (acTL chunk before the image data).</summary>
+    public static bool IsAnimatedPng(ReadOnlySpan<byte> d)
+    {
+        if (FileSignature.Detect(d) != ImageFormat.Png) return false;
+        for (var i = 8; d.Length - i >= 12;)
+        {
+            var length = (uint)(d[i] << 24 | d[i + 1] << 16 | d[i + 2] << 8 | d[i + 3]);
+            var type = d.Slice(i + 4, 4);
+            if (type.SequenceEqual("acTL"u8)) return true;
+            if (type.SequenceEqual("IDAT"u8) || length > int.MaxValue - 12 || i + 12L + length > d.Length) return false;
+            i += 12 + (int)length;
+        }
+        return false;
     }
 
     private static readonly uint[] CrcTable = BuildCrcTable();

@@ -20,7 +20,7 @@ Every package and platform component the product or its tests use. Versions are 
   - libmicrohttpd is used only by Skia's debugger tools; SkiaSharp builds with tools disabled.
   - On Windows, Skia uses DirectWrite for fonts, not FreeType.
   - GIF decoding in this Skia is wuffs (Apache-2.0/MIT).
-  - A string scan of the shipped DLL found no libmicrohttpd or FreeType entry points. Symbols are stripped, so this supports the build configuration but does not prove it.
+  - Stronger evidence comes from the package's native `libSkiaSharp.pdb` (evaluator, 2026-10-21). It contains no FreeType, libmicrohttpd, old GIF decoder or DNG SDK symbols. It does contain wuffs, libwebp, the DirectWrite font manager and **expat** (MIT), which also needs a notice.
 - **Where a dual-licensed part is present,** we use it under its permissive option: MPL-1.1, FTL or zlib.
 - **Conclusion:** no GPL/AGPL obligation was found.
 - **Follow-up:** re-run this review at every SkiaSharp upgrade and before packaging.
@@ -38,3 +38,4 @@ Alternatives considered for tests: MSTest (MIT) and NUnit (MIT) are equivalent. 
 ## Development tooling outside the build
 - GitHub Actions `actions/checkout` v7.0.1 and `actions/setup-dotnet` v6.0.0 (MIT), pinned by commit SHA in `.github/workflows/ci.yml`.
 - `tests/samples/New-Samples.ps1` uses Windows PowerShell 5.1 and System.Drawing (GDI+), both part of Windows, to regenerate the committed test images with an encoder independent of WIC.
+- `tests/samples/New-WebPSamples.py` uses **Pillow** (HPND licence, with its own libwebp) to write the lossless WebP samples, an encoder independent of SkiaSharp. It is a developer-machine tool only; nothing in the build or CI needs it.

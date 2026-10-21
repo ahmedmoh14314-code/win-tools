@@ -88,7 +88,9 @@ using (var explorer = ExplorerWindow.Open(folder))
         Thread.Sleep(250);
         Desktop.GetCursorPos(out var at);
         // Aim at the middle of the sector of the wanted command, as the product lays them out (clockwise from 12).
-        var index = Math.Max(0, commands.ToList().FindIndex(o => o.Target == outputFormat));
+        var index = commands.ToList().FindIndex(o => o.Target == outputFormat);
+        if (index < 0 && expectOutput) { Record(new { cycle, abort = $"{outputFormat} is not offered for {sourceName}" }); exitCode = 4; break; }
+        index = Math.Max(0, index);
         var angle = (index + 0.5) * 2 * Math.PI / Math.Max(1, commands.Count);
         var drop = (X: at.X + (int)Math.Round(Px(70) * Math.Sin(angle)), Y: at.Y - (int)Math.Round(Px(70) * Math.Cos(angle)));
         var outside = (X: at.X, Y: at.Y + Px(200));           // beyond the ring, over the folder background

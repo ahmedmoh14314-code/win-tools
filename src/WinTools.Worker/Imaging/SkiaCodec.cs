@@ -6,7 +6,8 @@ namespace WinTools.Worker.Imaging;
 
 /// <summary>
 /// WebP through SkiaSharp's bundled libwebp (Windows has no WebP encoder, and its decoder is an optional Store
-/// extension). Loaded only in the worker. Animated WebP: the first frame only.
+/// extension). Loaded only in the worker. Animated WebP is refused. WebP has no checksum over its payload, so damage
+/// inside a structurally complete file can decode to wrong pixels undetected (documented in ADR-0006).
 /// </summary>
 internal static class SkiaCodec
 {
@@ -18,6 +19,7 @@ internal static class SkiaCodec
         using var data = SKData.CreateCopy(bytes);
         using var codec = SKCodec.Create(data) ?? throw new ImagingException(ErrorCode.DecodeFailed, "The file could not be decoded.");
         if (codec.EncodedFormat != SKEncodedImageFormat.Webp) throw new ImagingException(ErrorCode.DecodeFailed, "The decoder found a different format.");
+        if (codec.FrameCount > 1) throw new ImagingException(ErrorCode.UnsupportedContent, "Animated WebP is not supported yet.");
         var size = codec.Info;
         var pixels = RasterImage.AllocateFor(size.Width, size.Height);
         if (!ContainerCheck.IsComplete(bytes, ImageFormat.WebP, out var damage))

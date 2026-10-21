@@ -17,6 +17,7 @@ public enum ErrorCode
     SourceNotReadable,
     InputTooLarge,
     ContentMismatch,
+    UnsupportedContent,
     DecodeFailed,
     ImageTooLarge,
     EncodeFailed,

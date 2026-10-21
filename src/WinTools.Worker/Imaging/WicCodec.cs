@@ -35,7 +35,11 @@ internal static class WicCodec
             var decoder = com.Add(WicNative.Create<IWICBitmapDecoder>(ids.Decoder));
             decoder.Initialize(stream, WicDecodeOptions.MetadataCacheOnDemand);
             if (decoder.GetContainerFormat() != ids.Container) throw new ImagingException(ErrorCode.DecodeFailed, "Decoder reported an unexpected container format.");
-            if (decoder.GetFrameCount() == 0) throw new ImagingException(ErrorCode.DecodeFailed, "Image has no frames.");
+            var frames = decoder.GetFrameCount();
+            if (frames == 0) throw new ImagingException(ErrorCode.DecodeFailed, "Image has no frames.");
+            // Converting only the first page or frame would silently lose the rest (owner decision 2026-10-21: refuse).
+            if (frames > 1) throw new ImagingException(ErrorCode.UnsupportedContent, $"This file has {frames} pages or frames; multi-page images are not supported yet.");
+            if (format == ImageFormat.Png && ContainerCheck.IsAnimatedPng(bytes)) throw new ImagingException(ErrorCode.UnsupportedContent, "Animated PNG is not supported yet.");
             var frame = com.Add(decoder.GetFrame(0));
             frame.GetSize(out var width, out var height);
             var pixels = RasterImage.AllocateFor(width, height); // limits before any pixel work
@@ -64,7 +68,7 @@ internal static class WicCodec
         using var com = new ComScope();
         try
         {
-            var stream = com.Add(WicNative.CreateStreamOnHGlobal(0, deleteOnRelease: true));
+            var stream = new GrowableStream();
             var encoder = com.Add(WicNative.Create<IWICBitmapEncoder>(Ids(format).Encoder));
             encoder.Initialize(stream, WicEncoderCacheOption.NoCache);
             encoder.CreateNewFrame(out var frameEncode, out var options);
@@ -72,6 +76,9 @@ internal static class WicCodec
             try
             {
                 if (jpegQuality is { } q && format == ImageFormat.Jpeg && options != 0) PropertyBag.WriteFloat(options, "ImageQuality", Math.Clamp(q, 0f, 1f));
+                // The TIFF encoder's default ("don't care") compression takes minutes on photographic content; Deflate is
+                // lossless, widely read, and fast.
+                if (format == ImageFormat.Tiff && options != 0) PropertyBag.WriteByte(options, "TiffCompressionMethod", 6 /* WICTiffCompressionZIP */);
                 frameEncode.Initialize(options);
             }
             finally { if (options != 0) Marshal.Release(options); }
@@ -107,7 +114,9 @@ internal static class WicCodec
             }
             frameEncode.Commit();
             encoder.Commit();
-            return ReadAll(stream);
+            var bytes = stream.ToArray();
+            if (bytes.Length == 0) throw new ImagingException(ErrorCode.EncodeFailed, "Encoder produced no data.");
+            return bytes;
         }
         catch (COMException ex) { throw new ImagingException(ErrorCode.EncodeFailed, $"Encoding failed (0x{ex.HResult:X8}).", ex); }
     }
@@ -125,18 +134,6 @@ internal static class WicCodec
             return value.UInt16 is >= 1 and <= 8 ? value.UInt16 : 1;
         }
         finally { _ = WicNative.PropVariantClear(&value); }
-    }
-
-    private static unsafe byte[] ReadAll(IStream stream)
-    {
-        stream.Stat(out var stat, 1 /* STATFLAG_NONAME */);
-        if (stat.cbSize <= 0 || stat.cbSize > int.MaxValue) throw new ImagingException(ErrorCode.EncodeFailed, "Encoder produced no data.");
-        var bytes = new byte[stat.cbSize];
-        stream.Seek(0, 0, 0);
-        int read;
-        stream.Read(bytes, bytes.Length, (nint)(&read));
-        if (read != bytes.Length) throw new ImagingException(ErrorCode.EncodeFailed, "Short read from the encoded stream.");
-        return bytes;
     }
 
     private static IWICImagingFactory Factory(ComScope com) => com.Factory ??= com.Add(WicNative.Create<IWICImagingFactory>(WicIds.ImagingFactory));
@@ -157,22 +154,25 @@ internal static class WicCodec
     }
 }
 
-/// <summary>IPropertyBag2::Write for one VT_R4 encoder option, through the raw vtable (only this one call is needed).</summary>
+/// <summary>IPropertyBag2::Write for one encoder option (VT_R4 or VT_UI1), through the raw vtable (only this call is needed).</summary>
 internal static unsafe class PropertyBag
 {
     [StructLayout(LayoutKind.Sequential)]
     private struct PROPBAG2 { public uint dwType; public ushort vt; public ushort cfType; public uint dwHint; public nint pstrName; public Guid clsid; }
 
     [StructLayout(LayoutKind.Explicit, Size = 24)]
-    private struct VARIANT { [FieldOffset(0)] public ushort vt; [FieldOffset(8)] public float fltVal; }
+    private struct VARIANT { [FieldOffset(0)] public ushort vt; [FieldOffset(8)] public float fltVal; [FieldOffset(8)] public byte bVal; }
 
-    public static void WriteFloat(nint bag, string name, float value)
+    public static void WriteByte(nint bag, string name, byte value) => Write(bag, name, new VARIANT { vt = 17 /* VT_UI1 */, bVal = value });
+
+    public static void WriteFloat(nint bag, string name, float value) => Write(bag, name, new VARIANT { vt = 4 /* VT_R4 */, fltVal = value });
+
+    private static void Write(nint bag, string name, VARIANT v)
     {
         var namePtr = Marshal.StringToCoTaskMemUni(name);
         try
         {
-            var prop = new PROPBAG2 { vt = 4 /* VT_R4 */, pstrName = namePtr };
-            var v = new VARIANT { vt = 4, fltVal = value };
+            var prop = new PROPBAG2 { vt = v.vt, pstrName = namePtr };
             var write = (delegate* unmanaged[Stdcall]<nint, uint, PROPBAG2*, VARIANT*, int>)(*(*(void***)bag + 4)); // IUnknown(3) + Read, Write
             var hr = write(bag, 1, &prop, &v);
             if (hr < 0) throw new ImagingException(ErrorCode.EncodeFailed, $"The encoder rejected option {name} (0x{hr:X8}).");

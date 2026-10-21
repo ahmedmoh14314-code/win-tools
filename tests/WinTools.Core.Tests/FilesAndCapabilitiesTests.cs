@@ -370,3 +370,55 @@ public sealed class PathPolicyTests
         Assert.Empty(CapabilityResolver.Default.Resolve([@"C:\ok\a.png", @"C:\dir.\b.png"]));
     }
 }
+
+public sealed class WebPAndBmpStructureTests
+{
+    private static byte[] Le32(int v) => [(byte)v, (byte)(v >> 8), (byte)(v >> 16), (byte)(v >> 24)];
+
+    private static byte[] WebP(params (string Id, int DeclaredSize, int ActualSize)[] chunks)
+    {
+        var body = new List<byte>("WEBP"u8.ToArray());
+        foreach (var (id, declared, actual) in chunks)
+        {
+            body.AddRange(System.Text.Encoding.ASCII.GetBytes(id));
+            body.AddRange(Le32(declared));
+            body.AddRange(new byte[actual + (actual & 1)]);
+        }
+        return [.. "RIFF"u8, .. Le32(body.Count), .. body];
+    }
+
+    [Fact]
+    public void Complete_webp_container_passes()
+    {
+        Assert.True(ContainerCheck.IsComplete(WebP(("VP8L", 9, 9)), ImageFormat.WebP, out var r), r);
+        Assert.True(ContainerCheck.IsComplete(WebP(("VP8X", 10, 10), ("VP8 ", 20, 20), ("EXIF", 3, 3)), ImageFormat.WebP, out r), r);
+    }
+
+    [Fact]
+    public void Webp_failures_are_detected()
+    {
+        var ok = WebP(("VP8L", 9, 9));
+        Assert.False(ContainerCheck.IsComplete(ok.AsSpan(0, ok.Length - 4), ImageFormat.WebP, out var r1)); Assert.Contains("RIFF size", r1);
+        Assert.False(ContainerCheck.IsComplete(WebP(("VP8L", 500, 9)), ImageFormat.WebP, out var r2)); Assert.Contains("past the end", r2);
+        Assert.False(ContainerCheck.IsComplete(WebP(("EXIF", 4, 4)), ImageFormat.WebP, out var r3)); Assert.Contains("no image", r3);
+    }
+
+    private static byte[] Bmp24(int width, int height, int pixelBytes, int compression = 0)
+    {
+        var header = new List<byte>("BM"u8.ToArray());
+        header.AddRange(Le32(54 + pixelBytes)); header.AddRange(Le32(0)); header.AddRange(Le32(54));
+        header.AddRange(Le32(40)); header.AddRange(Le32(width)); header.AddRange(Le32(height));
+        header.AddRange([1, 0, 24, 0]); header.AddRange(Le32(compression)); header.AddRange(new byte[20]);
+        return [.. header, .. new byte[pixelBytes]];
+    }
+
+    [Fact]
+    public void Bmp_pixel_array_must_fit_and_rle_is_refused()
+    {
+        // 3x2 at 24 bpp: rows are padded to 12 bytes, so 24 bytes of pixels.
+        Assert.True(ContainerCheck.IsComplete(Bmp24(3, 2, 24), ImageFormat.Bmp, out var r), r);
+        Assert.True(ContainerCheck.IsComplete(Bmp24(3, -2, 24), ImageFormat.Bmp, out r), r); // top-down
+        Assert.False(ContainerCheck.IsComplete(Bmp24(3, 2, 23), ImageFormat.Bmp, out var cut)); Assert.Contains("truncated", cut);
+        Assert.False(ContainerCheck.IsComplete(Bmp24(3, 2, 24, compression: 1), ImageFormat.Bmp, out var rle)); Assert.Contains("RLE", rle);
+    }
+}
