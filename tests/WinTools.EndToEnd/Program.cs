@@ -12,6 +12,7 @@ using WinTools.EndToEnd;
 // Usage: WinTools.EndToEnd <png|jpg|bmp|tif|webp|batch|escape|outside|unsupported|category|fast|edge|worker-crash>
 //          [--op <operation id>] [--target jpeg|png|webp|bmp|tiff] [--batch N] [--cycles N] [--fast-ms N] [--results file.jsonl]
 //          [--animations on|off|system]   (default on: the menu's animations run, the heavier path for latency)
+//          [--host <WinTools.Host.exe>]   (default: the host next to the harness; e.g. an installed copy)
 // Each scenario: fresh folder with copies of the committed samples, fresh host with its own log and default settings,
 // one Explorer window on that folder. Before every injection the window is re-verified; a release happens only over our
 // overlay or over the folder's own background, otherwise the drag is cancelled with Escape. After every cycle the folder
@@ -26,7 +27,7 @@ using WinTools.EndToEnd;
 // sound the host logged must follow the rules: one level sound per level change, never more ticks than sector changes.
 
 var scenario = args.Length > 0 ? args[0] : "png";
-var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; string? opArg = null; var batchSize = 12; var animations = "On";
+var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; string? opArg = null; var batchSize = 12; var animations = "On"; string? hostArg = null;
 for (var i = 1; i < args.Length; i++)
 {
     switch (args[i])
@@ -37,6 +38,7 @@ for (var i = 1; i < args.Length; i++)
         case "--op": opArg = args[++i]; break;                        // any menu operation id, e.g. resize.percent-50
         case "--batch": batchSize = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break; // files for "batch"
         case "--results": resultsPath = Path.GetFullPath(args[++i]); break;
+        case "--host": hostArg = Path.GetFullPath(args[++i]); break;
         case "--animations": animations = args[++i] switch { "on" => "On", "off" => "Off", "system" => "System", var a => throw new ArgumentException($"--animations {a}") }; break;
         default: Console.Error.WriteLine($"Unknown option {args[i]}"); return 64;
     }
@@ -101,7 +103,7 @@ resultsPath ??= Path.Combine(folder, "..", $"e2e-{scenario}-{stamp}.jsonl");
 using var results = new StreamWriter(resultsPath, append: false) { AutoFlush = true };
 void Record(object o) { var line = JsonSerializer.Serialize(o); results.WriteLine(line); Console.WriteLine(line); }
 
-var hostInfo = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "WinTools.Host.exe"))
+var hostInfo = new ProcessStartInfo(hostArg ?? Path.Combine(AppContext.BaseDirectory, "WinTools.Host.exe"))
 {
     UseShellExecute = false, CreateNoWindow = true,
     ArgumentList = { "--log", Path.GetFullPath(hostLog), "--settings", Path.GetFullPath(settingsFile) },
