@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Resident process and composition root: hooks -> session -> overlay -> capability resolver -> worker. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WinTools.Core\WinTools.Core.csproj" />
+    <ProjectReference Include="..\WinTools.Windows\WinTools.Windows.csproj" />
+    <!-- Built and copied next to the host so it can be started as a separate process. The host never calls worker code
+         in-process; WinTools.Worker.Tests asserts the host assembly does not reference it. -->
+    <ProjectReference Include="..\WinTools.Worker\WinTools.Worker.csproj" />
+    <InternalsVisibleTo Include="WinTools.Worker.Tests" />
+  </ItemGroup>
+</Project>

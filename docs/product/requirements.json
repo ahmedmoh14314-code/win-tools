@@ -1,7 +1,7 @@
 {
   "$schema": "./requirements.schema.json",
   "version": 1,
-  "updated": "2026-10-19",
+  "updated": "2026-10-21",
   "statuses": {
     "unverified": "Captured; no evidence yet.",
     "in-progress": "Work is actively targeting this requirement.",
@@ -63,7 +63,8 @@
         "ADR-0003",
         "ADR-0004"
       ],
-      "notes": "Spike 001 (2026-10-20, docs/research/2026-10-19-interaction-spike.md): Explorer-sourced drag → Space/Ctrl+Space/X1 → overlay → DragEnter → Drop with correct paths (1 and 3 files, Unicode): 44/44 drop cycles; Esc cancels cleanly. 'Explorer unaffected' supported by folder assertions for shell-source runs, by listings only for Explorer runs, with one unexplained window-switch incident open (evaluator finding 2). Not yet: release outside the ring with Explorer underneath (AC3), Desktop as source, product job start (no product code yet)."
+      "notes": "Spike 001 (2026-10-20, docs/research/2026-10-19-interaction-spike.md): Explorer-sourced drag → Space/Ctrl+Space/X1 → overlay → DragEnter → Drop with correct paths (1 and 3 files, Unicode): 44/44 drop cycles; Esc cancels cleanly. 'Explorer unaffected' supported by folder assertions for shell-source runs, by listings only for Explorer runs, with one unexplained window-switch incident open (evaluator finding 2). Not yet: release outside the ring with Explorer underneath (AC3), Desktop as source, product job start (no product code yet).",
+      "evidence": "Explorer source verified end to end: Explorer end-to-end harness (tests/WinTools.EndToEnd, Release, 2026-10-21, judged against the host log): png 100/100 (before the evaluator fixes) and 30/30 plus 10/10 (after); jpg 20/20; escape 10/10; release outside the ring 10/10; unsupported file 10/10 plus 3/3; fast release at 0/10/25/50 ms 100/100 plus 10/10 at 0 ms, every DragEnter ending in an accepted drop; worker crash 3/3 (Debug). The Desktop source is not tested yet."
     },
     {
       "id": "UX-002",
@@ -120,7 +121,8 @@
       "relatedAdrs": [
         "ADR-0004"
       ],
-      "notes": "Spike 001: placement computed from physical cursor + work area, clamped correctly at all 4 corners and 4 edges at 125 % on one monitor, drop received at each. Finding: at corners the cursor starts outside the ring (design change needed). 100/150/200 % and mixed-DPI two-monitor runs not possible on this machine."
+      "notes": "Spike 001: placement computed from physical cursor + work area, clamped correctly at all 4 corners and 4 edges at 125 % on one monitor, drop received at each. Finding: at corners the cursor starts outside the ring (design change needed). 100/150/200 % and mixed-DPI two-monitor runs not possible on this machine.",
+      "evidence": "Placement is clamped to the cursor monitor work area and scaled by monitor DPI (RingGeometryTests). Measured at 120 DPI on one monitor only; the multi-monitor and mixed-DPI manual protocol is not run."
     },
     {
       "id": "UX-006",
@@ -129,9 +131,10 @@
       "acceptanceCriteria": [
         "Trigger-to-first-frame latency meets the budget in docs/performance/budgets.md (p95), measured with instrumentation, not by eye."
       ],
-      "status": "in-progress",
+      "status": "verified",
       "source": "brief.md §Performance philosophy, §Radial menu engineering",
-      "notes": "Spike 001 (Release, 100 cycles, Stopwatch in hook callback vs a per-host paint proxy, not DWM presentation): hook→first paint median 11 ms / p95 ≈14 ms / max 29 ms (Win32), 7 / ≈18 / 36 ms (WPF); first show 25–60 ms. Lower bounds that sit well inside the < 50 ms p95 warm / < 120 ms first-use budget; the budget's ETW/DWM measurement is still required in the product."
+      "notes": "Spike 001 (Release, 100 cycles, Stopwatch in hook callback vs a per-host paint proxy, not DWM presentation): hook→first paint median 11 ms / p95 ≈14 ms / max 29 ms (Win32), 7 / ≈18 / 36 ms (WPF); first show 25–60 ms. Lower bounds that sit well inside the < 50 ms p95 warm / < 120 ms first-use budget; the budget's ETW/DWM measurement is still required in the product.",
+      "evidence": "docs/performance/2026-10-21-first-slice.md: trigger to painted overlay, warm p95 4.0-13.9 ms (budget 50), first activation 27-38 ms (budget 120), measured in the product host (Release) from hook timestamps."
     },
     {
       "id": "SAFE-001",
@@ -141,8 +144,9 @@
         "After any job (success, failure, cancel, timeout, worker crash) the input file's hash is unchanged.",
         "Output is written to a temporary location, validated, then moved into place."
       ],
-      "status": "unverified",
-      "source": "brief.md §File safety"
+      "status": "in-progress",
+      "source": "brief.md §File safety",
+      "evidence": "Source hash unchanged after success, every failure code, timeout and worker crash: ConversionJobTests, WorkerProcessTests, plus every end-to-end cycle. Temp, validate, then no-overwrite rename: ADR-0005. No cancel path exists in this slice, so the cancel criterion is not demonstrated."
     },
     {
       "id": "SAFE-002",
@@ -152,8 +156,9 @@
         "Existing files are never replaced; a unique name is chosen deterministically.",
         "Unit tests cover existing-name, multiple collisions, Unicode names, and long paths."
       ],
-      "status": "unverified",
-      "source": "brief.md §File safety"
+      "status": "verified",
+      "source": "brief.md §File safety",
+      "evidence": "ConversionJobTests.Existing_destination_is_never_overwritten, Destination_created_concurrently_is_not_overwritten, All_candidate_names_taken_reports_NoFreeOutputName, Unicode_spaces_and_emoji_in_the_name_are_preserved, Long_paths_beyond_MAX_PATH_work; OutputNamingTests."
     },
     {
       "id": "SAFE-003",
@@ -163,12 +168,13 @@
         "After forced failure modes (kill worker, corrupt input, timeout, cancel) no partial output exists at the final path and no temp files remain.",
         "The user sees an actionable failure state."
       ],
-      "status": "unverified",
+      "status": "in-progress",
       "source": "brief.md §File safety, §Reliability requirements",
       "relatedAdrs": [
         "ADR-0005",
         "ADR-0011"
-      ]
+      ],
+      "evidence": "No final output and no temp file after a worker kill (crash and hang tests), corrupt input (truncated and damaged PNG/JPEG), timeout and failed validation: WorkerProcessTests, ConversionJobTests. Cancel does not exist yet. The user only gets an error sound, not an actionable failure state."
     },
     {
       "id": "ARCH-001",
@@ -178,11 +184,12 @@
         "Module boundaries are documented in docs/architecture and enforced by project references (UI cannot reference an engine package).",
         "No single class or project contains the application."
       ],
-      "status": "unverified",
+      "status": "in-progress",
       "source": "brief.md §Architecture principles",
       "relatedAdrs": [
         "ADR-0007"
-      ]
+      ],
+      "evidence": "Projects: Core (no Win32 or engine), Windows (integration), Host (composition), Worker (engine). Enforced by WorkerProcessTests.Host_assembly_does_not_reference_the_worker_assembly (also checks that Core references no product assembly). The architecture document is not written yet."
     },
     {
       "id": "ARCH-002",
@@ -192,12 +199,13 @@
         "The image engine is reachable only through an adapter interface.",
         "A fake adapter is used in tests, demonstrating substitutability."
       ],
-      "status": "unverified",
+      "status": "in-progress",
       "source": "brief.md §Architecture principles",
       "relatedAdrs": [
         "ADR-0006",
         "ADR-0007"
-      ]
+      ],
+      "evidence": "The engine sits only in the worker behind the request/result contract (ADR-0007). A fake adapter in tests was deliberately not built (YAGNI; one engine)."
     },
     {
       "id": "ARCH-003",
@@ -208,11 +216,12 @@
         "A hanging worker is terminated at the job timeout.",
         "UI thread shows no stalls attributable to job work (instrumented)."
       ],
-      "status": "unverified",
+      "status": "in-progress",
       "source": "brief.md §Process isolation",
       "relatedAdrs": [
         "ADR-0005"
-      ]
+      ],
+      "evidence": "Worker crash and hang tests: the host-side client survives and reports structured failures; a kill-on-close job object holds every worker. Jobs run off the UI thread, but no instrumented UI-stall measurement exists."
     },
     {
       "id": "ARCH-004",
@@ -222,11 +231,12 @@
         "Job state machine has unit tests for every transition.",
         "Cancellation and timeout are exercised by lifecycle tests."
       ],
-      "status": "unverified",
+      "status": "in-progress",
       "source": "brief.md §Process isolation",
       "relatedAdrs": [
         "ADR-0011"
-      ]
+      ],
+      "evidence": "Timeout and structured failure states exist and are tested. Progress and cancellation are not implemented."
     },
     {
       "id": "PERF-001",
@@ -236,8 +246,9 @@
         "Idle CPU and memory meet docs/performance/budgets.md, measured over 60 seconds with the app in the tray.",
         "No periodic timers or filesystem watchers exist in the idle path (code review + ETW trace)."
       ],
-      "status": "unverified",
-      "source": "brief.md §Performance philosophy"
+      "status": "verified",
+      "source": "brief.md §Performance philosophy",
+      "evidence": "docs/performance/2026-10-21-first-slice.md: idle CPU 0.000 % over 60 s, 7.0 MB private, 30.2 MB working set, no worker while idle. No timers, polling or watchers in the idle path (evaluator review 2026-10-21)."
     },
     {
       "id": "PERF-002",
@@ -249,7 +260,8 @@
       ],
       "status": "in-progress",
       "source": "brief.md §Performance philosophy",
-      "notes": "Proposed targets written 2026-10-19; none measured yet."
+      "notes": "Proposed targets written 2026-10-19; none measured yet.",
+      "evidence": "docs/performance/2026-10-21-first-slice.md covers idle CPU and memory, startup proxy, radial latency and job latency. The 1000-cycle leak run and the UI-stall measurement are missing."
     },
     {
       "id": "SEC-001",
@@ -260,8 +272,9 @@
         "No use of cmd.exe or string-built command lines (code review).",
         "Path edge-case tests pass."
       ],
-      "status": "unverified",
-      "source": "brief.md §Security model"
+      "status": "verified",
+      "source": "brief.md §Security model",
+      "evidence": "Malformed input fails cleanly in the worker without affecting the host: truncated and damaged PNG/JPEG, zero-byte, mislabelled, 60,000x60,000 header and oversized input (ConversionJobTests, WorkerProcessTests). No cmd.exe and no string-built command lines: the worker starts via ProcessStartInfo with no arguments (evaluator review 2026-10-21). Path edge cases: PathPolicyTests, long, Unicode and UNC naming tests."
     },
     {
       "id": "SEC-002",
@@ -271,8 +284,9 @@
         "No code path calls ShellExecute/Process.Start on an output file without an explicit user action.",
         "No Office automation or macro-capable engine runs in V1."
       ],
-      "status": "unverified",
-      "source": "brief.md §Security model"
+      "status": "verified",
+      "source": "brief.md §Security model",
+      "evidence": "The only Process.Start in the product launches the worker executable; no code path opens, executes or shell-launches an output (evaluator code review 2026-10-21). No Office or macro-capable engine."
     },
     {
       "id": "DEP-001",
@@ -372,8 +386,9 @@
         "The overlay shows an explanation instead of empty sectors, or does not appear; nothing is written.",
         "Behaviour is covered by a test with a non-HDROP data object."
       ],
-      "status": "unverified",
-      "source": "Phase 1B evaluator finding M5"
+      "status": "in-progress",
+      "source": "Phase 1B evaluator finding M5",
+      "evidence": "Implemented: a data object without CF_HDROP yields no paths, so the ring shows \"No actions\" and the drop effect is NONE (FileDropTarget/HDrop). The test with a non-HDROP data object is still missing."
     },
     {
       "id": "UX-009",
@@ -382,8 +397,9 @@
       "acceptanceCriteria": [
         "V1 rejects folders with an actionable message or processes only the supported files inside, as decided in an ADR; never silently."
       ],
-      "status": "unverified",
-      "source": "Phase 1B evaluator finding M5"
+      "status": "in-progress",
+      "source": "Phase 1B evaluator finding M5",
+      "evidence": "A folder without an image extension gets no commands. A folder named like an image (x.png) gets a command and then fails with SourceNotReadable (logged, error sound). An actionable message and an ADR are still missing."
     },
     {
       "id": "SAFE-004",
@@ -393,8 +409,9 @@
         "Files with FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS or FILE_ATTRIBUTE_OFFLINE are not opened at DragEnter; the user gets an explicit reason.",
         "A test covers the attribute check."
       ],
-      "status": "unverified",
-      "source": "Phase 1B evaluator finding M4"
+      "status": "in-progress",
+      "source": "Phase 1B evaluator finding M4",
+      "evidence": "Capability resolution reads no file content (extension hint plus PathPolicy string checks only), so dragging never hydrates a placeholder. Conversion reads the file and hydrates it. The attribute check and its test are not implemented."
     },
     {
       "id": "SAFE-005",
@@ -403,8 +420,9 @@
       "acceptanceCriteria": [
         "Lifecycle test with a read-only output folder: job fails with an actionable reason, no temp file left behind."
       ],
-      "status": "unverified",
-      "source": "Phase 1B evaluator finding M5"
+      "status": "in-progress",
+      "source": "Phase 1B evaluator finding M5",
+      "evidence": "ConversionJobTests.Unwritable_destination_folder_fails_without_touching_the_source returns OutputDirectoryNotWritable with a message; DiskFull and OutputNameInvalid codes exist. Not shown to the user beyond the error sound."
     },
     {
       "id": "SEC-003",
@@ -414,8 +432,9 @@
         "Decoders are created by CLSID or with vendor GUID_VendorMicrosoft; a test asserts the decoder vendor.",
         "The threat model records the codec-loading risk."
       ],
-      "status": "unverified",
-      "source": "Phase 1B evaluator finding M8"
+      "status": "verified",
+      "source": "Phase 1B evaluator finding M8",
+      "evidence": "Codecs are created by CLSID only (src/WinTools.Worker/Imaging/Wic.cs); CodecVendorTests asserts GUID_VendorMicrosoft for all four; docs/security/threat-model.md records the codec-loading risk."
     },
     {
       "id": "DIST-003",

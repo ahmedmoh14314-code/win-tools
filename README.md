@@ -4,7 +4,7 @@ A lightweight, local-first Windows desktop utility: drag a file, press a trigger
 a radial menu appears around the cursor, drop the file on an action, and the
 operation runs safely (e.g. `photo.png` → Convert → WebP → `photo.webp`).
 
-**Status: research and feasibility spikes. No product code exists yet; see `docs/progress.md`.**
+**Status: first product slice in review. PNG → JPEG and JPEG → PNG work end to end from Windows Explorer. No installer, tray or settings yet; see `docs/progress.md`.**
 
 ## Start here (every session)
 
@@ -29,4 +29,19 @@ operation runs safely (e.g. `photo.png` → Convert → WebP → `photo.webp`).
 | `docs/engineering/` | Workflow, evaluator pattern, environment, git conventions, audits. |
 | `scripts/` | Repository tooling (not product code). |
 
-Source code will live under `src/` and `tests/` once the architecture spike is approved.
+| `src/` | Product code: `WinTools.Core`, `WinTools.Windows`, `WinTools.Host`, `WinTools.Worker`. |
+| `tests/` | Unit and integration tests (run in CI) and `WinTools.EndToEnd`, a local Explorer harness. |
+| `spikes/` | Throwaway experiments kept as evidence; never referenced by product code. |
+
+## Build and run
+
+Requires the .NET 10 SDK (`global.json`) on Windows 10/11 x64.
+
+```
+dotnet build WinTools.slnx
+dotnet test tests/WinTools.Core.Tests
+dotnet test tests/WinTools.Worker.Tests
+src/WinTools.Host/bin/Debug/net10.0-windows/win-x64/WinTools.Host.exe
+```
+
+While the host runs, drag a `.png` or `.jpg` in Explorer, press **Space** without releasing the mouse, and drop the file on the ring. The output appears next to the source, as `photo.jpg` or `photo (1).jpg` if that name is taken. **Escape** cancels. **Ctrl+C** in the host's console exits.

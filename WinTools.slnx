@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WinTools.Core/WinTools.Core.csproj" />
+    <Project Path="src/WinTools.Windows/WinTools.Windows.csproj" />
+    <Project Path="src/WinTools.Host/WinTools.Host.csproj" />
+    <Project Path="src/WinTools.Worker/WinTools.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WinTools.Core.Tests/WinTools.Core.Tests.csproj" />
+    <Project Path="tests/WinTools.Worker.Tests/WinTools.Worker.Tests.csproj" />
+    <Project Path="tests/WinTools.EndToEnd/WinTools.EndToEnd.csproj" />
+  </Folder>
+</Solution>
