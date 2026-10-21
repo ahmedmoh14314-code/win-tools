@@ -42,6 +42,7 @@ internal static class ConversionJob
         try
         {
             var input = ReadSource(source);
+            FaultInjection.At("after-read", source);
             hooks?.AfterSourceRead?.Invoke();
             // The format is decided by content, never by the name; the operation must apply to what the file really is.
             var actual = FileSignature.Detect(input);

@@ -33,7 +33,6 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 - Multi-monitor and mixed DPI; the Desktop as drag source; Windows 10. These need the manual protocol or Windows Sandbox.
 - A user-visible failure state (notifications or a tray icon). Today a failure gives only the error sound and a log entry.
 - JPEGs with benign codec warnings are refused; not yet measured on a real-world photo set (TASK 5).
-- Image limits (100 MP) are high for 4 parallel workers; lower limits and a job-object memory cap (TASK 5).
 - Overlay accessibility: its own provider, which must not block the overlay thread.
 
 ## Current blockers

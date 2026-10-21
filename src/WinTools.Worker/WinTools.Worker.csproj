@@ -9,5 +9,8 @@
     <ProjectReference Include="..\WinTools.Core\WinTools.Core.csproj" />
     <PackageReference Include="SkiaSharp" />
     <InternalsVisibleTo Include="WinTools.Worker.Tests" />
+    <!-- Equal to WorkerJobObject.WorkerMemoryLimitBytes (1536 MiB, ADR-0015). Set explicitly: the worker joins the host's
+         job after it has started, and a GC that read the job's limit first would cap its heap at 75 % of it. -->
+    <RuntimeHostConfigurationOption Include="System.GC.HeapHardLimit" Value="1610612736" />
   </ItemGroup>
 </Project>

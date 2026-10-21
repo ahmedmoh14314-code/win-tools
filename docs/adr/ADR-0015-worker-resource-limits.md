@@ -1,0 +1,50 @@
+# ADR-0015: Worker resource limits: pixels, memory cap, memory-bounded pool
+
+- **Status:** Accepted (2026-10-21), TASK 5 hardening
+- **Date:** 2026-10-21
+- **Deciders:** product owner (roadmap TASK 5: "lower image limits, add a job-object memory cap")
+- **Related requirements:** SEC-001, SAFE-003, ARCH-004, PERF-002
+
+## Context
+The worker allocated images up to 100 MP and could commit as much memory as the system granted. Up to 4 workers run in parallel (ADR-0005).
+
+Measured peak commit per worker (`docs/performance/2026-10-21-worker-memory.md`):
+- It grows linearly, about 21 MB per megapixel in the worst case (conversion to BMP).
+- At 100 MP that is about 2.1 GB per worker, or 8.6 GB for four. The development machine had 4.3 GB of physical memory available while it was measured.
+
+A hostile file could also make a decoder allocate natively, outside any .NET limit.
+
+## Decision
+- **Pixel limit: 50 MP** (`ImageLimits.MaxPixels`, 65,535 per side).
+  - It is checked from the header before any pixel buffer is allocated, for decodes and for resize targets alike.
+  - The worst measured peak at the limit is 1.06 GB. The limit covers 48 and 50 MP phone photos and cameras up to 50 MP. Larger images are refused with ImageTooLarge.
+- **Per-worker memory cap: 1.5 GB** (`WorkerJobObject.WorkerMemoryLimitBytes`), set through `JOB_OBJECT_LIMIT_PROCESS_MEMORY` on the host's job object.
+  - It covers native and managed commits. An allocation past it fails inside the worker: managed and WIC E_OUTOFMEMORY failures are reported as ImageTooLarge; a codec that cannot handle the failure crashes its worker, which the host reports.
+  - The worker's runtimeconfig sets `System.GC.HeapHardLimit` to the same value. The worker joins the job only after it starts, and a GC that read the job's limit first would otherwise cap its heap at 75 % of it, depending on timing.
+- **Memory-bounded pool:** at the start of a batch, the number of workers is
+  `clamp(min(processors / 2, available physical memory / cap), 1, 4)`.
+  Four workers that each reach the cap therefore still fit in the memory available. One worker always runs.
+
+## Alternatives considered
+- **Keep 100 MP and rely on the pagefile:** four large conversions could need 8.6 GB. The machine would page heavily, and on an 8 GB machine allocations would fail at random.
+- **64 MP:** the BMP peak is 1.35 GB, which leaves too little headroom under a 1.5 GB cap. A 2 GB cap would allow only two workers on a typical busy 16 GB machine.
+- **A job-wide memory limit for all workers together:** a large file would then fail because other files of the same batch happened to run at the same time, not because of its own size. That is a non-deterministic failure.
+- **The host reads image headers and schedules by pixel count:** this puts parsing of untrusted files in the host process, which ADR-0005 rules out.
+- **Lower the peak by streaming the encode and validation:** possible later. It does not remove the need for a cap against hostile input.
+
+## Consequences
+- Images over 50 MP (for example 61 MP cameras and the 108/200 MP modes of phones) are refused with an actionable message. This is a V1 limitation.
+- On a busy machine a batch may run with fewer than 4 workers. Small files then go slower than they could. The batch log records the number used (`job.done.workers`).
+- `ContainerCheck` derives its PNG inflate ceiling from the same limit.
+
+## Evidence / experiments
+- `docs/performance/2026-10-21-worker-memory.md`: the measurements above.
+- `tests/WinTools.Worker.Tests/ResourceLimitTests.cs`:
+  - the exact pixel boundary;
+  - a 50 MP BMP rotated under the cap (the costliest case at the limit);
+  - native commits past the cap refused. This is a Debug-only fault, and the test fails when the cap is removed (checked by mutation);
+  - the lane rule;
+  - the GC heap limit equal to the cap.
+
+## Evaluator review
+Part of the TASK 5 final evaluator pass.

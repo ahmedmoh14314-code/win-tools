@@ -98,8 +98,8 @@ public static class ContainerCheck
         return produced == expected ? null : "image data is truncated";
     }
 
-    /// <summary>Largest decompressed PNG stream the check will inflate (100 MP at 16-bit RGBA, plus filter bytes).</summary>
-    private const long MaxInflatedBytes = 100_000_000L * 8 + 65_536;
+    /// <summary>Largest decompressed PNG stream the check will inflate (the pixel limit at 16-bit RGBA, plus one filter byte per row).</summary>
+    private const long MaxInflatedBytes = ImageLimits.MaxPixels * 8 + ImageLimits.MaxDimension + 1;
 
     private static string? CheckJpeg(ReadOnlySpan<byte> d)
     {

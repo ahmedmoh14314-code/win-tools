@@ -13,7 +13,8 @@ namespace WinTools.Host.Jobs;
 /// result per file.
 /// <list type="bullet">
 /// <item>Lanes (at most <see cref="DefaultParallelism"/>, never more than the number of files) take files from one queue,
-/// each with its own worker.</item>
+/// each with its own worker. Each worker may commit up to <see cref="WorkerJobObject.WorkerMemoryLimitBytes"/>, so there
+/// are never more lanes than that fits into the physical memory available when the batch starts (ADR-0015).</item>
 /// <item>A crash, a hang past the per-job timeout or a protocol violation fails only the file being processed: its worker
 /// is killed, its known temporary file is deleted, and the lane starts a new worker for the next file. A lane gives up
 /// after <see cref="MaxRestartsPerLane"/> failures in a row (a success resets the count); what is left is reported as not run.</item>
@@ -23,13 +24,26 @@ namespace WinTools.Host.Jobs;
 /// </summary>
 internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IReadOnlyDictionary<string, string>? environment = null, int parallelism = 0)
 {
-    /// <summary>Measured choice (docs/performance): half the logical processors, between 1 and 4.</summary>
-    public static int DefaultParallelism => Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
+    /// <summary>Measured choice (docs/performance): half the logical processors, between 1 and 4, bounded by memory.</summary>
+    public static int DefaultParallelism => Lanes(Environment.ProcessorCount, SystemMemory.AvailablePhysicalBytes());
+
+    /// <summary>
+    /// Half the processors, but no more workers than can each reach the memory cap within the available physical memory;
+    /// between 1 and 4. Unknown memory counts as enough.
+    /// </summary>
+    internal static int Lanes(int processors, ulong? availableBytes)
+    {
+        var byMemory = availableBytes is { } a ? (int)Math.Min(4, a / (ulong)WorkerJobObject.WorkerMemoryLimitBytes) : 4;
+        return Math.Clamp(Math.Min(processors / 2, byMemory), 1, 4);
+    }
 
     public const int MaxRestartsPerLane = 3;
 
     /// <summary>Whether every worker of the last batch was placed in the host's kill-on-close job object (logged by the caller).</summary>
     public bool JobObjectAssigned { get; private set; }
+
+    /// <summary>How many workers the last batch used (logged by the caller).</summary>
+    public int LastLaneCount { get; private set; }
 
     public async Task<IReadOnlyList<ConversionResult>> RunAsync(IReadOnlyList<ConversionRequest> requests, CancellationToken cancellationToken)
     {
@@ -40,6 +54,7 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
         var results = new ConversionResult?[requests.Count];
         var queue = new System.Collections.Concurrent.ConcurrentQueue<int>(Enumerable.Range(0, requests.Count));
         var lanes = Math.Clamp(parallelism > 0 ? parallelism : DefaultParallelism, 1, requests.Count);
+        LastLaneCount = lanes;
         var allAssigned = true;
         await Task.WhenAll(Enumerable.Range(0, lanes).Select(_ => Task.Run(async () =>
         {

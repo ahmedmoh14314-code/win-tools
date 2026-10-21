@@ -15,8 +15,8 @@ internal sealed class ImagingException(ErrorCode code, string message, Exception
 /// </summary>
 internal sealed class RasterImage
 {
-    public const long MaxPixels = 100_000_000;
-    public const int MaxDimension = 65_535;
+    public const long MaxPixels = WinTools.Core.Files.ImageLimits.MaxPixels;
+    public const int MaxDimension = WinTools.Core.Files.ImageLimits.MaxDimension;
 
     public int Width { get; }
     public int Height { get; }

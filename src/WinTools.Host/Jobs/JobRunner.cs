@@ -27,7 +27,7 @@ internal sealed class JobRunner(WorkerClient client, HostLog log, AppSettings se
             foreach (var r in results)
                 log.Event("job.result", new { id = r.Id, ok = r.Success, error = r.Error.ToString(), r.Message, output = r.OutputPath is null ? null : Path.GetFileName(r.OutputPath) });
             log.Event("job.done", new { op = operation.Id, ok = results.Count(r => r.Success), nothingToDo = results.Count(r => r.Error == ErrorCode.NothingToDo),
-                failed = results.Count(r => !r.Success && r.Error != ErrorCode.NothingToDo), ms = Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 1), jobObject = client.JobObjectAssigned });
+                failed = results.Count(r => !r.Success && r.Error != ErrorCode.NothingToDo), ms = Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 1), jobObject = client.JobObjectAssigned, workers = client.LastLaneCount });
             var facts = results.Where(r => r.Info is not null).Select(r => r.Info!).ToArray();
             if (facts.Length > 0) _ = Task.Run(() => showInfo(facts)); // a modal box must not hold the next drop back
             if (results.Any(r => !r.Success && r.Error != ErrorCode.NothingToDo)) onFailure();
