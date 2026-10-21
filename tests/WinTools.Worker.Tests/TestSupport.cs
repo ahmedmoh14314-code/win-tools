@@ -58,7 +58,7 @@ public sealed record Pixels(int Width, int Height, byte[] Bgra)
 /// <summary>Minimal PNG writer (RGBA 8-bit, filter 0) independent of WIC, for crafted inputs.</summary>
 public static class PngWriter
 {
-    public static byte[] Rgba(int width, int height, Func<int, int, (byte R, byte G, byte B, byte A)> pixel)
+    public static byte[] Rgba(int width, int height, Func<int, int, (byte R, byte G, byte B, byte A)> pixel, CompressionLevel level = CompressionLevel.Optimal)
     {
         var raw = new MemoryStream();
         for (var y = 0; y < height; y++)
@@ -67,7 +67,7 @@ public static class PngWriter
             for (var x = 0; x < width; x++) { var (r, g, b, a) = pixel(x, y); raw.Write([r, g, b, a]); }
         }
         var z = new MemoryStream();
-        using (var zs = new ZLibStream(z, CompressionLevel.Optimal, leaveOpen: true)) raw.WriteTo(zs);
+        using (var zs = new ZLibStream(z, level, leaveOpen: true)) raw.WriteTo(zs);
         return Build(width, height, z.ToArray());
     }
 

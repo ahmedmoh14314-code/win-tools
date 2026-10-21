@@ -42,7 +42,8 @@ var source = Path.Combine(folder, sourceName);
 if (sample.Length > 0) File.Copy(Path.Combine(AppContext.BaseDirectory, "samples", sample), source);
 else File.WriteAllText(source, "plain text, not an image");
 var sourceHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source)));
-var commands = WinTools.Core.Capabilities.CapabilityResolver.Default.Resolve([source]);
+// The ring shows conversions only until the hierarchical menu lands; aim with the same list the host shows.
+var commands = WinTools.Core.Capabilities.CapabilityResolver.Default.Resolve([source]).Where(o => o.Kind == WinTools.Core.Capabilities.OperationKind.Convert).ToArray();
 var hostLog = Path.Combine(folder, "..", $"host-{scenario}-{DateTime.Now:HHmmss}.jsonl");
 resultsPath ??= Path.Combine(folder, "..", $"e2e-{scenario}-{DateTime.Now:HHmmss}.jsonl");
 using var results = new StreamWriter(resultsPath, append: false) { AutoFlush = true };
@@ -80,7 +81,12 @@ using (var explorer = ExplorerWindow.Open(folder))
     {
         if (explorer.ItemCentre(sourceName) is not { } item) { Record(new { cycle, abort = "item not found" }); exitCode = 4; break; }
         var (cx, cy) = item;
-        if (!explorer.EnsureForeground(cx, cy)) { Record(new { cycle, abort = "Explorer window not foreground or covered; refusing to inject" }); exitCode = 4; break; }
+        if (!explorer.EnsureForeground(cx, cy))
+        {
+            Record(new { cycle, abort = "Explorer window not foreground or covered; refusing to inject",
+                underPoint = Desktop.ClassOf(Desktop.RootAt(cx, cy)), foreground = Desktop.ClassOf(Desktop.GetForegroundWindow()), at = $"{cx},{cy}" });
+            exitCode = 4; break;
+        }
 
         Desktop.MoveTo(cx, cy); Thread.Sleep(60);
         Desktop.LeftDown(); Thread.Sleep(80);
@@ -91,7 +97,7 @@ using (var explorer = ExplorerWindow.Open(folder))
         var index = commands.ToList().FindIndex(o => o.Target == outputFormat);
         if (index < 0 && expectOutput) { Record(new { cycle, abort = $"{outputFormat} is not offered for {sourceName}" }); exitCode = 4; break; }
         index = Math.Max(0, index);
-        var angle = (index + 0.5) * 2 * Math.PI / Math.Max(1, commands.Count);
+        var angle = (index + 0.5) * 2 * Math.PI / Math.Max(1, commands.Length);
         var drop = (X: at.X + (int)Math.Round(Px(70) * Math.Sin(angle)), Y: at.Y - (int)Math.Round(Px(70) * Math.Cos(angle)));
         var outside = (X: at.X, Y: at.Y + Px(200));           // beyond the ring, over the folder background
         string? releasedOver;

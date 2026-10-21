@@ -13,10 +13,14 @@ public static class OutputNaming
 
     public static string Extension(ImageFormat format) => ImageFormats.Extension(format);
 
-    /// <summary>Candidate output paths in the order they must be tried.</summary>
-    public static IEnumerable<string> Candidates(string sourcePath, ImageFormat target)
+    /// <summary>
+    /// Candidate output paths in the order they must be tried. <paramref name="suffix"/> names the operation for outputs
+    /// that keep the format ("photo (resized 50%).jpg"); a plain conversion has none ("photo.png").
+    /// </summary>
+    public static IEnumerable<string> Candidates(string sourcePath, ImageFormat target, string? suffix = null)
     {
         var (dir, stem) = Split(sourcePath);
+        if (suffix is not null) stem = $"{stem} ({suffix})";
         var ext = Extension(target);
         yield return Path.Combine(dir, stem + ext);
         for (var i = 1; i <= MaxCollisionIndex; i++)

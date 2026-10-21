@@ -33,6 +33,34 @@ internal static class SkiaCodec
         return (new RasterImage(size.Width, size.Height, pixels), origin is >= 1 and <= 8 ? origin : 1);
     }
 
+    /// <summary>True if the WebP's image data is lossless (a VP8L bitstream, directly or after a VP8X header).</summary>
+    public static bool IsLosslessWebP(ReadOnlySpan<byte> bytes)
+    {
+        for (var i = 12; i + 8 <= bytes.Length;)
+        {
+            var id = bytes.Slice(i, 4);
+            if (id.SequenceEqual("VP8L"u8)) return true;
+            if (id.SequenceEqual("VP8 "u8)) return false;
+            var size = (long)(uint)(bytes[i + 4] | bytes[i + 5] << 8 | bytes[i + 6] << 16 | bytes[i + 7] << 24);
+            if (size > bytes.Length) return false;
+            i += 8 + (int)size + (int)(size & 1);
+        }
+        return false;
+    }
+
+    /// <summary>PNG with the strongest lossless settings (zlib level 9, every filter tried), for "compress lossless".</summary>
+    public static unsafe byte[] EncodePngSmallest(RasterImage image)
+    {
+        var info = new SKImageInfo(image.Width, image.Height, SKColorType.Bgra8888, image.HasTransparency() ? SKAlphaType.Unpremul : SKAlphaType.Opaque);
+        fixed (byte* p = image.Bgra)
+        {
+            using var pixmap = new SKPixmap(info, (nint)p, image.Width * 4);
+            using var data = pixmap.Encode(new SKPngEncoderOptions(SKPngEncoderFilterFlags.AllFilters, 9))
+                ?? throw new ImagingException(ErrorCode.EncodeFailed, "The PNG encoder produced no data.");
+            return data.ToArray();
+        }
+    }
+
     /// <summary>Encodes BGRA as WebP: lossy at <paramref name="quality"/> (0–100, alpha kept), or lossless.</summary>
     public static unsafe byte[] EncodeWebP(RasterImage image, int quality, bool lossless)
     {

@@ -10,7 +10,11 @@ The radial menu must show only valid operations for the dragged input, derived f
 ## Decision
 **A declarative operation catalog and one resolver in Core; the radial overlay renders whatever the resolver returns.**
 - **The format table:** `ImageFormats` holds the decodable and encodable formats, extensions, display names and alpha policy.
-- **Operations are rows** generated from that table: `Operation(Id, Label, Kind, Target)` with ids `convert.to-<format>`. `Operation.AppliesTo(contentFormat)` is the single validity rule; a format never converts to itself.
+- **Operations are rows** generated from that table and from fixed presets: `Operation(Id, Label, Kind, Target, Resize, Compress, RotateDegrees)`.
+  - Ids: `convert.to-<format>`, `resize.percent-N`, `resize.box-WxH[-stretch]`, `resize.width-N`, `resize.height-N`, `compress.high|balanced|small|lossless`, `rotate.left|right|180`.
+  - `Operation.AppliesTo(contentFormat)` is the single validity rule. A format never converts to itself; lossy compression applies to JPEG/WebP and lossless to PNG.
+  - `OutputFormat` gives the written format (the target for convert, the source's own format otherwise), and `NameSuffix` names the output.
+- **The flat ring shows conversions only** until the hierarchical menu lands; resize, compress and rotate are complete in the worker.
 - **`CapabilityResolver.Resolve(paths)`** uses the extension only as a hint (`FormatHint`), because it runs during the drag and must not read files. That means no I/O on the UI thread and no hydration of cloud placeholders (SAFE-004).
   - The answer is the **intersection** of operations that apply to every file.
   - Unsupported files, refused paths (`PathPolicy`), and empty or oversized selections (more than 50 files) get no commands. The overlay then shows "No actions" and refuses the drop (effect NONE).

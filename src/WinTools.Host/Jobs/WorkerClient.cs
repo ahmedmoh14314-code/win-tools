@@ -118,17 +118,28 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
     }
 
     /// <summary>
-    /// A success claim must name a file the naming policy allows for this source and operation, and that file's
-    /// SHA-256 must equal the hash of the output the worker validated (so a pre-existing or replaced file is not believed).
+    /// A success claim is believed only if:
+    /// <list type="bullet">
+    /// <item>the file's SHA-256 equals the hash of the output the worker validated, so a pre-existing or replaced file is
+    /// not believed;</item>
+    /// <item>its real format is one this operation can produce (the conversion target, or the source's own format for
+    /// operations that keep it);</item>
+    /// <item>its name is one the naming policy allows for this source, operation and format.</item>
+    /// </list>
     /// </summary>
     internal static bool IsBelievable(ConversionRequest request, ConversionResult result)
     {
         if (!result.Success) return result.OutputPath is null && result.Error != ErrorCode.None;
         if (result.OutputPath is null || result.OutputSha256 is not { Length: 64 } claimed || OperationCatalog.Find(request.OperationId) is not { } op) return false;
-        if (!OutputNaming.Candidates(request.SourcePath, op.Target).Contains(result.OutputPath, StringComparer.OrdinalIgnoreCase)) return false;
         try
         {
             using var file = new FileStream(result.OutputPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var header = new byte[FileSignature.HeaderLength];
+            var read = file.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
+            var format = FileSignature.Detect(header.AsSpan(0, read));
+            var producible = op.Kind == OperationKind.Convert ? format == op.Target : op.AppliesTo(format);
+            if (!producible || !OutputNaming.Candidates(request.SourcePath, format, op.NameSuffix).Contains(result.OutputPath, StringComparer.OrdinalIgnoreCase)) return false;
+            file.Position = 0;
             return string.Equals(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(file)), claimed, StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }

@@ -25,7 +25,7 @@ internal sealed class JobRunner(WorkerClient client, HostLog log, Action onFailu
             foreach (var r in results)
                 log.Event("job.result", new { id = r.Id, ok = r.Success, error = r.Error.ToString(), r.Message, output = r.OutputPath is null ? null : Path.GetFileName(r.OutputPath) });
             log.Event("job.done", new { op = operation.Id, ok = results.Count(r => r.Success), failed = results.Count(r => !r.Success), ms = Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 1), jobObject = client.JobObjectAssigned });
-            if (results.Any(r => !r.Success)) onFailure();
+            if (results.Any(r => !r.Success && r.Error != ErrorCode.NothingToDo)) onFailure(); // "already fits" is not a failure
         }
         catch (Exception ex)
         {
