@@ -3,34 +3,32 @@
 Keep this a snapshot, not a diary. Update at the end of every session (workflow step 13).
 
 ## Current phase
-**Experimental framework phase closed (2026-10-21).** ADR-0001 is Accepted: native Win32 radial/drop overlay. ADR-0003 is Accepted with amendments: Space trigger, low-level hooks on a dedicated thread, asynchronous hand-off. Next comes the first product slice on branch `feat/first-image-conversion-slice`: PNG→JPEG and JPEG→PNG, end to end.
+**First product slice in review (2026-10-21):** PNG → JPEG and JPEG → PNG end to end from Windows Explorer. It lives on branch `feat/first-image-conversion-slice` with an open pull request against `main`. The independent evaluator's verdict is MERGE once the minor items are fixed or recorded; they are, in the PR. Not merged; external review pending.
 
 ## Last known-good commit
-`main`: the Spike 002C documentation commit (2026-10-21). Earlier checkpoints are kept in the private archive.
+`main`: the Spike 002C documentation commit. Branch `feat/first-image-conversion-slice`: the head of the PR, with CI green on that head.
 
 ## Work completed (this phase)
-- Spike 001 (interaction feasibility) and Spike 002 (dead zone, Win32 vs WPF, hooks under GC pressure, Raw Input, memory plateau). See `docs/research/`.
-- Spike 002C ran a stall probe and found the WPF overlay's 5 s blocks are UI Automation / UI-thread stalls, not the watchdog:
-  - a watchdog of 2/5/8 s did not change the stall;
-  - with UIA disabled, the run had 0 stalls and 200/200 drops.
-- Spike 002C fast release showed no host-specific loss once the overlay existed. Explorer fast release was not obtained because of harness defects; those are fixed but not re-run.
-- Reference reviews and the licensing ledger are in `docs/research/references/`. The requirement ledger holds 34 entries.
+- Product source: `src/WinTools.Core`, `src/WinTools.Windows`, `src/WinTools.Host`, `src/WinTools.Worker`. Tests: `tests/WinTools.Core.Tests` (117), `tests/WinTools.Worker.Tests` (49 in Debug, 47 in Release; the crash and hang tests need the Debug fault injection), and the local Explorer harness `tests/WinTools.EndToEnd`.
+- ADR-0001 and ADR-0003 accepted earlier. ADR-0005, 0006, 0007 and 0011 accepted for the slice.
+- Measurements: `docs/performance/2026-10-21-first-slice.md`. Threat model: `docs/security/threat-model.md`. Dependency matrix: `docs/architecture/dependency-matrix.md`. CI: `.github/workflows/ci.yml`.
 
 ## Decisions made
-- Drag modifiers, the middle button and the right button are not triggers. Space is the default trigger.
-- Post-release rule: after `DragEnter`, wait for OLE Drop/DragLeave. A short grace applies only without DragEnter. Esc is ignored while a drop is pending.
-- The overlay is a native Win32 window. WPF is not in the resident interaction path. Future settings UI is deferred.
-- Engines run only in an on-demand worker. Output goes temp → validate → exclusive create. No polling in the idle path.
-- Raw Input and hook-health recovery are deferred future reliability work.
+- The overlay is native Win32 (ADR-0001). The trigger is Space through low-level hooks on a dedicated thread (ADR-0003).
+- Conversion runs in a disposable worker per batch (ADR-0005). The engine is WIC with Microsoft codecs by CLSID (ADR-0006).
+- Output goes temp → validate (structure, full decode, codec diagnostics) → no-overwrite rename. The host re-checks the result by hash.
+- The ring is centred where the trigger was pressed (the pointer position captured by the hook).
+- Transparent PNG → JPEG is composited onto white. The JPEG EXIF orientation is applied for PNG output. Metadata is not copied.
 
 ## Open questions (each with the experiment or decision that closes it)
-- Explorer fast-release behaviour: product acceptance test in the first slice.
-- Exact cause of the WPF ≈ 5 s CLR wait inside UIA: recorded as a rejected path, not pursued.
-- Overlay accessibility (own MSAA/UIA provider that cannot block the overlay thread): before V1 ships.
-- Not testable here: multi-monitor/mixed DPI, Windows 10, Desktop source (do it in Windows Sandbox), elevated source, the human feel pass.
+- Multi-monitor and mixed DPI; the Desktop as drag source; Windows 10. These need the manual protocol or Windows Sandbox.
+- A user-visible failure state (notifications or a tray icon). Today a failure gives only the error sound and a log entry.
+- A minimum visible time before a drop may run a command, before destructive or many commands exist (evaluator m12).
+- JPEGs with benign codec warnings are now refused. This has not been measured on a real-world photo set.
+- Overlay accessibility: its own provider, which must not block the overlay thread.
 
 ## Current blockers
 None.
 
 ## Next recommended task
-First product slice (PNG↔JPEG) on `feat/first-image-conversion-slice`, reviewed through a pull request.
+External review of the PR. After merge: user-visible job feedback (tray or notification) and the next format, each as its own slice.

@@ -8,7 +8,7 @@
 The app needs: cross-application OLE drag-and-drop target, transparent/topmost/non-activating overlay windows positioned at the cursor, per-monitor DPI, global input (hooks or hotkeys), tray icon, raw Windows messages, small idle footprint and fast cold start. C#/.NET is preferred. The brief names WPF + Win32 interop as the strong candidate and asks for a comparison with WinUI 3, direct Win32, Windows App SDK and hybrids; Electron is out unless overwhelming evidence appears.
 
 ## Decision
-**V1 uses a native Win32 window (C# P/Invoke) for the latency-critical radial/drop overlay**, hosted by a lightweight .NET resident process. The overlay is a pre-created, layered, topmost, non-activating window (`WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`) with its own `IDropTarget`, placed in physical pixels on the cursor's monitor, and shown/hidden, never activated.
+**V1 uses a native Win32 window (C# P/Invoke) for the latency-critical radial/drop overlay**, hosted by a lightweight .NET resident process. The overlay is a pre-created, topmost, non-activating tool window (`WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`), clipped to a circle with `SetWindowRgn` and painted with GDI, with its own `IDropTarget`, placed in physical pixels on the cursor's monitor, and shown/hidden, never activated.
 
 **WPF is not selected for this overlay.** The finding is narrow: WPF is not the lowest-risk technology for this particular global drag/drop overlay in a resident process. It is not a claim that WPF is generally unreliable. WPF remains acceptable for ordinary application UI (settings/preferences) later; that UI is deferred and is not in the resident interaction path of the first slice.
 
@@ -24,7 +24,7 @@ Why:
 Rules carried into the product (Spike 001/002):
 - The interaction state machine is framework-independent (Core). After `DragEnter`, a button release does not hide the target; the overlay waits for the terminal OLE `Drop` or `DragLeave`. A long watchdog only guards a dead source.
 - No conversion or other heavy work runs on the hook or overlay thread.
-- Every pixel inside the ring, including the dead zone, has alpha ≥ 1. Alpha 0 is click-through for OLE.
+- The whole disc, including the dead zone, is part of the window (window region, no per-pixel transparency), so OLE always delivers DragEnter/Drop there. If a layered window is used later, every pixel inside the ring needs alpha ≥ 1: alpha 0 is click-through for OLE.
 
 ## Alternatives considered
 - **WPF for the overlay (and the app shell):** the richest UI stack and the least interop. It was rejected for the overlay on the Spike 002C evidence above. It remains a candidate for future ordinary windows.
