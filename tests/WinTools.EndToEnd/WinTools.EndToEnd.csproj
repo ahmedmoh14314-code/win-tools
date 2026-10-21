@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Local, interactive end-to-end harness: drives a real Explorer window with injected input against the product
+       host. It takes over the mouse and keyboard while it runs; never run it in CI or while using the machine.
+       UseWPF only for UI Automation client assemblies (item positions); the product does not use WPF. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UseWPF>true</UseWPF>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest>..\..\src\WinTools.Host\app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="System.IO" />
+    <ProjectReference Include="..\..\src\WinTools.Core\WinTools.Core.csproj" />
+    <ProjectReference Include="..\..\src\WinTools.Host\WinTools.Host.csproj" />
+    <ProjectReference Include="..\..\src\WinTools.Worker\WinTools.Worker.csproj" />
+    <None Include="..\samples\*.png;..\samples\*.jpg" Link="samples\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

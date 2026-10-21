@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- On-demand conversion process. Decodes, encodes and validates with Windows Imaging Component; one JSON line per job. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WinTools.Core\WinTools.Core.csproj" />
+    <InternalsVisibleTo Include="WinTools.Worker.Tests" />
+  </ItemGroup>
+</Project>

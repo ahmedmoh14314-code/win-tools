@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Framework-independent domain: interaction state machine, file identification, capabilities, output naming,
+       worker contract. No Win32, no UI framework, no imaging engine. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RuntimeIdentifier />
+    <PlatformTarget>AnyCPU</PlatformTarget>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="WinTools.Core.Tests" />
+  </ItemGroup>
+</Project>
