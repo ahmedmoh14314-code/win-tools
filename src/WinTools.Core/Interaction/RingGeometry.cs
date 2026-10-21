@@ -2,7 +2,8 @@ namespace WinTools.Core.Interaction;
 
 /// <summary>
 /// Pure geometry of the radial overlay: placement clamped to the monitor work area, DPI scaling and sector hit-testing.
-/// Angles run clockwise from 12 o'clock in [0, 2π). Sector i of n spans [start + i·w, start + (i+1)·w) with w = 2π/n;
+/// Angles run clockwise from 12 o'clock in [0, 2π). Sector i of n spans [start + i·w, start + (i+1)·w) with w = 2π/n,
+/// unless sector 0 is given its own width (<c>firstSweep</c>), in which case the others share the rest equally;
 /// -1 means the dead zone or outside the ring.
 /// </summary>
 public static class RingGeometry
@@ -32,16 +33,37 @@ public static class RingGeometry
     /// <param name="dx">Horizontal offset from the ring centre in pixels.</param>
     /// <param name="dy">Vertical offset from the ring centre in pixels (down is positive).</param>
     /// <param name="start">Where sector 0 begins (radians clockwise from 12 o'clock).</param>
-    public static int HitSector(int dx, int dy, int innerRadius, int outerRadius, int sectorCount, double start = 0)
+    /// <param name="firstSweep">Width of sector 0, or 0 for equal sectors.</param>
+    public static int HitSector(int dx, int dy, int innerRadius, int outerRadius, int sectorCount, double start = 0, double firstSweep = 0)
     {
         if (sectorCount <= 0) return -1;
         var d2 = (double)dx * dx + (double)dy * dy;
         if (d2 < (double)innerRadius * innerRadius || d2 > (double)outerRadius * outerRadius) return -1;
-        return Math.Min((int)(Normalize(Angle(dx, dy) - start) / (2 * Math.PI / sectorCount)), sectorCount - 1);
+        var rel = Normalize(Angle(dx, dy) - start);
+        if (firstSweep <= 0 || sectorCount == 1) return Math.Min((int)(rel / (2 * Math.PI / sectorCount)), sectorCount - 1);
+        if (rel < firstSweep) return 0;
+        return Math.Min(1 + (int)((rel - firstSweep) / ((2 * Math.PI - firstSweep) / (sectorCount - 1))), sectorCount - 1);
+    }
+
+    /// <summary>Start and end angle of sector <paramref name="index"/> (end may exceed 2π).</summary>
+    public static (double From, double To) SectorBounds(int index, int count, double start = 0, double firstSweep = 0)
+    {
+        if (firstSweep <= 0 || count == 1)
+        {
+            var w = 2 * Math.PI / count;
+            return (start + index * w, start + (index + 1) * w);
+        }
+        if (index == 0) return (start, start + firstSweep);
+        var rest = (2 * Math.PI - firstSweep) / (count - 1);
+        return (start + firstSweep + (index - 1) * rest, start + firstSweep + index * rest);
     }
 
     /// <summary>Middle angle of sector <paramref name="index"/> of <paramref name="count"/>.</summary>
-    public static double SectorCentre(int index, int count, double start = 0) => Normalize(start + (index + 0.5) * 2 * Math.PI / count);
+    public static double SectorCentre(int index, int count, double start = 0, double firstSweep = 0)
+    {
+        var (from, to) = SectorBounds(index, count, start, firstSweep);
+        return Normalize((from + to) / 2);
+    }
 
     public static double Normalize(double a)
     {

@@ -7,7 +7,8 @@ namespace WinTools.Core.Interaction;
 /// <param name="Hot">Sector under the pointer, or -1.</param>
 /// <param name="Armed">The hot sector is a command that a drop would run now.</param>
 /// <param name="Hub">Text for the centre: the open category, or empty at the top level.</param>
-public sealed record MenuView(IReadOnlyList<string> Labels, double Start, int Hot, bool Armed, string Hub);
+/// <param name="FirstSweep">Width of sector 0 (Back on a category's ring), or 0 when all sectors are equal.</param>
+public sealed record MenuView(IReadOnlyList<string> Labels, double Start, int Hot, bool Armed, string Hub, double FirstSweep = 0);
 
 /// <summary>
 /// Navigation of the two-level radial menu during a drag, driven only by pointer offsets from the centre of the ring
@@ -16,7 +17,8 @@ public sealed record MenuView(IReadOnlyList<string> Labels, double Start, int Ho
 /// <list type="bullet">
 /// <item>The top level shows the categories. Moving deep into one (<see cref="RingGeometry.OpenRadius96"/>) opens it:
 /// the owner re-centres the ring on the pointer, which shows that category's commands plus a Back sector pointing the
-/// way the stroke came. Moving deep into Back returns to the categories, re-centred the same way.</item>
+/// way the stroke came. Back is at least as wide as a category, so retracing any stroke that opened the category lands
+/// on it. Moving deep into Back returns to the categories, re-centred the same way.</item>
 /// <item>Movement threshold: a ring reacts only after the pointer has been inside its dead zone. Each ring appears
 /// centred on the pointer, so this holds at once, except near a screen edge where the ring is pushed aside; there the
 /// pointer has to come to the centre first.</item>
@@ -57,15 +59,23 @@ public sealed class MenuNavigator
     public Operation? Hot => _level >= 0 && _hot >= 1 ? _groups[_level].Commands[_hot - 1] : null;
 
     /// <summary>
+    /// Width of Back on a category's ring: an equal share, but never narrower than a category sector, so the reverse of
+    /// any stroke that opened the category (which stayed inside that sector) points into Back.
+    /// </summary>
+    public static double BackSweep(int groupCount, int commandCount) => Math.Max(2 * Math.PI / (commandCount + 1), 2 * Math.PI / groupCount);
+
+    /// <summary>
     /// Where sector 0 (Back) of category <paramref name="group"/>'s ring begins: Back is centred on the direction
-    /// opposite to the category, so retracing the stroke goes back. Commands follow clockwise.
+    /// opposite to the category. Commands follow clockwise and share the rest of the circle.
     /// </summary>
     public static double LevelStart(int group, int groupCount, int commandCount) =>
-        RingGeometry.Normalize(RingGeometry.SectorCentre(group, groupCount) + Math.PI - Math.PI / (commandCount + 1));
+        RingGeometry.Normalize(RingGeometry.SectorCentre(group, groupCount) + Math.PI - BackSweep(groupCount, commandCount) / 2);
 
     private int SectorCount => _level < 0 ? _groups.Count : _groups[_level].Commands.Count + 1;
 
     private double Start => _level < 0 ? 0 : LevelStart(_level, _groups.Count, _groups[_level].Commands.Count);
+
+    private double FirstSweep => _level < 0 ? 0 : BackSweep(_groups.Count, _groups[_level].Commands.Count);
 
     /// <summary>
     /// Feeds the pointer offset from the centre of the ring on screen at <paramref name="now"/>. Returns true when the
@@ -76,7 +86,7 @@ public sealed class MenuNavigator
         var d2 = (double)dx * dx + (double)dy * dy;
         if (d2 < (double)_dead * _dead) { _hubVisited = true; _hot = -1; return false; }
         if (!_hubVisited) { _hot = -1; return false; } // pushed aside near an edge: come to the centre first
-        _hot = RingGeometry.HitSector(dx, dy, _dead, _ring, SectorCount, Start);
+        _hot = RingGeometry.HitSector(dx, dy, _dead, _ring, SectorCount, Start, FirstSweep);
         if (_hot < 0 || d2 < (double)_open * _open) return false;
         if (_level < 0) _level = _hot;          // into a category
         else if (_hot == 0) _level = -1;        // into Back
@@ -107,7 +117,7 @@ public sealed class MenuNavigator
 
     public MenuView View(TimeSpan now) => _level < 0
         ? new MenuView(_groupLabels, 0, _hot, false, "")
-        : new MenuView(_levelLabels[_level], Start, _hot, Armed(now) is not null, _groups[_level].Label);
+        : new MenuView(_levelLabels[_level], Start, _hot, Armed(now) is not null, _groups[_level].Label, FirstSweep);
 
     private void SetDpi(uint dpi)
     {

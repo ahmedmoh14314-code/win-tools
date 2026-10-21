@@ -122,7 +122,12 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         // One menu per overlay session, so a drag that leaves and comes back finds the menu where it left it. A first
         // DragEnter that brought no readable files does not fix an empty menu for the rest of the session.
         var first = _navigator is null || (_navigator.Groups.Count == 0 && paths.Count > 0);
-        if (first) _navigator = new MenuNavigator(RadialMenu.Build(_resolver.Resolve(paths)), _dpi);
+        if (first)
+        {
+            _navigator = new MenuNavigator(RadialMenu.Build(_resolver.Resolve(paths)), _dpi);
+            // The first ring was centred on the pointer at the trigger (unless clamped at an edge): that is the start.
+            _navigator.Shown(_anchor.X - _centre.X, _anchor.Y - _centre.Y, TimeSpan.Zero, _dpi);
+        }
         var hot = Track(dx, dy);
         Apply(action, "dragEnterAfterRelease");
         if (first)
@@ -146,8 +151,10 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         var now = Stopwatch.GetElapsedTime(_shownTimestamp);
         if (nav.Move(dx, dy, now))
         {
+            // A DragOver already in flight when the overlay was hidden must not bring it back.
+            if (!_overlay.IsVisible || _session.State == SessionState.Idle) return false;
             var (px, py) = (_centre.X + dx, _centre.Y + dy);
-            var placed = _overlay.ShowAt(px, py);
+            var placed = _overlay.MoveTo(px, py);
             _centre = (placed.CentreX, placed.CentreY);
             now = Stopwatch.GetElapsedTime(_shownTimestamp);
             nav.Shown(px - _centre.X, py - _centre.Y, now, placed.Dpi);
@@ -185,6 +192,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         if (execute is null || chosen is null)
         {
             var reason = !copyAllowed ? "copyNotAllowed" : hot is not null ? "notArmed" : "noCommand";
+            if (reason == "notArmed") MessageWindow.InfoBeep(); // released on a command too early: say that nothing ran
             _log.Event("drop", new { accepted = false, reason, hot = hot?.Id, openMs, files = paths.Count, at = $"{dx},{dy}" });
             return false;
         }

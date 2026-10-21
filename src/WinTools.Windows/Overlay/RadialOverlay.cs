@@ -86,6 +86,27 @@ public sealed class RadialOverlay : IDisposable
         return new OverlayPlacement(_left + _size / 2, _top + _size / 2, _dpi);
     }
 
+    /// <summary>
+    /// Moves the visible ring to be centred on (x, y), clamped like <see cref="ShowAt"/>, without painting: the owner
+    /// paints the next level with <see cref="SetView"/> right after, so no intermediate frame is drawn.
+    /// </summary>
+    public OverlayPlacement MoveTo(int x, int y)
+    {
+        var cursor = new POINT { X = x, Y = y };
+        var monitor = User32.MonitorFromPoint(cursor, User32.MONITOR_DEFAULTTONEAREST);
+        var info = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
+        User32.GetMonitorInfoW(monitor, ref info);
+        _dpi = Shcore.GetDpiForMonitor(monitor, 0 /* MDT_EFFECTIVE_DPI */, out var dpiX, out _) == 0 ? dpiX : 96;
+        var size = RingGeometry.Scale(RingGeometry.OuterRadius96 * 2, _dpi);
+        var resized = size != _size;
+        _size = size;
+        (_left, _top) = RingGeometry.Place(cursor.X, cursor.Y, _size, info.rcWork.Left, info.rcWork.Top, info.rcWork.Right, info.rcWork.Bottom);
+        if (resized) ApplyRegion();
+        User32.SetWindowPos(_hwnd, User32.HWND_TOPMOST, _left, _top, _size, _size, User32.SWP_NOACTIVATE);
+        _view = null; // the next SetView always paints
+        return new OverlayPlacement(_left + _size / 2, _top + _size / 2, _dpi);
+    }
+
     public void Hide()
     {
         if (IsVisible) User32.ShowWindow(_hwnd, User32.SW_HIDE);
@@ -193,11 +214,11 @@ public sealed class RadialOverlay : IDisposable
                 _ = Gdi32.SetBkMode(mem, Gdi32.TRANSPARENT);
                 var n = view.Labels.Count;
                 var isLevel = view.Hub.Length > 0; // a category's ring: sector 0 is Back
-                var w = n == 0 ? 0 : 2 * Math.PI / n;
                 for (var i = 0; i < n; i++)
                 {
                     Gdi32.SelectObject(mem, i == view.Hot ? (view.Armed ? armed : pending) : isLevel && i == 0 ? back : normal);
-                    Sector(mem, c, c, view.Start + i * w, view.Start + (i + 1) * w);
+                    var (from, to) = RingGeometry.SectorBounds(i, n, view.Start, view.FirstSweep);
+                    Sector(mem, c, c, from, to);
                 }
                 if (n == 0)
                 {
@@ -215,7 +236,7 @@ public sealed class RadialOverlay : IDisposable
                 for (var i = 0; i < n; i++)
                 {
                     _ = Gdi32.SetTextColor(mem, isLevel && i == 0 ? Gdi32.Rgb(170, 172, 180) : Gdi32.Rgb(240, 240, 245));
-                    Label(mem, view.Labels[i], c, RingGeometry.SectorCentre(i, n, view.Start), (dead + c) / 2.0 + RingGeometry.Scale(4, _dpi), half, lineHalf);
+                    Label(mem, view.Labels[i], c, RingGeometry.SectorCentre(i, n, view.Start, view.FirstSweep), (dead + c) / 2.0 + RingGeometry.Scale(4, _dpi), half, lineHalf);
                 }
                 if (isLevel)
                 {

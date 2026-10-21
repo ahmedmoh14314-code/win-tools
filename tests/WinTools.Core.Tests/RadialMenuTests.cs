@@ -110,11 +110,16 @@ public sealed class MenuNavigatorTests
         n.Shown(0, 0, t, dpi);
     }
 
-    private static (int, int) Command(MenuNavigator n, int g, int c, double radius96 = 69, uint dpi = 96)
+    /// <summary>Centre angle of sector i (0 = Back) of category g's ring, as the product lays it out.</summary>
+    private static double LevelAngle(IReadOnlyList<MenuGroup> menu, int g, int i, double skew = 0)
     {
-        var count = n.Groups[g].Commands.Count;
-        return At(RingGeometry.SectorCentre(c + 1, count + 1, MenuNavigator.LevelStart(g, n.Groups.Count, count)), radius96, dpi);
+        var count = menu[g].Commands.Count;
+        var (from, to) = RingGeometry.SectorBounds(i, count + 1, MenuNavigator.LevelStart(g, menu.Count, count), MenuNavigator.BackSweep(menu.Count, count));
+        return (from + to) / 2 + skew * (to - from) / 2;
     }
+
+    private static (int, int) Command(MenuNavigator n, int g, int c, double radius96 = 69, uint dpi = 96) =>
+        At(LevelAngle(n.Groups, g, c + 1), radius96, dpi);
 
     private static void Move(MenuNavigator n, (int X, int Y) p, TimeSpan t) => n.Move(p.X, p.Y, t);
 
@@ -139,8 +144,9 @@ public sealed class MenuNavigatorTests
         var view = n.View(Ms(100));
         Assert.Equal(["Back", "To PNG", "To WebP", "To BMP", "To TIFF"], view.Labels);
         Assert.Equal("Convert", view.Hub);
-        // Back points the way the stroke came (opposite to Convert).
-        Assert.Equal(RingGeometry.Normalize(RingGeometry.SectorCentre(0, 5) + Math.PI), RingGeometry.SectorCentre(0, 5, view.Start), 9);
+        // Back points the way the stroke came (opposite to Convert) and is at least as wide as a category.
+        Assert.Equal(RingGeometry.Normalize(RingGeometry.SectorCentre(0, 5) + Math.PI), RingGeometry.SectorCentre(0, view.Labels.Count, view.Start, view.FirstSweep), 9);
+        Assert.True(view.FirstSweep >= 2 * Math.PI / 5 - 1e-9);
     }
 
     [Fact]
@@ -162,7 +168,7 @@ public sealed class MenuNavigatorTests
         var n = new MenuNavigator(MenuFor(@"C:\p\photo.jpg"), 96);
         OpenCategory(n, 2, Ms(0));
         var view = n.View(Ms(0));
-        var back = RingGeometry.SectorCentre(0, view.Labels.Count, view.Start);
+        var back = RingGeometry.SectorCentre(0, view.Labels.Count, view.Start, view.FirstSweep);
         Move(n, At(back, 50), Ms(300));
         Assert.Null(n.Armed(Ms(400)));               // on Back, not deep: nothing runs, still in Resize
         Assert.Equal(MenuCategory.Resize, n.Open!.Category);
@@ -239,9 +245,7 @@ public sealed class MenuNavigatorTests
                                 }
                                 Assert.True(opened);
                                 n.Shown(0, 0, Ms(120), dpi);
-                                var count = menu[g].Commands.Count;
-                                var w = 2 * Math.PI / (count + 1);
-                                var target = RingGeometry.SectorCentre(c + 1, count + 1, MenuNavigator.LevelStart(g, menu.Count, count)) + cmdSkew * w / 2;
+                                var target = LevelAngle(menu, g, c + 1, cmdSkew);
                                 for (var r = 4.0; r <= radius; r += 6)
                                 {
                                     var (x, y) = At(target, r, dpi);
@@ -252,6 +256,82 @@ public sealed class MenuNavigatorTests
                             }
         }
         Assert.True(checkedStrokes > 1000, $"{checkedStrokes} strokes");
+    }
+
+    /// <summary>Retracing the stroke that opened a category, whatever its slant inside the category sector, goes Back (evaluator N4).</summary>
+    [Theory]
+    [InlineData(@"C:\p\a.jpg")]
+    [InlineData(@"C:\p\a.bmp")]
+    [InlineData(@"C:\p\a.png")]
+    public void Retracing_any_opening_stroke_lands_on_back(string path)
+    {
+        var menu = MenuFor(path);
+        for (var g = 0; g < menu.Count; g++)
+            foreach (var skew in new[] { -0.95, -0.5, 0.0, 0.5, 0.95 })
+            {
+                var n = new MenuNavigator(menu, 96);
+                var angle = RingGeometry.SectorCentre(g, menu.Count) + skew * Math.PI / menu.Count;
+                n.Move(0, 0, Ms(0));
+                var (x, y) = At(angle, 95);
+                Assert.True(n.Move(x, y, Ms(10)));
+                n.Shown(0, 0, Ms(10), 96);
+                var (bx, by) = At(angle + Math.PI, 95);
+                Assert.True(n.Move(bx, by, Ms(400)), $"{menu[g].Label} skew {skew}");
+                n.Shown(0, 0, Ms(400), 96);
+                Assert.Null(n.Open);
+            }
+    }
+
+    /// <summary>
+    /// The owner's re-centring, with the ring clamped to the work area near every edge and corner (evaluator N6): a
+    /// stroke either arms exactly the command aimed at, or (pushed-aside ring not yet visited at its centre) nothing.
+    /// </summary>
+    [Fact]
+    public void Clamped_recentring_near_edges_never_arms_a_wrong_command()
+    {
+        const int workW = 1920, workH = 1040, size = 2 * RingGeometry.OuterRadius96;
+        var menu = MenuFor(@"C:\p\a.jpg");
+        int[] xs = [5, 60, 130, 960, workW - 130, workW - 60, workW - 5], ys = [5, 60, 130, 520, workH - 130, workH - 60, workH - 5];
+        var exact = 0;
+        foreach (var ax in xs)
+            foreach (var ay in ys)
+                for (var g = 0; g < menu.Count; g++)
+                    for (var c = 0; c < menu[g].Commands.Count; c++)
+                    {
+                        // Trigger: the ring is placed around the pointer and clamped.
+                        var (l, t) = RingGeometry.Place(ax, ay, size, 0, 0, workW, workH);
+                        var centre = (X: l + size / 2, Y: t + size / 2);
+                        var n = new MenuNavigator(menu, 96);
+                        n.Shown(ax - centre.X, ay - centre.Y, Ms(0), 96);
+                        var p = (X: ax, Y: ay);
+                        // The hand goes to the centre first (it must, if the ring was pushed aside), then strokes out.
+                        n.Move(0, 0, Ms(5));
+                        p = (centre.X, centre.Y);
+                        var opened = false;
+                        for (var r = 30.0; r <= 110 && !opened; r += 6)
+                        {
+                            var (dx, dy) = At(RingGeometry.SectorCentre(g, menu.Count), r);
+                            p = (centre.X + dx, centre.Y + dy);
+                            opened = n.Move(dx, dy, Ms(10 + r));
+                        }
+                        Assert.True(opened);
+                        // Re-centre on the pointer, clamped, exactly like the coordinator.
+                        (l, t) = RingGeometry.Place(p.X, p.Y, size, 0, 0, workW, workH);
+                        centre = (l + size / 2, t + size / 2);
+                        n.Shown(p.X - centre.X, p.Y - centre.Y, Ms(200), 96);
+                        // Stroke from where the pointer is toward the command's point on the new ring.
+                        var target = At(LevelAngle(menu, g, c + 1), 69);
+                        var goal = (X: centre.X + target.Item1, Y: centre.Y + target.Item2);
+                        for (var i = 1; i <= 20; i++)
+                        {
+                            var q = (X: p.X + (goal.X - p.X) * i / 20, Y: p.Y + (goal.Y - p.Y) * i / 20);
+                            n.Move(q.X - centre.X, q.Y - centre.Y, Ms(210 + i));
+                        }
+                        var armed = n.Armed(Ms(200) + Late);
+                        Assert.True(armed is null || armed.Id == menu[g].Commands[c].Id, $"anchor {ax},{ay}: {armed?.Id} instead of {menu[g].Commands[c].Id}");
+                        if (armed is not null) exact++;
+                    }
+        Assert.True(exact > 0);
     }
 
     [Fact]

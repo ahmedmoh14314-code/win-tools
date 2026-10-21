@@ -176,7 +176,7 @@ using (var explorer = ExplorerWindow.Open(folder))
             {
                 if (groupIndex < 0) return CategoryPoint(o);
                 var count = menu[groupIndex].Commands.Count;
-                return Around(o, RingGeometry.SectorCentre(commandIndex + 1, count + 1, MenuNavigator.LevelStart(groupIndex, menu.Count, count)), 62);
+                return Around(o, RingGeometry.SectorCentre(commandIndex + 1, count + 1, MenuNavigator.LevelStart(groupIndex, menu.Count, count), MenuNavigator.BackSweep(menu.Count, count)), 62);
             }
             var assumed = (at.X, at.Y, Desktop.GetDpiForWindow(explorer.Hwnd));
             (int X, int Y) release = (at.X, at.Y);

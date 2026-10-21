@@ -19,15 +19,15 @@ The roadmap asks for protection against accidental activation (a minimum visible
 **Opening a category:**
 - Moving deep into a category (80 of 110 px at 96 DPI) opens it.
 - The owner moves the ring so that it is centred on the pointer.
-- The new ring shows that category's commands, plus a **Back** sector centred on the direction the stroke came from. Retracing the stroke returns to the categories, centred the same way.
+- The new ring shows that category's commands, plus a **Back** sector centred on the direction the stroke came from. Back is never narrower than a category sector, so retracing any stroke that opened the category lands on it and returns to the categories, centred the same way.
 - The exact resize size from the settings is the last Resize command. If it has the same size as a preset but a different behaviour, it is labelled "(enlarge)" or "(stretch)".
 
 **Why this replaces the first design:** the first design kept both levels on screen, with the commands in an arc around the category ring. Commands that are wider than their category lie in the directions of other categories. So in the first Explorer run, and in the evaluator's sweep of every command, a straight path to a command crossed a neighbour, which opened that neighbour and armed one of its commands. With one ring centred on the pointer, a straight stroke out of the centre stays inside one sector, so it reaches exactly the command it aims at. `MenuNavigatorTests.Every_straight_stroke_arms_exactly_the_command_aimed_at` checks this for every command, every format and mixed batches, three stroke directions, three target positions and four DPIs.
 
 **Accidental-activation safety:**
-- **Movement threshold:** a ring reacts only after the pointer has been inside its 28 px centre. Every ring appears centred on the pointer, so this holds at once, except where the ring was pushed aside at a screen edge; there the user has to come to the centre first. Starting off-centre therefore never selects anything.
+- **Movement threshold:** a ring reacts only after the pointer has been inside its 28 px centre. Every ring appears centred on the pointer, so this holds at once, except where the ring was pushed aside at a screen edge; there the user has to come to the centre first. Starting off-centre therefore never selects anything. For the first ring, the start is the pointer position at the trigger.
 - **Opening needs depth:** a category or Back opens only from deep in its sector, never from a graze.
-- **Minimum visible time:** a drop runs a command only if its ring has been on screen for at least `ArmDelay` = 150 ms. A drop on a category, on Back, in the centre or outside the ring runs nothing.
+- **Minimum visible time:** a drop runs a command only if its ring has been on screen for at least `ArmDelay` = 150 ms. A drop on a category, on Back, in the centre or outside the ring runs nothing. A release on a command before the delay plays the information sound, so "nothing ran" is never silent.
 - **Re-check at drop time:** the drop's own data object is resolved again, and the command runs only if it is still offered.
 
 **Drop effect:**
@@ -46,7 +46,7 @@ The roadmap asks for protection against accidental activation (a minimum visible
 
 ## Consequences
 - **Adding operations:** a new operation of an existing kind appears without any change to the menu (`RadialMenuTests.A_new_operation_appears_without_any_menu_change`). A new kind needs one line in `RadialMenu.CategoryOf`.
-- **Each level costs one deliberate stroke,** and the ring moves when it opens. Experts can flick category then command; novices see each ring.
+- **Each level costs one deliberate stroke,** and the ring moves when it opens. A fast hand can stroke category then command without looking, but the release must come at least 150 ms after the command ring appeared.
 - **At screen edges** a pushed-aside ring asks the user to come to its centre first. This is the price of the movement threshold.
 - **This is the functional V1.** The visual design (shapes, colours, typography, animation) belongs to the UI phase.
 
@@ -63,4 +63,13 @@ First pass (2026-10-21): MERGE AFTER FIXES, with no blocker and no safety failur
 - **M3:** the `fast` E2E check could not catch a lost or silently cancelled drop. The harness now requires the exact rule per drop and a Drop whenever the release was over the overlay.
 - **Minor:** duplicate labels, region failure paths, a menu fixed by an empty first DragEnter, and a tautological test. All are addressed. The latency check is to be re-run in Explorer.
 
-Re-check pending.
+Re-check (2026-10-21): MERGE AFTER FIXES, with no blocker or major finding.
+- **M1–M3 fixed:** the evaluator's sweep of 172,800 strokes, with clamping near edges and corners, found none that armed a wrong command or armed early.
+- **Explorer runs:** required before merge.
+- **Minor findings, all fixed:**
+  - **N1:** the first ring's start comes from the trigger position.
+  - **N2:** no re-centring once the overlay was hidden.
+  - **N3:** a level change paints once.
+  - **N4:** Back is at least as wide as a category (`Retracing_any_opening_stroke_lands_on_back`).
+  - **N5:** a release before the delay has a sound, and the ADR claim is reworded.
+  - **N6:** clamped re-centring is now a Core test (`Clamped_recentring_near_edges_never_arms_a_wrong_command`).
