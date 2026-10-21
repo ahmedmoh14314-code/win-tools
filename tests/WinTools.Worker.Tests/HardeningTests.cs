@@ -1,8 +1,8 @@
 using WinTools.Core.Files;
 using WinTools.Core.Jobs;
 using WinTools.Core.Settings;
-using WinTools.Host;
 using WinTools.Host.Jobs;
+using WinTools.Windows.Settings;
 
 namespace WinTools.Worker.Tests;
 

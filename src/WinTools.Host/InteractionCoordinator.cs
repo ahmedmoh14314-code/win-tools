@@ -1,8 +1,11 @@
 using System.Diagnostics;
 using WinTools.Core.Capabilities;
+using WinTools.Core.Feedback;
 using WinTools.Core.Interaction;
+using WinTools.Core.Settings;
 using WinTools.Host.Jobs;
 using WinTools.Windows;
+using WinTools.Windows.Feedback;
 using WinTools.Windows.Input;
 using WinTools.Windows.Overlay;
 
@@ -11,6 +14,8 @@ namespace WinTools.Host;
 /// <summary>
 /// Connects input, session, overlay, capabilities and jobs on the UI thread. It translates events into calls on
 /// <see cref="InteractionSession"/> and carries out the actions the session returns; the rules live in the session.
+/// It also plays the navigation sounds (<see cref="NavigationSounds"/> decides which) and tells the feedback layer where
+/// the user dropped.
 /// </summary>
 internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
 {
@@ -19,7 +24,12 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
 
     private readonly HostLog _log;
     private readonly JobRunner _jobs;
-    private readonly CapabilityResolver _resolver;
+    private readonly FeedbackPresenter _feedback;
+    private readonly SoundPlayer _sounds;
+    private readonly NavigationSounds _navigationSounds;
+    private CapabilityResolver _resolver;
+    private CapabilityResolver _sessionResolver; // fixed for one overlay session, so a settings reload cannot change an armed menu
+    private AppSettings _settings;
     private readonly InteractionSession _session = new();
     private readonly MessageWindow _window;
     private readonly RadialOverlay _overlay;
@@ -29,22 +39,48 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     private uint _dpi = 96;
     private (int X, int Y) _anchor, _centre;
 
-    /// <param name="catalog">The operations the menu may offer (<see cref="RadialMenu.Catalog"/>).</param>
-    public InteractionCoordinator(HostLog log, JobRunner jobs, int triggerVirtualKey, IReadOnlyList<Operation> catalog)
+    public InteractionCoordinator(HostLog log, MessageWindow window, JobRunner jobs, FeedbackPresenter feedback, SoundPlayer sounds, AppSettings settings)
     {
         _log = log;
         _jobs = jobs;
-        _resolver = new CapabilityResolver(catalog);
-        _window = new MessageWindow(OnMessage);
+        _feedback = feedback;
+        _sounds = sounds;
+        _settings = settings;
+        _navigationSounds = new NavigationSounds(settings.UiSounds);
+        _resolver = new CapabilityResolver(RadialMenu.Catalog(settings.CustomResizeId()));
+        _sessionResolver = _resolver;
+        _window = window;
         _overlay = new RadialOverlay(this);
-        _hooks = new LowLevelHooks(_window.Handle, triggerVirtualKey);
+        _feedback.AttachOverlay(() => _overlay.IsVisible, _overlay.BringToFront);
+        _overlay.RenderFailed = hidden =>
+        {
+            _log.Event("overlay.renderFailed", new { hidden });
+            if (hidden) _feedback.OverlayHidden();
+        };
+        _hooks = new LowLevelHooks(_window.Handle, settings.TriggerVirtualKey);
     }
+
+    /// <summary>
+    /// Applies changed settings at once (UI thread): the trigger key, the menu's custom size, the sounds and the motion. A session
+    /// in progress keeps its menu; the next one uses the new commands.
+    /// </summary>
+    public void ApplySettings(AppSettings settings)
+    {
+        _settings = settings;
+        _hooks.SetTriggerKey(settings.TriggerVirtualKey);
+        _resolver = new CapabilityResolver(RadialMenu.Catalog(settings.CustomResizeId()));
+        _navigationSounds.Enabled = settings.UiSounds;
+    }
+
+    /// <summary>The message window this coordinator runs on (owned by the composition root).</summary>
+    public MessageWindow Window => _window;
 
     public void Start() => _hooks.Start();
 
     public void RequestClose() => _window.RequestClose();
 
-    private bool OnMessage(uint msg, nuint wParam, nint lParam)
+    /// <summary>Messages of the message window (hook signals and timers); the composition root routes them here.</summary>
+    internal bool OnMessage(uint msg, nuint wParam, nint lParam)
     {
         if (msg == LowLevelHooks.SignalMessage)
         {
@@ -93,17 +129,23 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         {
             case SessionAction.ShowOverlay:
                 _navigator = null;
+                _sessionResolver = _resolver;
+                _navigationSounds.Reset();
+                _feedback.OverlayShowing();
+                _overlay.ReducedMotion = _settings.ReducedMotion(SystemPreferences.ReducedMotion()); // Windows' "Animation effects" unless overridden
                 var placed = _overlay.ShowAt(_anchor.X, _anchor.Y);
                 _shownTimestamp = Stopwatch.GetTimestamp();
                 _dpi = placed.Dpi;
                 _centre = (placed.CentreX, placed.CentreY);
                 _log.Event("overlay.show", new { hookToShownMs = Math.Round(Stopwatch.GetElapsedTime(_triggerTimestamp).TotalMilliseconds, 3), anchor = $"{_anchor.X},{_anchor.Y}", centre = $"{placed.CentreX},{placed.CentreY}", dpi = placed.Dpi });
+                if (!_overlay.IsVisible) _log.Event("overlay.renderFailed"); // not shown: a ring with transparent holes would let the drag through
                 break;
             case SessionAction.HideOverlay:
                 _window.StopTimer(SessionTimer);
                 _window.StopTimer(ArmTimer);
                 _overlay.Hide();
-                _log.Event("overlay.hide", new { reason });
+                _feedback.OverlayHidden();
+                _log.Event("overlay.hide", new { reason, sounds = SoundCounts(), frames = _overlay.Frames });
                 break;
             case SessionAction.StartReleaseGrace:
                 _window.StartTimer(SessionTimer, InteractionSession.ReleaseGrace);
@@ -124,7 +166,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         var first = _navigator is null || (_navigator.Groups.Count == 0 && paths.Count > 0);
         if (first)
         {
-            _navigator = new MenuNavigator(RadialMenu.Build(_resolver.Resolve(paths)), _dpi);
+            _navigator = new MenuNavigator(RadialMenu.Build(_sessionResolver.Resolve(paths)), _dpi);
             // The first ring was centred on the pointer at the trigger (unless clamped at an edge): that is the start.
             _navigator.Shown(_anchor.X - _centre.X, _anchor.Y - _centre.Y, TimeSpan.Zero, _dpi);
         }
@@ -161,9 +203,17 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             _window.StartTimer(ArmTimer, MenuNavigator.ArmDelay + TimeSpan.FromMilliseconds(5));
             _log.Event(nav.Open is { } g ? "menu.open" : "menu.back", new { group = nav.Open?.Label, centre = $"{_centre.X},{_centre.Y}", dpi = placed.Dpi, msSinceShown = Math.Round(now.TotalMilliseconds, 1) });
         }
-        _overlay.SetView(nav.View(now));
+        var view = nav.View(now);
+        _overlay.SetView(view);
+        if (_navigationSounds.OnView(nav.Open is { } open ? (int)open.Category : -1, view.Hot, now) is { } sound) _sounds.Play(sound);
         return nav.Hot is not null;
     }
+
+    private object SoundCounts() => new
+    {
+        ticks = _navigationSounds.Ticks, levels = _navigationSounds.LevelSounds,
+        sectorChanges = _navigationSounds.SectorChanges, levelChanges = _navigationSounds.LevelChanges,
+    };
 
     void IOverlayEvents.DragLeft()
     {
@@ -188,21 +238,25 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         var execute = _session.OnDrop(chosen is null ? -1 : 0, 1);
         _window.StopTimer(SessionTimer);
         _window.StopTimer(ArmTimer);
+        var frames = _overlay.Frames;
         _overlay.Hide();
+        _feedback.DroppedAt(_centre.X + dx, _centre.Y + dy);
+        _feedback.OverlayHidden();
         if (execute is null || chosen is null)
         {
             var reason = !copyAllowed ? "copyNotAllowed" : hot is not null ? "notArmed" : "noCommand";
-            if (reason == "notArmed") MessageWindow.InfoBeep(); // released on a command too early: say that nothing ran
-            _log.Event("drop", new { accepted = false, reason, hot = hot?.Id, openMs, files = paths.Count, at = $"{dx},{dy}" });
+            if (reason == "notArmed") _sounds.Play(UiSound.Nothing); // released on a command too early: say that nothing ran
+            _log.Event("drop", new { accepted = false, reason, hot = hot?.Id, openMs, files = paths.Count, at = $"{dx},{dy}", sounds = SoundCounts(), frames });
             return false;
         }
         // Re-resolve from the drop's own data object; run only if it still offers the command that was armed.
-        if (!_resolver.Resolve(paths).Any(o => o.Id == chosen.Id))
+        if (!_sessionResolver.Resolve(paths).Any(o => o.Id == chosen.Id))
         {
+            _sounds.Play(UiSound.Nothing);
             _log.Event("drop", new { accepted = false, reason = "commandsChanged", files = paths.Count });
             return false;
         }
-        _log.Event("drop", new { accepted = true, op = chosen.Id, openMs, files = paths.Count });
+        _log.Event("drop", new { accepted = true, op = chosen.Id, openMs, files = paths.Count, sounds = SoundCounts(), frames });
         _ = _jobs.Start(chosen, paths);
         return true;
     }
@@ -211,6 +265,5 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     {
         _hooks.Dispose();
         _overlay.Dispose();
-        _window.Dispose();
     }
 }

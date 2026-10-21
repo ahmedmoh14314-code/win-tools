@@ -92,12 +92,12 @@
         "A settings surface allows changing the trigger; the change takes effect without restarting the application.",
         "Invalid or conflicting triggers are rejected with an actionable message."
       ],
-      "status": "deferred",
-      "rationale": "The data layer exists (ADR-0013): the trigger is read from settings.json (Space or F8-F12, invalid values repaired to Space). A settings surface and a live change without restart belong to the UI phase, so the requirement stays deferred until then.",
+      "status": "verified",
       "source": "brief.md §Important UX requirement",
       "relatedAdrs": [
         "ADR-0013"
-      ]
+      ],
+      "evidence": "The settings window (WinTools.Settings.exe, ADR-0016) offers the activation key as a choice of the allowed keys only (Space, F8-F12), so an invalid or modifier key cannot be entered; a hand-edited invalid value is repaired to Space and logged. The change applies without restarting: the window saves atomically and raises the settings signal, the host reloads and changes the hook key at once. Tests: TriggerKeyChangeTests.A_new_trigger_key_takes_effect_at_once_and_the_old_one_stops_triggering, UiSurfaceTests.A_saved_change_reaches_a_listener_through_the_signal. Measured on the Release host: settings.reload with TriggerKey F9 logged 225 ms after the signal (docs/performance/2026-10-21-ui.md)."
     },
     {
       "id": "UX-004",
@@ -141,7 +141,7 @@
       "status": "verified",
       "source": "brief.md §Performance philosophy, §Radial menu engineering",
       "notes": "Spike 001 (Release, 100 cycles, Stopwatch in hook callback vs a per-host paint proxy, not DWM presentation): hook→first paint median 11 ms / p95 ≈14 ms / max 29 ms (Win32), 7 / ≈18 / 36 ms (WPF); first show 25–60 ms. Lower bounds that sit well inside the < 50 ms p95 warm / < 120 ms first-use budget; the budget's ETW/DWM measurement is still required in the product.",
-      "evidence": "docs/performance/2026-10-21-first-slice.md: trigger to painted overlay, warm p95 4.0-13.9 ms (budget 50), first activation 27-38 ms (budget 120), measured in the product host (Release) from hook timestamps."
+      "evidence": "docs/performance/2026-10-21-first-slice.md: trigger to painted overlay, warm p95 4.0-13.9 ms (budget 50), first activation 27-38 ms (budget 120), measured in the product host (Release) from hook timestamps. UI phase (layered, animated overlay; docs/performance/2026-10-21-ui.md): warm p95 9.1 ms, first activation max 14.8 ms over 22 Explorer scenarios with animations on."
     },
     {
       "id": "SAFE-001",
@@ -181,7 +181,7 @@
         "ADR-0005",
         "ADR-0011"
       ],
-      "evidence": "No final output and no temp file after a worker kill (crash and hang tests), corrupt input (truncated and damaged PNG/JPEG), timeout and failed validation: WorkerProcessTests, ConversionJobTests. Cancel does not exist yet. The user only gets an error sound, not an actionable failure state."
+      "evidence": "No final output and no temp file after a worker kill (crash and hang tests), corrupt input (truncated and damaged PNG/JPEG), timeout and failed validation: WorkerProcessTests, ConversionJobTests. The user sees an actionable failure state: a toast with the failure and its reason in plain words, counted per batch (ADR-0016, FeedbackTextTests, JobFeedbackTests). Missing: cancel, which does not exist yet."
     },
     {
       "id": "ARCH-001",
@@ -243,7 +243,7 @@
       "relatedAdrs": [
         "ADR-0011"
       ],
-      "evidence": "Timeout and structured failure states exist and are tested. Progress and cancellation are not implemented."
+      "evidence": "Timeout and structured failure states exist and are tested. Progress exists: WorkerClient reports each finished file and a batch still running after 450 ms shows a progress toast (JobFeedbackTests.Progress_counts_every_file_once_and_the_summary_carries_names_and_sizes). Missing: user cancellation."
     },
     {
       "id": "PERF-001",
@@ -255,7 +255,7 @@
       ],
       "status": "verified",
       "source": "brief.md §Performance philosophy",
-      "evidence": "docs/performance/2026-10-21-first-slice.md: idle CPU 0.000 % over 60 s, 7.0 MB private, 30.2 MB working set, no worker while idle. No timers, polling or watchers in the idle path (evaluator review 2026-10-21)."
+      "evidence": "docs/performance/2026-10-21-first-slice.md: idle CPU 0.000 % over 60 s, 7.0 MB private, 30.2 MB working set, no worker while idle. No timers, polling or watchers in the idle path (evaluator review 2026-10-21). Re-measured after the UI phase (tray, sounds thread, settings-signal wait): idle CPU 0.000 % over 60 s, 9.1-9.3 MB private, 39.6-39.7 MB working set, no timers while idle (the toast stops its timers at rest) (docs/performance/2026-10-21-ui.md)."
     },
     {
       "id": "PERF-002",
@@ -387,7 +387,7 @@
         "ADR-0003",
         "ADR-0004"
       ],
-      "rationale": "The keyboard alternative and the overlay's UI Automation provider are interface work. The owner's functional V1 roadmap excludes the UI/UX design phase (2026-10-20), so this requirement moves to that phase. Nothing in the architecture blocks it: commands come from the capability resolver, not from the overlay. Pending the owner's confirmation of this status change."
+      "rationale": "Deferred beyond V1 (owner's V1 UI brief, 2026-10-21: \"if a full UIA provider is too risky for V1, document it\"). The overlay exists only during a mouse drag, which has no keyboard or screen-reader path, and a UI Automation provider runs on the overlay thread, where ADR-0001 measured multi-second UI Automation stalls. The keyboard alternative path is a new feature, not polish. What V1 does provide is recorded in ADR-0016: checked contrast, states not shown by colour alone, text of at least 11 px, reduced motion, sounds that can be turned off, and an accessible settings window."
     },
     {
       "id": "UX-008",
@@ -431,9 +431,9 @@
       "acceptanceCriteria": [
         "Lifecycle test with a read-only output folder: job fails with an actionable reason, no temp file left behind."
       ],
-      "status": "in-progress",
+      "status": "verified",
       "source": "Phase 1B evaluator finding M5",
-      "evidence": "ConversionJobTests.Unwritable_destination_folder_fails_without_touching_the_source returns OutputDirectoryNotWritable with a message; DiskFull and OutputNameInvalid codes exist. Not shown to the user beyond the error sound."
+      "evidence": "ConversionJobTests.Unwritable_destination_folder_fails_without_touching_the_source returns OutputDirectoryNotWritable with no temp file left. The user now sees the reason: the result toast maps it to \"The output folder cannot be written to.\" (FeedbackText.Reason; FeedbackTextTests.A_failure_gives_the_reason_in_plain_words_never_the_worker_text_or_a_path), shown without taking focus (ADR-0016)."
     },
     {
       "id": "SEC-003",
@@ -456,7 +456,7 @@
       ],
       "status": "deferred",
       "source": "Phase 1B evaluator finding M5",
-      "rationale": "Uninstall behaviour depends on the packaging decision (DIST-001, ADR-0008), which comes after functional V1. Today nothing is installed: the host writes only %APPDATA%\\WinTools\\settings.json (on save) and %LOCALAPPDATA%\\WinTools\\logs, and registers no Run entry. Pending the owner's confirmation of this status change."
+      "rationale": "Uninstall behaviour depends on the packaging decision (DIST-001, ADR-0008), which comes after functional V1. Today nothing is installed: the host writes only %APPDATA%\\WinTools\\settings.json (on save) and %LOCALAPPDATA%\\WinTools\\logs, and registers no Run entry. Since the UI phase the settings window may also write the HKCU Run value \"WinTools\" when the user turns on Start with Windows (ADR-0016); an uninstaller must remove it. Pending the owner's confirmation of this status change."
     },
     {
       "id": "OPS-001",

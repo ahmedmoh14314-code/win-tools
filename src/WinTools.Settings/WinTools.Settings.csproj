@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The settings window: an ordinary WPF window in its own short-lived process (ADR-0001 allows WPF for ordinary UI;
+       ADR-0016 keeps it out of the resident host). It edits the settings file and signals the host to reload. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\WinTools.Host\Assets\WinTools.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="System.IO" />
+    <ProjectReference Include="..\WinTools.Core\WinTools.Core.csproj" />
+    <ProjectReference Include="..\WinTools.Windows\WinTools.Windows.csproj" />
+    <Resource Include="..\WinTools.Host\Assets\WinTools.ico" Link="Assets\WinTools.ico" />
+  </ItemGroup>
+</Project>

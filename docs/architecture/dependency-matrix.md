@@ -10,6 +10,9 @@ Every package and platform component the product or its tests use. Versions are 
 | .NET 10 runtime (framework-dependent) | Host and worker runtime | MIT (.NET Foundation) | Not bundled in this slice. Packaging is ADR-0008. |
 | Windows Imaging Component (Windows) | PNG, JPEG, BMP and TIFF decode and encode in the worker | Part of Windows; nothing is redistributed | Microsoft codecs are created by CLSID only (ADR-0006, SEC-003). |
 | Win32 / OLE (user32, gdi32, ole32, shell32, shcore) | Hooks, overlay window, drop target, DPI | Part of Windows | Hand-written P/Invoke, isolated in `WinTools.Windows`. |
+| GDI+ (gdiplus.dll) | Anti-aliased shapes of the overlay, toast, info panel and icon (ADR-0016) | Part of Windows; nothing is redistributed | Flat API by hand-written P/Invoke in `WinTools.Windows/Native/Gdiplus.cs`. Draws only our own vector shapes, never decodes a user file. |
+| winmm (`PlaySound`), dwmapi, `Shell_NotifyIcon` | UI sounds, the settings window's dark title bar, the tray icon | Part of Windows | Sounds are synthesised in code; no audio asset or codec is involved. |
+| WPF (`Microsoft.WindowsDesktop.App`, .NET 10) | The settings window only, in its own process (`WinTools.Settings.exe`) | MIT (.NET Foundation) | Part of the .NET desktop runtime, not a package. Never loaded by the resident host (test: `UiSurfaceTests.The_host_never_loads_wpf`). |
 
 ### Licence review of `libSkiaSharp.dll` (2026-10-21)
 - **Notices file:** `THIRD-PARTY-NOTICES.txt` lists the whole Skia third-party tree. Some entries are copyleft or dual-licensed:

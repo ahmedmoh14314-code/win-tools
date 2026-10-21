@@ -37,6 +37,9 @@ public sealed class LowLevelHooks : IDisposable
 
     public static SignalPacking.Signal Unpack(nuint wParam) => SignalPacking.Unpack(wParam);
 
+    /// <summary>Changes the trigger key while the hooks run (from the settings).</summary>
+    public void SetTriggerKey(int virtualKey) => _detector.TriggerVirtualKey = virtualKey;
+
     /// <summary>Installs both hooks; throws if either cannot be installed.</summary>
     public void Start()
     {
