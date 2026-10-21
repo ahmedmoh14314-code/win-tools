@@ -12,7 +12,7 @@ Template: `template.md`. Numbering is sequential and never reused. Old ADRs are 
 | [ADR-0005](ADR-0005-process-isolation-model.md) | Process isolation / worker model | Accepted (first slice) | — |
 | [ADR-0006](ADR-0006-image-conversion-engine.md) | Image conversion engine for V1 | Accepted (WIC + SkiaSharp for WebP) | — |
 | [ADR-0007](ADR-0007-capability-and-adapter-architecture.md) | Capability resolution and conversion adapter architecture | Accepted (first slice) | — |
-| [ADR-0008](ADR-0008-packaging-strategy.md) | Packaging and private distribution for the experiment | Proposed | Research |
+| [ADR-0008](ADR-0008-packaging-strategy.md) | Packaging and private distribution for the experiment | Accepted for the 0.1.0 beta (per-user Inno Setup, portable ZIP) | Signing |
 | [ADR-0009](ADR-0009-dependency-license-policy.md) | Dependency and license policy | Proposed | Product owner confirmation |
 | [ADR-0010](ADR-0010-telemetry-policy.md) | Telemetry and diagnostics policy | Proposed | Product owner confirmation |
 | [ADR-0011](ADR-0011-error-result-model.md) | Error / result model across process boundaries | Accepted (first slice) | — |
