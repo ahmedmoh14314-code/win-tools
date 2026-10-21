@@ -11,5 +11,6 @@
          in-process; WinTools.Worker.Tests asserts the host assembly does not reference it. -->
     <ProjectReference Include="..\WinTools.Worker\WinTools.Worker.csproj" />
     <InternalsVisibleTo Include="WinTools.Worker.Tests" />
+    <InternalsVisibleTo Include="WinTools.Soak" />
   </ItemGroup>
 </Project>

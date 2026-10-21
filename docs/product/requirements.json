@@ -220,12 +220,12 @@
         "A hanging worker is terminated at the job timeout.",
         "UI thread shows no stalls attributable to job work (instrumented)."
       ],
-      "status": "in-progress",
+      "status": "verified",
       "source": "brief.md §Process isolation",
       "relatedAdrs": [
         "ADR-0005"
       ],
-      "evidence": "Worker crash and hang tests: the host-side client survives and reports structured failures; a kill-on-close job object holds every worker. Jobs run off the UI thread, but no instrumented UI-stall measurement exists."
+      "evidence": "Worker crash and hang tests: the host-side client survives and reports structured failures; a kill-on-close job object holds every worker. Jobs run in worker processes, off the UI thread. Instrumented: overlay show and paint latency while a batch keeps every worker busy is p95 9.6 ms and max 13.3 ms (idle p95 11.8 ms), so there is no stall attributable to job work (docs/performance/2026-10-21-soak.md). Memory: a 1.5 GB per-worker cap and a commit-bounded pool (ADR-0015, ResourceLimitTests)."
     },
     {
       "id": "ARCH-004",
@@ -265,7 +265,7 @@
       "status": "in-progress",
       "source": "brief.md §Performance philosophy",
       "notes": "Proposed targets written 2026-10-19; none measured yet.",
-      "evidence": "docs/performance/2026-10-21-first-slice.md covers idle CPU and memory, startup proxy, radial latency and job latency. The 1000-cycle leak run and the UI-stall measurement are missing."
+      "evidence": "docs/performance/2026-10-21-first-slice.md covers idle CPU and memory, startup proxy, radial latency and job latency. Leak and UI stall: docs/performance/2026-10-21-soak.md. 10,000 overlay cycles and 3000 conversions, no growth (quarter medians; the detector catches an injected leak). The overlay shows and paints in p95 9.6 ms (max 13.3 ms) while every worker is busy, against a budget of 0 frames over 16 ms. Worker memory per operation: docs/performance/2026-10-21-worker-memory.md. Still missing: the installer/portable size (no package exists yet)."
     },
     {
       "id": "SEC-001",

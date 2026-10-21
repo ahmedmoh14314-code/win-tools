@@ -21,9 +21,11 @@ A hostile file could also make a decoder allocate natively, outside any .NET lim
 - **Per-worker memory cap: 1.5 GB** (`WorkerJobObject.WorkerMemoryLimitBytes`), set through `JOB_OBJECT_LIMIT_PROCESS_MEMORY` on the host's job object.
   - It covers native and managed commits. An allocation past it fails inside the worker: managed and WIC E_OUTOFMEMORY failures are reported as ImageTooLarge; a codec that cannot handle the failure crashes its worker, which the host reports.
   - The worker's runtimeconfig sets `System.GC.HeapHardLimit` to the same value. The worker joins the job only after it starts, and a GC that read the job's limit first would otherwise cap its heap at 75 % of it, depending on timing.
-- **Memory-bounded pool:** at the start of a batch, the number of workers is
-  `clamp(min(processors / 2, available physical memory / cap), 1, 4)`.
-  Four workers that each reach the cap therefore still fit in the memory available. One worker always runs.
+- **Commit-bounded pool:** at the start of a batch, the number of workers is
+  `clamp(min(processors / 2, (available commit − 1 GB) / cap), 1, 4)`.
+  - Even if every worker reaches its cap, the batch can never be what exhausts the system's commit, which would make allocations fail in every program. One worker always runs.
+  - Commit (RAM plus page file, `ullAvailPageFile`) is used rather than free physical memory. Physical memory only decides paging speed, and on the development machine in normal use (about 2 GB free) it would have meant one worker for every batch.
+  - On that machine, with 4.6 GB of commit left, the rule gives 2 workers.
 
 ## Alternatives considered
 - **Keep 100 MP and rely on the pagefile:** four large conversions could need 8.6 GB. The machine would page heavily, and on an 8 GB machine allocations would fail at random.
@@ -34,7 +36,9 @@ A hostile file could also make a decoder allocate natively, outside any .NET lim
 
 ## Consequences
 - Images over 50 MP (for example 61 MP cameras and the 108/200 MP modes of phones) are refused with an actionable message. This is a V1 limitation.
-- On a busy machine a batch may run with fewer than 4 workers. Small files then go slower than they could. The batch log records the number used (`job.done.workers`).
+- On a machine short of commit a batch runs with fewer than 4 workers, and small files then go slower than they could. The batch log records the number used (`job.done.workers`).
+  - In the soak runs (`docs/performance/2026-10-21-soak.md`), 2 workers converted 50 small files in 291 ms (p50).
+  - A first version bounded by free physical memory ran 1 worker on the same machine. The soak run exposed this, and it led to the commit rule.
 - `ContainerCheck` derives its PNG inflate ceiling from the same limit.
 
 ## Evidence / experiments
@@ -43,7 +47,7 @@ A hostile file could also make a decoder allocate natively, outside any .NET lim
   - the exact pixel boundary;
   - a 50 MP BMP rotated under the cap (the costliest case at the limit);
   - native commits past the cap refused. This is a Debug-only fault, and the test fails when the cap is removed (checked by mutation);
-  - the lane rule;
+  - the lane rule, including the 4.6 GB case measured on the development machine;
   - the GC heap limit equal to the cap.
 
 ## Evaluator review

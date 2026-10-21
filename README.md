@@ -4,7 +4,7 @@ A lightweight, local-first Windows desktop utility: drag a file, press a trigger
 a radial menu appears around the cursor, drop the file on an action, and the
 operation runs safely (e.g. `photo.png` → Convert → WebP → `photo.webp`).
 
-**Status: functional V1 in progress. Conversion between PNG, JPEG, WebP, BMP and TIFF works end to end from Windows Explorer. Resize, compress, rotate, remove metadata, image info and batch processing (up to 1000 files per drop) are implemented and reached through a two-level radial menu (categories, then commands; ADR-0014). Settings live in `%APPDATA%\WinTools\settings.json` (ADR-0013). SVG and HEIC input are deferred (ADR-0012). No installer, tray or settings UI yet; see `docs/progress.md`.**
+**Status: functional V1 in progress. Conversion between PNG, JPEG, WebP, BMP and TIFF works end to end from Windows Explorer. Resize, compress, rotate, remove metadata, image info and batch processing (up to 1000 files per drop) are implemented and reached through a two-level radial menu (categories, then commands; ADR-0014). Settings live in `%APPDATA%\WinTools\settings.json` (ADR-0013). SVG and HEIC input are deferred (ADR-0012). Images are limited to 50 MP, and each conversion worker to 1.5 GB of memory (ADR-0015). No installer, tray or settings UI yet; see `docs/progress.md`.**
 
 ## Start here (every session)
 
@@ -30,7 +30,7 @@ operation runs safely (e.g. `photo.png` → Convert → WebP → `photo.webp`).
 | `scripts/` | Repository tooling (not product code). |
 
 | `src/` | Product code: `WinTools.Core`, `WinTools.Windows`, `WinTools.Host`, `WinTools.Worker`. |
-| `tests/` | Unit and integration tests (run in CI) and `WinTools.EndToEnd`, a local Explorer harness. |
+| `tests/` | Unit and integration tests (run in CI), `WinTools.EndToEnd`, a local Explorer harness, and `WinTools.Soak`, local leak and UI-stall runs. |
 | `spikes/` | Throwaway experiments kept as evidence; never referenced by product code. |
 
 ## Build and run

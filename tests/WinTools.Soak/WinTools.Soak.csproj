@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Local soak runs for leaks and UI stalls: the real overlay window and the real worker pool, for minutes. It shows a
+       non-activating window on screen and injects no input. Not run in CI. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest>..\..\src\WinTools.Host\app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="System.IO" />
+    <ProjectReference Include="..\..\src\WinTools.Host\WinTools.Host.csproj" />
+    <ProjectReference Include="..\..\src\WinTools.Worker\WinTools.Worker.csproj" />
+    <None Include="..\samples\quadrants-64x48.png" Link="samples\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

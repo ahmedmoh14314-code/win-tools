@@ -52,12 +52,12 @@ public sealed class ResourceLimitTests : IDisposable
 #endif
 
     [Theory]
-    [InlineData(16, 8L << 30, 4)]        // plenty of memory: half the processors, at most 4
-    [InlineData(16, 4_400_000_000L, 2)]  // a busy 16 GB machine: two workers can each reach the cap
-    [InlineData(16, 1L << 30, 1)]        // less than one cap: still one worker
+    [InlineData(16, 8L << 30, 4)]        // commit to spare: half the processors, at most 4
+    [InlineData(16, 4_939_212_390L, 2)]  // 4.6 GB left (measured on a busy 16 GB machine): 1 GB reserve, then two caps
+    [InlineData(16, 1L << 30, 1)]        // not even one cap beyond the reserve: still one worker
     [InlineData(2, 64L << 30, 1)]        // few processors
     [InlineData(16, -1L, 4)]             // memory unknown
-    public void Workers_are_bounded_by_processors_and_available_memory(int processors, long available, int expected) =>
+    public void Workers_are_bounded_by_processors_and_available_commit(int processors, long available, int expected) =>
         Assert.Equal(expected, WorkerClient.Lanes(processors, available < 0 ? null : (ulong)available));
 
     [Fact]

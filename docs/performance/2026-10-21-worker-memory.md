@@ -33,6 +33,6 @@ The peak grows linearly with the pixel count: about 21 MB per megapixel in the w
 - At the old limit of 100 MP a single worker would need about 2.1 GB, and four parallel workers about 8.6 GB. During this measurement only 4.3 GB of physical memory was available on a 16 GB machine.
 - The pixel limit is now 50 MP: 1.06 GB at most per worker.
 - The per-worker cap is 1.5 GB (job object, with the same GC heap limit).
-- The number of parallel workers is bounded by the available physical memory divided by the cap.
+- The number of parallel workers is bounded by the available commit, less 1 GB, divided by the cap.
 - `ResourceLimitTests.An_image_at_the_pixel_limit_is_processed_under_the_worker_memory_cap` runs the costliest case at exactly 50 MP (BMP → BMP rotation) under the cap. `A_worker_cannot_commit_past_the_memory_cap` shows that the cap stops native allocations. Without the cap, that test fails.
 - The slowest case at the limit, WebP at 50 MP, took 12.5 s, within the 60 s job timeout.

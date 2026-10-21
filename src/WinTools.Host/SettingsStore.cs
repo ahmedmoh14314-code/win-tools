@@ -26,6 +26,9 @@ internal sealed class SettingsStore(string path)
     /// <summary>What happened on the last load, for the log.</summary>
     public string LastLoad { get; private set; } = "not loaded";
 
+    /// <summary>Largest settings file that is read.</summary>
+    public const int MaxFileBytes = 64 * 1024;
+
     public bool ReadOnly { get; private set; }
 
     public AppSettings Load()
@@ -34,7 +37,12 @@ internal sealed class SettingsStore(string path)
         if (Directory.Exists(Path)) { LastLoad = "defaults (the settings path is a folder)"; ReadOnly = true; return new AppSettings(); }
         if (!File.Exists(Path)) { LastLoad = "defaults (no file)"; return new AppSettings(); }
         string text;
-        try { text = File.ReadAllText(Path); }
+        try
+        {
+            // A settings file is a few hundred bytes; anything far larger is not ours to parse (or to move aside).
+            if (new FileInfo(Path).Length > MaxFileBytes) { LastLoad = "defaults (file too large; left untouched)"; ReadOnly = true; return new AppSettings(); }
+            text = File.ReadAllText(Path);
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { LastLoad = "defaults (unreadable)"; ReadOnly = true; return new AppSettings(); }
         var parsed = AppSettings.FromJson(text);
         if (RawSchema(text) > AppSettings.CurrentSchema)
