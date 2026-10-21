@@ -10,11 +10,12 @@ Template: `template.md`. Numbering is sequential and never reused. Old ADRs are 
 | [ADR-0003](ADR-0003-activation-trigger.md) | Activation / input strategy during drag | Accepted with amendments | UIPI, RegisterHotKey alternative |
 | [ADR-0004](ADR-0004-radial-overlay-implementation.md) | Radial overlay window implementation | Proposed | Spike |
 | [ADR-0005](ADR-0005-process-isolation-model.md) | Process isolation / worker model | Accepted (first slice) | — |
-| [ADR-0006](ADR-0006-image-conversion-engine.md) | Image conversion engine for V1 | Accepted (WIC, PNG↔JPEG) | — |
+| [ADR-0006](ADR-0006-image-conversion-engine.md) | Image conversion engine for V1 | Accepted (WIC + SkiaSharp for WebP) | — |
 | [ADR-0007](ADR-0007-capability-and-adapter-architecture.md) | Capability resolution and conversion adapter architecture | Accepted (first slice) | — |
 | [ADR-0008](ADR-0008-packaging-strategy.md) | Packaging and private distribution for the experiment | Proposed | Research |
 | [ADR-0009](ADR-0009-dependency-license-policy.md) | Dependency and license policy | Proposed | Product owner confirmation |
 | [ADR-0010](ADR-0010-telemetry-policy.md) | Telemetry and diagnostics policy | Proposed | Product owner confirmation |
 | [ADR-0011](ADR-0011-error-result-model.md) | Error / result model across process boundaries | Accepted (first slice) | — |
+| [ADR-0012](ADR-0012-svg-and-heic-input.md) | SVG and HEIC/HEIF as input formats | Accepted (both deferred for V1) | — |
 
 Decision order recommended: 0002 → 0003 → 0001/0004 (same spike) → 0005 → 0011 → 0007 → 0006 → 0008. 0009 and 0010 can be confirmed any time.

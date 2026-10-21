@@ -3,9 +3,9 @@ using WinTools.Core.Files;
 namespace WinTools.Core.Capabilities;
 
 /// <summary>
-/// Answers "which commands are valid for these dropped files?". An operation is offered only when every file's
-/// format hint matches its source format and every path passes <see cref="PathPolicy"/>; mixed or unsupported
-/// selections get no commands, never placeholders.
+/// Answers "which commands are valid for these dropped files?". The answer is the intersection: an operation is
+/// offered only if it applies to every file's format hint, and every path passes <see cref="PathPolicy"/>. Unsupported
+/// files, refused paths and empty or oversized selections get no commands, never placeholders.
 /// </summary>
 public sealed class CapabilityResolver(IReadOnlyList<Operation> catalog)
 {
@@ -17,11 +17,14 @@ public sealed class CapabilityResolver(IReadOnlyList<Operation> catalog)
     public IReadOnlyList<Operation> Resolve(IReadOnlyList<string> paths)
     {
         if (paths.Count is 0 or > MaxFiles) return [];
-        foreach (var p in paths) if (!PathPolicy.IsSupported(p)) return [];
-        var format = FormatHint.FromPath(paths[0]);
-        if (format == ImageFormat.Unknown) return [];
-        for (var i = 1; i < paths.Count; i++)
-            if (FormatHint.FromPath(paths[i]) != format) return [];
-        return catalog.Where(o => o.Source == format).ToArray();
+        var formats = new HashSet<ImageFormat>();
+        foreach (var p in paths)
+        {
+            if (!PathPolicy.IsSupported(p)) return [];
+            var f = FormatHint.FromPath(p);
+            if (f == ImageFormat.Unknown) return [];
+            formats.Add(f);
+        }
+        return catalog.Where(o => formats.All(o.AppliesTo)).ToArray();
     }
 }

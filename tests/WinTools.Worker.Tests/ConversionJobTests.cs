@@ -38,7 +38,7 @@ public sealed class ConversionJobTests : IDisposable
         var src = _dir.CopySample("quadrants-64x48.png", "photo.png");
         var before = Hash.Of(src);
 
-        var r = Run(OperationCatalog.PngToJpeg, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src);
 
         Assert.True(r.Success, r.Message);
         Assert.Equal(Path.Combine(_dir.Path, "photo.jpg"), r.OutputPath);
@@ -57,7 +57,7 @@ public sealed class ConversionJobTests : IDisposable
         var src = _dir.CopySample("quadrants-64x48.jpg", "photo.JPG");
         var before = Hash.Of(src);
 
-        var r = Run(OperationCatalog.JpegToPng, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Png), src);
 
         Assert.True(r.Success, r.Message);
         Assert.Equal(Path.Combine(_dir.Path, "photo.png"), r.OutputPath);
@@ -73,7 +73,7 @@ public sealed class ConversionJobTests : IDisposable
     {
         var src = _dir.CopySample("alpha-32x32.png");
 
-        var r = Run(OperationCatalog.PngToJpeg, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src);
 
         Assert.True(r.Success, r.Message);
         var px = Pixels.Load(r.OutputPath!);
@@ -86,7 +86,7 @@ public sealed class ConversionJobTests : IDisposable
     {
         byte[] bgra = [10, 20, 30, 0, 10, 20, 30, 255, 0, 0, 255, 128];
         var bgr = new byte[9];
-        Imaging.ImageTranscoder.CompositeOnWhite(bgra, bgr);
+        Imaging.RasterImage.CompositeOnWhite(bgra, bgr);
         Assert.Equal(new byte[] { 255, 255, 255, 10, 20, 30, 127, 127, 255 }, bgr);
     }
 
@@ -104,7 +104,7 @@ public sealed class ConversionJobTests : IDisposable
         var jpeg = ExifWriter.WithOrientation(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "samples", "quadrants-64x48.jpg")), orientation);
         var src = _dir.Write("rotated.jpg", jpeg);
 
-        var r = Run(OperationCatalog.JpegToPng, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Png), src);
 
         Assert.True(r.Success, r.Message);
         var px = Pixels.Load(r.OutputPath!);
@@ -136,7 +136,7 @@ public sealed class ConversionJobTests : IDisposable
         var src = _dir.Write("broken.png", full[..(full.Length / 2)]);
         var before = Hash.Of(src);
 
-        var r = Run(OperationCatalog.PngToJpeg, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src);
 
         Assert.False(r.Success);
         Assert.Equal(ErrorCode.DecodeFailed, r.Error);
@@ -152,7 +152,7 @@ public sealed class ConversionJobTests : IDisposable
         new Random(7).NextBytes(garbage);
         var src = _dir.Write("broken.jpg", [0xFF, 0xD8, 0xFF, 0xE0, .. garbage]);
 
-        var r = Run(OperationCatalog.JpegToPng, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Png), src);
 
         Assert.False(r.Success);
         Assert.Equal(ErrorCode.DecodeFailed, r.Error);
@@ -166,7 +166,7 @@ public sealed class ConversionJobTests : IDisposable
         var full = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "samples", "quadrants-64x48.jpg"));
         var src = _dir.Write("cut.jpg", full[..(full.Length * 2 / 3)]);
 
-        var r = Run(OperationCatalog.JpegToPng, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Png), src);
 
         Assert.Equal(ErrorCode.DecodeFailed, r.Error);
         AssertNoLeftovers("cut.jpg");
@@ -177,7 +177,7 @@ public sealed class ConversionJobTests : IDisposable
     {
         var src = _dir.CopySample("quadrants-64x48.jpg", "really-a-jpeg.png");
 
-        var r = Run(OperationCatalog.PngToJpeg, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src);
 
         Assert.Equal(ErrorCode.ContentMismatch, r.Error);
         AssertNoLeftovers("really-a-jpeg.png");
@@ -187,7 +187,7 @@ public sealed class ConversionJobTests : IDisposable
     public void Zero_byte_file_fails_cleanly()
     {
         var src = _dir.Write("empty.png", []);
-        var r = Run(OperationCatalog.PngToJpeg, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src);
         Assert.Equal(ErrorCode.DecodeFailed, r.Error);
         AssertNoLeftovers("empty.png");
     }
@@ -196,7 +196,7 @@ public sealed class ConversionJobTests : IDisposable
     public void Huge_declared_dimensions_are_refused_before_decoding()
     {
         var src = _dir.Write("bomb.png", PngWriter.HeaderOnly(60_000, 60_000));
-        var r = Run(OperationCatalog.PngToJpeg, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src);
         Assert.Equal(ErrorCode.ImageTooLarge, r.Error);
         AssertNoLeftovers("bomb.png");
     }
@@ -207,7 +207,7 @@ public sealed class ConversionJobTests : IDisposable
         const string name = "ملف عربي 日本語 ✓ émoji 🚀 (copy).png";
         var src = _dir.CopySample("quadrants-64x48.png", name);
 
-        var r = Run(OperationCatalog.PngToJpeg, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src);
 
         Assert.True(r.Success, r.Message);
         Assert.Equal(Path.Combine(_dir.Path, "ملف عربي 日本語 ✓ émoji 🚀 (copy).jpg"), r.OutputPath);
@@ -224,7 +224,7 @@ public sealed class ConversionJobTests : IDisposable
         File.Copy(Path.Combine(AppContext.BaseDirectory, "samples", "quadrants-64x48.png"), src);
         Assert.True(src.Length > 260);
 
-        var r = Run(OperationCatalog.PngToJpeg, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src);
 
         Assert.True(r.Success, r.Message);
         Assert.True(File.Exists(r.OutputPath));
@@ -238,7 +238,7 @@ public sealed class ConversionJobTests : IDisposable
         _dir.Write("photo (1).jpg", "also taken"u8.ToArray());
         var existingHash = Hash.Of(existing);
 
-        var r = Run(OperationCatalog.PngToJpeg, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src);
 
         Assert.True(r.Success, r.Message);
         Assert.Equal(Path.Combine(_dir.Path, "photo (2).jpg"), r.OutputPath);
@@ -252,7 +252,7 @@ public sealed class ConversionJobTests : IDisposable
         var src = _dir.CopySample("quadrants-64x48.png", "photo.png");
         var racer = Path.Combine(_dir.Path, "photo.jpg");
 
-        var r = Run(OperationCatalog.PngToJpeg, src, new JobHooks(BeforeFinalize: () => File.WriteAllText(racer, "created by someone else")));
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src, new JobHooks(BeforeFinalize: () => File.WriteAllText(racer, "created by someone else")));
 
         Assert.True(r.Success, r.Message);
         Assert.Equal(Path.Combine(_dir.Path, "photo (1).jpg"), r.OutputPath);
@@ -265,7 +265,7 @@ public sealed class ConversionJobTests : IDisposable
     {
         var src = _dir.CopySample("quadrants-64x48.png", "photo.png");
 
-        var r = Run(OperationCatalog.PngToJpeg, src, new JobHooks(AfterTempWritten: temp =>
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src, new JobHooks(AfterTempWritten: temp =>
         {
             var b = File.ReadAllBytes(temp);
             File.SetAttributes(temp, FileAttributes.Normal);
@@ -280,7 +280,7 @@ public sealed class ConversionJobTests : IDisposable
     [Fact]
     public void Missing_source_is_reported()
     {
-        var r = Run(OperationCatalog.PngToJpeg, Path.Combine(_dir.Path, "gone.png"));
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), Path.Combine(_dir.Path, "gone.png"));
         Assert.Equal(ErrorCode.SourceNotFound, r.Error);
         AssertNoLeftovers();
     }
@@ -290,7 +290,7 @@ public sealed class ConversionJobTests : IDisposable
     {
         var src = _dir.CopySample("quadrants-64x48.png", "photo.png");
 
-        var r = Run(OperationCatalog.PngToJpeg, src, new JobHooks(AfterSourceRead: () => File.Delete(src)));
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src, new JobHooks(AfterSourceRead: () => File.Delete(src)));
 
         // The bytes were read in full before the deletion, so the conversion of what the user dropped completes.
         Assert.True(r.Success, r.Message);
@@ -311,7 +311,7 @@ public sealed class ConversionJobTests : IDisposable
         info.SetAccessControl(acl);
         try
         {
-            var r = Run(OperationCatalog.PngToJpeg, src);
+            var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src);
 
             Assert.False(r.Success);
             Assert.Equal(ErrorCode.OutputDirectoryNotWritable, r.Error);
@@ -343,7 +343,7 @@ public sealed class ConversionJobTests : IDisposable
         var good = PngWriter.Rgba(64, 64, (x, y) => raw[y * 64 + x]);
         var src = _dir.Write("cut.png", PngWriter.WithTruncatedImageData(good, 0.3));
 
-        var r = Run(OperationCatalog.PngToJpeg, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src);
 
         Assert.Equal(ErrorCode.DecodeFailed, r.Error);
         Assert.Contains("truncated", r.Message, StringComparison.Ordinal);
@@ -359,7 +359,7 @@ public sealed class ConversionJobTests : IDisposable
         var dotted = Path.Combine(_dir.Path, "dir.") + @"\photo.png";
         File.Copy(Path.Combine(AppContext.BaseDirectory, "samples", "alpha-32x32.png"), @"\\?\" + dotted);
 
-        var r = Run(OperationCatalog.PngToJpeg, dotted);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), dotted);
 
         Assert.Equal(ErrorCode.InvalidRequest, r.Error);
         Assert.Equal(["photo.png"], Directory.GetFiles(twin).Select(Path.GetFileName));
@@ -369,7 +369,7 @@ public sealed class ConversionJobTests : IDisposable
     [Fact]
     public void Lone_surrogate_in_the_name_is_refused()
     {
-        var r = Run(OperationCatalog.PngToJpeg, Path.Combine(_dir.Path, "a" + '\uD800' + ".png"));
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), Path.Combine(_dir.Path, "a" + '\uD800' + ".png"));
         Assert.Equal(ErrorCode.InvalidRequest, r.Error);
     }
 
@@ -379,7 +379,7 @@ public sealed class ConversionJobTests : IDisposable
         var src = _dir.CopySample("quadrants-64x48.png", "photo.png");
         var squatter = _dir.Write("~wintools-abc.tmp", "not ours"u8.ToArray());
 
-        var r = ConversionJob.Run(new ConversionRequest("abc", OperationCatalog.PngToJpeg.Id, src));
+        var r = ConversionJob.Run(new ConversionRequest("abc", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src));
 
         Assert.False(r.Success);
         Assert.Equal("not ours", File.ReadAllText(squatter));
@@ -392,7 +392,7 @@ public sealed class ConversionJobTests : IDisposable
         var src = _dir.CopySample("quadrants-64x48.png", "p.png");
         foreach (var name in WinTools.Core.Output.OutputNaming.Candidates(src, WinTools.Core.Files.ImageFormat.Jpeg)) File.WriteAllBytes(name, [7]);
 
-        var r = Run(OperationCatalog.PngToJpeg, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src);
 
         Assert.Equal(ErrorCode.NoFreeOutputName, r.Error);
         Assert.Equal(WinTools.Core.Output.OutputNaming.MaxCollisionIndex + 2, Directory.GetFiles(_dir.Path).Length); // nothing added
@@ -405,7 +405,7 @@ public sealed class ConversionJobTests : IDisposable
         var src = Path.Combine(_dir.Path, "big.png");
         using (var fs = new FileStream(src, FileMode.CreateNew)) { fs.Write([0x89, 0x50, 0x4E, 0x47]); fs.SetLength(ConversionJob.MaxInputBytes + 1); }
 
-        var r = Run(OperationCatalog.PngToJpeg, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src);
 
         Assert.Equal(ErrorCode.InputTooLarge, r.Error);
         AssertNoLeftovers("big.png");
@@ -417,7 +417,7 @@ public sealed class ConversionJobTests : IDisposable
         var src = _dir.CopySample("quadrants-64x48.png", "photo.png");
         using var exclusive = new FileStream(src, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
 
-        var r = Run(OperationCatalog.PngToJpeg, src);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), src);
 
         Assert.Equal(ErrorCode.SourceNotReadable, r.Error);
     }
@@ -427,12 +427,12 @@ public sealed class ConversionJobTests : IDisposable
     {
         // Evaluator B1: a flip-rotator directly over the JPEG decoder re-reads scanlines per pixel (~5 minutes here).
         var png = _dir.Write("big.png", PngWriter.Rgba(4000, 3000, (x, y) => ((byte)x, (byte)y, (byte)(x ^ y), 255)));
-        var jpg = Run(OperationCatalog.PngToJpeg, png);
+        var jpg = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg), png);
         Assert.True(jpg.Success, jpg.Message);
         var rotated = _dir.Write("portrait.jpg", ExifWriter.WithOrientation(File.ReadAllBytes(jpg.OutputPath!), 6));
 
         var started = System.Diagnostics.Stopwatch.StartNew();
-        var r = Run(OperationCatalog.JpegToPng, rotated);
+        var r = Run(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Png), rotated);
 
         Assert.True(r.Success, r.Message);
         Assert.True(started.Elapsed < TimeSpan.FromSeconds(20), $"took {started.Elapsed}");
@@ -443,7 +443,7 @@ public sealed class ConversionJobTests : IDisposable
     [Fact]
     public void Relative_source_path_is_refused()
     {
-        var r = ConversionJob.Run(new ConversionRequest("x1", OperationCatalog.PngToJpeg.Id, "photo.png"));
+        var r = ConversionJob.Run(new ConversionRequest("x1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, "photo.png"));
         Assert.Equal(ErrorCode.InvalidRequest, r.Error);
     }
 }

@@ -22,7 +22,7 @@ public sealed class WorkerProcessTests : IDisposable
         var jpg = _dir.CopySample("quadrants-64x48.jpg", "b.jpg");
 
         var results = await Client().RunAsync(
-            [new("r1", OperationCatalog.PngToJpeg.Id, png), new("r2", OperationCatalog.JpegToPng.Id, jpg)], CancellationToken.None);
+            [new("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, png), new("r2", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Png).Id, jpg)], CancellationToken.None);
 
         Assert.All(results, r => Assert.True(r.Success, r.Message));
         Assert.Equal(Path.Combine(_dir.Path, "a.jpg"), results[0].OutputPath);
@@ -34,7 +34,7 @@ public sealed class WorkerProcessTests : IDisposable
     public async Task Worker_failure_result_crosses_the_process_boundary_with_its_code()
     {
         var src = _dir.CopySample("quadrants-64x48.jpg", "fake.png");
-        var results = await Client().RunAsync([new("r1", OperationCatalog.PngToJpeg.Id, src)], CancellationToken.None);
+        var results = await Client().RunAsync([new("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src)], CancellationToken.None);
         Assert.Equal(ErrorCode.ContentMismatch, results.Single().Error);
     }
 
@@ -47,7 +47,7 @@ public sealed class WorkerProcessTests : IDisposable
         var before = Hash.Of(src);
 
         var results = await Client(fault: "crash-after-temp").RunAsync(
-            [new("r1", OperationCatalog.PngToJpeg.Id, src), new("r2", OperationCatalog.PngToJpeg.Id, second)], CancellationToken.None);
+            [new("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src), new("r2", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, second)], CancellationToken.None);
 
         Assert.Equal(ErrorCode.WorkerCrashed, results[0].Error);
         Assert.Equal(ErrorCode.WorkerCrashed, results[1].Error);
@@ -61,7 +61,7 @@ public sealed class WorkerProcessTests : IDisposable
         var src = _dir.CopySample("quadrants-64x48.png", "photo.png");
 
         var started = DateTime.UtcNow;
-        var results = await Client(TimeSpan.FromSeconds(3), "hang-after-temp").RunAsync([new("r1", OperationCatalog.PngToJpeg.Id, src)], CancellationToken.None);
+        var results = await Client(TimeSpan.FromSeconds(3), "hang-after-temp").RunAsync([new("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src)], CancellationToken.None);
 
         Assert.Equal(ErrorCode.WorkerTimeout, results.Single().Error);
         Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(15));
@@ -79,7 +79,7 @@ public sealed class WorkerProcessTests : IDisposable
         var cut = full[..(scanStart + (full.Length - 2 - scanStart) / 2)];
         var src = _dir.Write("cut.jpg", [.. cut, 0xFF, 0xD9]);
 
-        var results = await Client().RunAsync([new("r1", OperationCatalog.JpegToPng.Id, src)], CancellationToken.None);
+        var results = await Client().RunAsync([new("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Png).Id, src)], CancellationToken.None);
 
         Assert.Equal(ErrorCode.DecodeFailed, results.Single().Error);
         Assert.Equal(["cut.jpg"], _dir.Names());
@@ -90,7 +90,7 @@ public sealed class WorkerProcessTests : IDisposable
     {
         var src = _dir.CopySample("quadrants-64x48.png", "photo.png");
         var client = new WorkerClient(Path.Combine(_dir.Path, "no-such-worker.exe"), TimeSpan.FromSeconds(5));
-        var results = await client.RunAsync([new("r1", OperationCatalog.PngToJpeg.Id, src)], CancellationToken.None);
+        var results = await client.RunAsync([new("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src)], CancellationToken.None);
         Assert.Equal(ErrorCode.WorkerCrashed, results.Single().Error);
     }
 
@@ -99,7 +99,7 @@ public sealed class WorkerProcessTests : IDisposable
     {
         var src = _dir.CopySample("quadrants-64x48.png", "photo.png");
         var elsewhere = _dir.Write("other.jpg", [1]);
-        var req = new ConversionRequest("r1", OperationCatalog.PngToJpeg.Id, src);
+        var req = new ConversionRequest("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src);
         Assert.False(WorkerClient.IsBelievable(req, ConversionResult.Ok("r1", elsewhere, Hash.Of(elsewhere))));
         Assert.False(WorkerClient.IsBelievable(req, ConversionResult.Ok("r1", Path.Combine(_dir.Path, "photo.jpg"), new string('0', 64)))); // does not exist
         var real = _dir.Write("photo (3).jpg", [1, 2, 3]);
@@ -125,10 +125,15 @@ public sealed class CodecVendorTests
     [InlineData("9456a480-e88b-43ea-9e73-0b2d9b71b1ca", true)]  // JPEG decoder
     [InlineData("27949969-876a-41d7-9447-568f6a35a4dc", false)] // PNG encoder
     [InlineData("1a34f5c1-4a5a-46dc-b644-1f4567e7a676", false)] // JPEG encoder
+    [InlineData("6b462062-7cbf-400d-9fdb-813dd10f2778", true)]  // BMP decoder
+    [InlineData("69be8bb4-d66d-47c8-865a-ed1589433782", false)] // BMP encoder
+    [InlineData("b54e85d9-fe23-499f-8b88-6acea713752b", true)]  // TIFF decoder
+    [InlineData("0131be10-2001-4c5f-a9b0-cc88fab64ce8", false)] // TIFF encoder
     public void Codecs_created_by_clsid_are_the_Microsoft_ones(string clsid, bool decoder)
     {
         var id = new Guid(clsid);
-        Assert.Contains(id, new[] { Imaging.WicIds.PngDecoder, Imaging.WicIds.JpegDecoder, Imaging.WicIds.PngEncoder, Imaging.WicIds.JpegEncoder });
+        Assert.Contains(id, new[] { Imaging.WicIds.PngDecoder, Imaging.WicIds.JpegDecoder, Imaging.WicIds.PngEncoder, Imaging.WicIds.JpegEncoder,
+            Imaging.WicIds.BmpDecoder, Imaging.WicIds.BmpEncoder, Imaging.WicIds.TiffDecoder, Imaging.WicIds.TiffEncoder });
         var factory = Imaging.WicNative.Create<Imaging.IWICImagingFactory>(Imaging.WicIds.ImagingFactory);
         var info = factory.CreateComponentInfo(id);
         Assert.Equal(Imaging.WicIds.VendorMicrosoft, info.GetVendorGUID());

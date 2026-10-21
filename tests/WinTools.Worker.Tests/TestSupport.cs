@@ -1,5 +1,4 @@
 using System.IO.Compression;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using WinTools.Worker.Imaging;
 
@@ -48,24 +47,11 @@ public sealed record Pixels(int Width, int Height, byte[] Bgra)
         return (Bgra[i + 2], Bgra[i + 1], Bgra[i], Bgra[i + 3]);
     }
 
-    public static unsafe Pixels Load(string path)
+    public static Pixels Load(string path)
     {
         var bytes = File.ReadAllBytes(path);
-        var stream = WicNative.CreateStreamOnHGlobal(0, true);
-        stream.Write(bytes, bytes.Length, 0);
-        stream.Seek(0, 0, 0);
-        var isPng = bytes[0] == 0x89;
-        var decoder = WicNative.Create<IWICBitmapDecoder>(isPng ? WicIds.PngDecoder : WicIds.JpegDecoder);
-        decoder.Initialize(stream, WicDecodeOptions.MetadataCacheOnDemand);
-        var frame = decoder.GetFrame(0);
-        frame.GetSize(out var w, out var h);
-        var factory = WicNative.Create<IWICImagingFactory>(WicIds.ImagingFactory);
-        var conv = factory.CreateFormatConverter();
-        conv.Initialize((IWICBitmapSource)frame, WicIds.Format32bppBGRA, WicDitherType.None, 0, 0, WicPaletteType.Custom);
-        var buf = new byte[w * h * 4];
-        fixed (byte* p = buf) conv.CopyPixels(null, w * 4, (uint)buf.Length, p);
-        foreach (var o in new object[] { conv, factory, frame, decoder, stream }) Marshal.FinalReleaseComObject(o);
-        return new Pixels((int)w, (int)h, buf);
+        var image = ImagePipeline.Decode(bytes, WinTools.Core.Files.FileSignature.Detect(bytes)).Image; // stored orientation, no EXIF applied
+        return new Pixels(image.Width, image.Height, image.Bgra);
     }
 }
 
@@ -99,6 +85,15 @@ public static class PngWriter
         }
         var z = idat.ToArray();
         return Build(width, height, z[..(int)(z.Length * fraction)]);
+    }
+
+    /// <summary>Inserts an extra chunk (with a valid CRC) right after IHDR.</summary>
+    public static byte[] InsertChunkAfterIhdr(byte[] png, string type, byte[] data)
+    {
+        var chunk = new MemoryStream();
+        Chunk(chunk, type, data);
+        const int afterIhdr = 8 + 25;
+        return [.. png[..afterIhdr], .. chunk.ToArray(), .. png[afterIhdr..]];
     }
 
     /// <summary>A PNG whose header claims the given size but carries only a token of image data.</summary>

@@ -9,12 +9,13 @@ The radial menu must show only valid operations for the dragged input, derived f
 
 ## Decision
 **A declarative operation catalog and one resolver in Core; the radial overlay renders whatever the resolver returns.**
-- An `Operation(Id, Label, Source, Target)` row describes each command. `OperationCatalog` lists the rows of this build: `convert.png-to-jpeg` and `convert.jpeg-to-png`.
-- `CapabilityResolver.Resolve(paths)` uses the extension only as a hint (`FormatHint`), because it runs during the drag and must not read files. That means no I/O on the UI thread and no hydration of cloud placeholders (SAFE-004).
-  - An operation is offered when every dropped file has its source format.
-  - Mixed, unsupported, empty or oversized selections (more than 50 files) get no commands. The overlay then shows "No actions" and refuses the drop (effect NONE).
-- The worker never trusts the hint. It checks the content signature (`FileSignature`) and the container structure, and decodes. A mislabelled file fails with `ContentMismatch`.
-- Adapter boundary: the worker's `ImageTranscoder` is the engine adapter. The host and Core know only operation ids and results. A fake engine adapter interface is **not** introduced: there is one engine, and the process boundary already isolates it (YAGNI).
+- **The format table:** `ImageFormats` holds the decodable and encodable formats, extensions, display names and alpha policy.
+- **Operations are rows** generated from that table: `Operation(Id, Label, Kind, Target)` with ids `convert.to-<format>`. `Operation.AppliesTo(contentFormat)` is the single validity rule; a format never converts to itself.
+- **`CapabilityResolver.Resolve(paths)`** uses the extension only as a hint (`FormatHint`), because it runs during the drag and must not read files. That means no I/O on the UI thread and no hydration of cloud placeholders (SAFE-004).
+  - The answer is the **intersection** of operations that apply to every file.
+  - Unsupported files, refused paths (`PathPolicy`), and empty or oversized selections (more than 50 files) get no commands. The overlay then shows "No actions" and refuses the drop (effect NONE).
+- **The worker never trusts the hint.** It detects the content format (`FileSignature`), requires `AppliesTo(content)` (otherwise `ContentMismatch`), checks the container, and decodes. A mislabelled file is converted according to its real content when the operation applies to it.
+- **Adapter boundary:** the worker's codecs (`WicCodec`, `SkiaCodec`) behind `ImagePipeline` are the engine adapters. The host and Core know only operation ids and results.
 
 ## Alternatives considered
 - Format logic in the overlay: rejected by the architecture rules.
@@ -22,8 +23,8 @@ The radial menu must show only valid operations for the dragged input, derived f
 - A general MIME-sniffing framework: not needed for two formats.
 
 ## Consequences
-- Adding a format or operation adds catalog rows and engine support. The overlay does not change; it sizes the ring to the number of commands.
-- ARCH-002's "fake adapter in tests" criterion is not met by design in this slice. Substitutability is shown at the process boundary instead (the worker contract), and it stays open in the requirements ledger.
+- Adding a format or operation adds rows in Core and an engine branch in the worker. The overlay does not change; it sizes the ring to the number of commands.
+- ARCH-002's "fake adapter in tests" criterion is not met by design. Substitutability is shown at the process boundary instead, through the worker contract.
 
 ## Evidence / experiments
 - `tests/WinTools.Core.Tests/FilesAndCapabilitiesTests.cs` (resolver, signature, structure check, naming); `ConversionJobTests.Mislabelled_file_is_refused_by_content`.
