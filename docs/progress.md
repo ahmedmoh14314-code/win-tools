@@ -39,7 +39,8 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 - Multi-monitor and mixed DPI; the Desktop as drag source; Windows 10. These need the manual protocol or Windows Sandbox.
 - A user-visible failure state (notifications or a tray icon). Today a failure gives only the error sound and a log entry.
 - Overlay accessibility: its own provider, which must not block the overlay thread.
-- Owner decisions: the supported Windows baseline (ADR-0002) and packaging (ADR-0008); the requirement status changes made at the acceptance gate (SCOPE-001 rejected; UX-007, DIST-001 and DIST-003 deferred).
+- The overlay latency measured at the acceptance gate was higher than at TASK 4 (warm p95 20.1 against 13.6 ms, first activation max 60.5 against 34.0 ms), within budget, with no change to the overlay code; the cause was not investigated. Re-measure on an idle machine.
+- Owner decisions: the supported Windows baseline (ADR-0002) and packaging (ADR-0008); the requirement status changes made at the acceptance gate (SCOPE-001 rejected; UX-007, DIST-001 and DIST-003 deferred), pending confirmation.
 
 ## Current blockers
 None.
