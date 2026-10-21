@@ -24,7 +24,7 @@ Pipeline (`ImagePipeline`):
    - JPEG: markers and scans through to EOI.
    - WebP: RIFF size and chunks.
    - BMP: the pixel array fits the file. **RLE BMP is refused**, because the decoder fills runs that end early with black.
-   - TIFF (`TiffCheck`): from IFD0, every strip or tile must lie inside the file. Uncompressed data must have at least the byte count implied by the dimensions; Deflate, PackBits and LZW data must decompress to at least that count. The Windows TIFF decoder fills short strips with black and reports success, so this check is the only defence. JPEG-in-TIFF and CCITT get the bounds check only (a residual risk).
+   - TIFF (`TiffCheck`): from IFD0, every strip or tile must lie inside the file. Uncompressed data must have at least the byte count implied by the dimensions; Deflate, PackBits and LZW data must decompress to at least that count. The Windows TIFF decoder fills short strips with black and reports success, so this check is the only defence. JPEG-in-TIFF, CCITT and FillOrder=2 files get the bounds check only (a residual risk). Only the tags the check needs are read, and more than 1,000,000 strips is refused, so a crafted IFD stays cheap. A TIFF with an IFD1 thumbnail counts as multi-page and is refused (safe side).
 4. **One sequential decode to BGRA.** For WIC, any codec diagnostic on the worker's stderr pipe means `DecodeFailed`. For Skia, `IncompleteInput` and other non-success results fail.
 5. **EXIF orientation** (JPEG, TIFF, WebP) is applied to the pixels in managed code. The flip-rotator is not used, because of its per-pixel re-reads (evaluator B1).
 6. **Encode:**

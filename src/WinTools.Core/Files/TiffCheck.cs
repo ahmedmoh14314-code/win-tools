@@ -16,7 +16,13 @@ internal static class TiffCheck
 {
     private const int TagWidth = 256, TagHeight = 257, TagBitsPerSample = 258, TagCompression = 259, TagStripOffsets = 273,
         TagSamplesPerPixel = 277, TagRowsPerStrip = 278, TagStripByteCounts = 279, TagPlanar = 284,
-        TagTileWidth = 322, TagTileLength = 323, TagTileOffsets = 324, TagTileByteCounts = 325;
+        TagTileWidth = 322, TagTileLength = 323, TagTileOffsets = 324, TagTileByteCounts = 325, TagFillOrder = 266;
+
+    private static readonly HashSet<uint> Needed = [TagWidth, TagHeight, TagBitsPerSample, TagCompression, TagFillOrder, TagStripOffsets,
+        TagSamplesPerPixel, TagRowsPerStrip, TagStripByteCounts, TagPlanar, TagTileWidth, TagTileLength, TagTileOffsets, TagTileByteCounts];
+
+    /// <summary>More strips or tiles than this cannot belong to an image within the pixel limits; refusing early keeps a crafted IFD cheap.</summary>
+    private const long MaxChunks = 1_000_000;
 
     public static string? Check(ReadOnlySpan<byte> d)
     {
@@ -40,7 +46,8 @@ internal static class TiffCheck
             var type = U16(d, e + 2);
             var count = (long)U32(d, e + 4);
             var size = type switch { 3 => 2, 4 => 4, _ => 0 };
-            if (size == 0 || count is <= 0 or > 10_000_000) continue; // only SHORT/LONG tags matter here
+            if (!Needed.Contains(tag) || size == 0 || count <= 0) continue; // only the SHORT/LONG tags this check uses
+            if (count > MaxChunks) return "too many strips or values";
             var at = count * size <= 4 ? e + 8 : U32(d, e + 8);
             if (at + count * size > d.Length) return "tag data outside the file";
             var values = new long[count];
@@ -58,6 +65,8 @@ internal static class TiffCheck
         var bits = tags.TryGetValue(TagBitsPerSample, out var bps) ? bps : [1];
         var bitsPerPixel = planar == 2 ? bits[0] : (bits.Length >= samples ? bits.Take((int)samples).Sum() : bits[0] * samples);
         var planes = planar == 2 ? samples : 1;
+        // FillOrder 2 stores each byte's bits reversed; the codecs below read MSB-first, so such files get the bounds check only.
+        var lengthChecks = One(TagFillOrder, 1) != 2;
 
         var tiled = tags.ContainsKey(TagTileOffsets);
         var offsets = tags.GetValueOrDefault(tiled ? (uint)TagTileOffsets : TagStripOffsets);
@@ -89,7 +98,7 @@ internal static class TiffCheck
             var rows = tiled ? chunkRows : Math.Min(chunkRows, height - i % perPlane * chunkRows);
             var expected = rowBytes * rows;
             var data = d.Slice((int)off, (int)cnt);
-            var produced = compression switch
+            var produced = !lengthChecks ? long.MaxValue : compression switch
             {
                 1 => cnt,
                 8 or 32946 => Inflate(data, expected),

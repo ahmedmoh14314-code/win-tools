@@ -206,6 +206,35 @@ public static class TiffWriter
 
     public static int CompressionOf(byte[] tiff) => (int)Tag(tiff, 259)!.Value.Values[0];
 
+    /// <summary>
+    /// Appends one SHORT tag to IFD0 by rewriting the IFD at the end of the file (entries stay sorted by tag).
+    /// With count &gt; 2 the tag points at an offset that does not exist, like a crafted file.
+    /// </summary>
+    public static byte[] WithExtraShortTag(byte[] tiff, int tag, int value, int count = 1)
+    {
+        int U16(int o) => tiff[o] | tiff[o + 1] << 8;
+        var ifd = tiff[4] | tiff[5] << 8 | tiff[6] << 16 | tiff[7] << 24;
+        var n = U16(ifd);
+        var entries = Enumerable.Range(0, n).Select(i => tiff.AsSpan(ifd + 2 + i * 12, 12).ToArray()).ToList();
+        var e = new byte[12];
+        e[0] = (byte)tag; e[1] = (byte)(tag >> 8); e[2] = 3;
+        e[4] = (byte)count; e[5] = (byte)(count >> 8); e[6] = (byte)(count >> 16); e[7] = (byte)(count >> 24);
+        if (count <= 2) { e[8] = (byte)value; e[9] = (byte)(value >> 8); }
+        else { e[8] = 0xF0; e[9] = 0xFF; e[10] = 0xFF; e[11] = 0x7F; }
+        entries.Add(e);
+        entries.Sort((a, b) => (a[0] | a[1] << 8).CompareTo(b[0] | b[1] << 8));
+        var newIfd = tiff.Length + (tiff.Length & 1);
+        var o = new MemoryStream();
+        o.Write(tiff);
+        if ((tiff.Length & 1) != 0) o.WriteByte(0);
+        o.Write([(byte)entries.Count, (byte)(entries.Count >> 8)]);
+        foreach (var x in entries) o.Write(x);
+        o.Write([0, 0, 0, 0]);
+        var result = o.ToArray();
+        result[4] = (byte)newIfd; result[5] = (byte)(newIfd >> 8); result[6] = (byte)(newIfd >> 16); result[7] = (byte)(newIfd >> 24);
+        return result;
+    }
+
     /// <summary>Halves the byte count of the last strip (or tile) in IFD0, leaving everything else intact.</summary>
     public static byte[] HalveLastStripByteCount(byte[] tiff)
     {
@@ -299,5 +328,33 @@ public static class WicTestEncoder
         encoder.Commit();
         Marshal.FinalReleaseComObject(encoder);
         return stream.ToArray();
+    }
+}
+
+public sealed class TiffCheckEdgeTests
+{
+    [Fact]
+    public void Fill_order_2_tiff_is_not_falsely_rejected()
+    {
+        // Evaluator: a FillOrder=2 LZW file was refused as damaged. With FillOrder=2 only the bounds are checked.
+        var tiff = TiffWriter.Rgb(16, 16, rowsPerStrip: 16, compression: 8, (x, y) => ((byte)x, (byte)y, 1));
+        Assert.True(ContainerCheck.IsComplete(tiff, ImageFormat.Tiff, out var r), r);
+        var reversedDeflate = TiffWriter.WithExtraShortTag(tiff, 266, 2);
+        Assert.True(ContainerCheck.IsComplete(reversedDeflate, ImageFormat.Tiff, out r), r);
+    }
+
+    [Fact]
+    public void Huge_unneeded_tags_are_not_read()
+    {
+        var tiff = TiffWriter.Rgb(16, 16, rowsPerStrip: 16, compression: 1, (x, y) => (1, 2, 3));
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        // A private tag claiming 5 M values is skipped without being read (the check uses only its own tags).
+        var bloated = TiffWriter.WithExtraShortTag(tiff, 40000, 7, count: 5_000_000);
+        Assert.True(ContainerCheck.IsComplete(bloated, ImageFormat.Tiff, out var ok), ok);
+        // A needed tag with an absurd count is refused early instead of being materialised.
+        var hugeStrips = TiffWriter.WithExtraShortTag(tiff, 324 /* TileOffsets */, 7, count: 5_000_000);
+        Assert.False(ContainerCheck.IsComplete(hugeStrips, ImageFormat.Tiff, out var reason));
+        Assert.Contains("too many", reason, StringComparison.Ordinal);
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(2));
     }
 }
