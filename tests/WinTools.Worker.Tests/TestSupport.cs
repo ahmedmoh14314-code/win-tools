@@ -87,6 +87,32 @@ public static class PngWriter
         return Build(width, height, z[..(int)(z.Length * fraction)]);
     }
 
+    /// <summary>A PNG with an arbitrary IHDR bit depth / colour type and the given compressed IDAT payload.</summary>
+    public static byte[] Custom(int width, int height, byte bitDepth, byte colorType, byte[] idat)
+    {
+        var png = new MemoryStream();
+        png.Write([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        var ihdr = new byte[13];
+        BigEndian(ihdr, 0, (uint)width); BigEndian(ihdr, 4, (uint)height);
+        ihdr[8] = bitDepth; ihdr[9] = colorType;
+        Chunk(png, "IHDR", ihdr);
+        Chunk(png, "IDAT", idat);
+        Chunk(png, "IEND", []);
+        return png.ToArray();
+    }
+
+    public static List<string> ChunkTypes(byte[] png)
+    {
+        var types = new List<string>();
+        for (var i = 8; i + 12 <= png.Length;)
+        {
+            var len = png[i] << 24 | png[i + 1] << 16 | png[i + 2] << 8 | png[i + 3];
+            types.Add(System.Text.Encoding.ASCII.GetString(png, i + 4, 4));
+            i += 12 + len;
+        }
+        return types;
+    }
+
     /// <summary>Inserts an extra chunk (with a valid CRC) right after IHDR.</summary>
     public static byte[] InsertChunkAfterIhdr(byte[] png, string type, byte[] data)
     {

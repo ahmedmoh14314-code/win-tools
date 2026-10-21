@@ -26,8 +26,10 @@ internal static class Resampler
             var s = f.CreateBitmapScaler();
             scaler = s;
             s.Initialize(b, (uint)width, (uint)height, WicInterpolationMode.HighQualityCubic);
+            if (s.GetPixelFormat() != WicIds.Format32bppPBGRA) throw new ImagingException(ErrorCode.EncodeFailed, "The scaler changed the pixel format.");
             fixed (byte* p = target) s.CopyPixels(null, (uint)width * 4, (uint)target.Length, p);
         }
+        catch (COMException ex) when (ex.HResult == unchecked((int)0x8007000E)) { throw new ImagingException(ErrorCode.ImageTooLarge, "Not enough memory to resize this image.", ex); }
         catch (COMException ex) { throw new ImagingException(ErrorCode.EncodeFailed, $"Resizing failed (0x{ex.HResult:X8}).", ex); }
         finally
         {
@@ -35,7 +37,7 @@ internal static class Resampler
         }
         Unpremultiply(target);
         // Resolution is kept: a resized photo prints smaller at the same DPI, which is what image editors do too.
-        return new RasterImage(width, height, target, source.DpiX, source.DpiY);
+        return source.WithPixels(width, height, target);
     }
 
     internal static void Premultiply(Span<byte> bgra)

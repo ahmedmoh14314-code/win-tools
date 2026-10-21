@@ -28,7 +28,7 @@ internal static class Program
         OleApartment.Initialize();
         try
         {
-            var jobs = new JobRunner(new WorkerClient(workerPath, JobTimeout), log, MessageWindow.FailureBeep);
+            var jobs = new JobRunner(new WorkerClient(workerPath, JobTimeout), log, MessageWindow.FailureBeep, MessageWindow.InfoBeep);
             using var coordinator = new InteractionCoordinator(log, jobs);
             coordinator.Start();
             Console.CancelKeyPress += (_, e) => { e.Cancel = true; coordinator.RequestClose(); };

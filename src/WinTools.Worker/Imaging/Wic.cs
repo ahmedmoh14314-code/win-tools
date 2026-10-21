@@ -61,7 +61,7 @@ internal interface IWICImagingFactory
     void CreateBitmapClipper_Unused();
     IWICBitmapFlipRotator CreateBitmapFlipRotator();
     void CreateStream_Unused();
-    void CreateColorContext_Unused();
+    IWICColorContext CreateColorContext();
     void CreateColorTransformer_Unused();
     void CreateBitmap_Unused();
     /// <summary>Returns an IWICBitmap (declared by its IWICBitmapSource base, the only part used).</summary>
@@ -101,6 +101,17 @@ internal interface IWICBitmapFrameDecode // : IWICBitmapSource
     void CopyPalette(nint palette);
     unsafe void CopyPixels(WicRect* rect, uint stride, uint bufferSize, byte* buffer);
     [PreserveSig] int GetMetadataQueryReader(out IWICMetadataQueryReader? reader);
+    [PreserveSig] unsafe int GetColorContexts(uint count, nint* contexts, out uint actual);
+}
+
+[ComImport, Guid("3c613a02-34b2-44ea-9a7c-45aea9c6fd6d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IWICColorContext
+{
+    void InitializeFromFilename_Unused();
+    unsafe void InitializeFromMemory(byte* buffer, uint size);
+    void InitializeFromExifColorSpace_Unused();
+    uint GetType_();
+    [PreserveSig] unsafe int GetProfileBytes(uint size, byte* buffer, out uint actual);
 }
 
 [ComImport, Guid("00000301-a8f2-4877-ba0a-fd2b6645fb94"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -162,7 +173,7 @@ internal interface IWICBitmapFrameEncode
     void SetSize(uint width, uint height);
     void SetResolution(double dpiX, double dpiY);
     void SetPixelFormat(ref Guid pixelFormat);
-    void SetColorContexts_Unused();
+    unsafe void SetColorContexts(uint count, nint* contexts);
     void SetPalette_Unused();
     void SetThumbnail_Unused();
     unsafe void WritePixels(uint lineCount, uint stride, uint bufferSize, byte* pixels);

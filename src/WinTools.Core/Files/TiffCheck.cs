@@ -24,6 +24,33 @@ internal static class TiffCheck
     /// <summary>More strips or tiles than this cannot belong to an image within the pixel limits; refusing early keeps a crafted IFD cheap.</summary>
     private const long MaxChunks = 1_000_000;
 
+    /// <summary>The largest BitsPerSample value of IFD0 (1 if absent, 0 if unreadable).</summary>
+    public static int MaxBitsPerSample(ReadOnlySpan<byte> d)
+    {
+        if (FileSignature.Detect(d) != ImageFormat.Tiff || d.Length < 8) return 0;
+        var le = d[0] == 0x49;
+        int U16(ReadOnlySpan<byte> b, long o) => le ? b[(int)o] | b[(int)o + 1] << 8 : b[(int)o] << 8 | b[(int)o + 1];
+        long U32(ReadOnlySpan<byte> b, long o) => le
+            ? (uint)(b[(int)o] | b[(int)o + 1] << 8 | b[(int)o + 2] << 16 | b[(int)o + 3] << 24)
+            : (uint)(b[(int)o] << 24 | b[(int)o + 1] << 16 | b[(int)o + 2] << 8 | b[(int)o + 3]);
+        var ifd = U32(d, 4);
+        if (ifd < 8 || ifd + 2 > d.Length) return 0;
+        var n = U16(d, ifd);
+        for (var i = 0; i < n && ifd + 2 + (i + 1) * 12L <= d.Length; i++)
+        {
+            var e = ifd + 2 + i * 12L;
+            if (U16(d, e) != TagBitsPerSample) continue;
+            var count = U32(d, e + 4);
+            if (U16(d, e + 2) != 3 || count is <= 0 or > 16) return 0;
+            var at = count <= 2 ? e + 8 : U32(d, e + 8);
+            if (at + count * 2 > d.Length) return 0;
+            var max = 0;
+            for (var k = 0; k < count; k++) max = Math.Max(max, U16(d, at + k * 2));
+            return max;
+        }
+        return 1;
+    }
+
     public static string? Check(ReadOnlySpan<byte> d)
     {
         if (FileSignature.Detect(d) != ImageFormat.Tiff) return "not a TIFF signature";

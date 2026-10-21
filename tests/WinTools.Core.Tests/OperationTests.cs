@@ -93,9 +93,12 @@ public sealed class OperationCatalogTests
     [InlineData("resize.box-800x600x2")]
     [InlineData("resize.width-1e3")]
     [InlineData("delete.everything")]
+    [InlineData("resize.box-0064x0010")]
+    [InlineData("")]
     public void Malformed_ids_are_unknown(string id)
     {
         Assert.Null(OperationCatalog.Find(id));
+        Assert.Null(OperationCatalog.Find(null));
     }
 
     [Fact]

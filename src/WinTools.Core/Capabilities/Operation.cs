@@ -11,8 +11,8 @@ public enum ResizeMode { Percent, Width, Height, Box }
 
 /// <summary>
 /// A resize request. Percent scales both sides. Width or Height fixes one side and scales the other proportionally.
-/// Box fits inside W×H (KeepAspect) or stretches to exactly W×H. With NoUpscale, an image that already fits is left
-/// alone (the job reports "nothing to do").
+/// Box fits inside W×H (KeepAspect) or stretches each axis to W and H. With NoUpscale (the default) no axis grows, so a
+/// stretch only shrinks the axes that are larger, and an image that already fits is left alone ("nothing to do").
 /// </summary>
 public sealed record ResizeSpec(ResizeMode Mode, int Percent = 0, int Width = 0, int Height = 0, bool KeepAspect = true, bool NoUpscale = true)
 {
@@ -116,8 +116,9 @@ public static class OperationCatalog
     /// A catalog operation, or a parameterised resize ("resize.width-800", "resize.height-600", "resize.box-800x600",
     /// "resize.box-800x600-stretch") such as the settings' exact sizes produce. Sizes must be 1..65535.
     /// </summary>
-    public static Operation? Find(string id)
+    public static Operation? Find(string? id)
     {
+        if (string.IsNullOrEmpty(id)) return null;
         var known = All.FirstOrDefault(o => o.Id == id);
         if (known is not null) return known;
         if (id.StartsWith("resize.width-", StringComparison.Ordinal) && Size(id["resize.width-".Length..]) is { } w)
@@ -137,5 +138,5 @@ public static class OperationCatalog
     }
 
     private static int? Size(string s) =>
-        s.Length is > 0 and <= 5 && s.All(char.IsAsciiDigit) && int.Parse(s, CultureInfo.InvariantCulture) is var v and >= 1 and <= 65_535 ? v : null;
+        s.Length is > 0 and <= 5 && s[0] != '0' && s.All(char.IsAsciiDigit) && int.Parse(s, CultureInfo.InvariantCulture) is var v and <= 65_535 ? v : null;
 }

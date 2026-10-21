@@ -48,6 +48,14 @@ Pipeline (`ImagePipeline`):
   - Not offered for BMP or TIFF, where it means nothing; converting is the useful action there.
   - If the result would not be smaller than the input, the job reports `NothingToDo` and writes nothing.
 
+**What carries over, and what does not (all operations):**
+- **ICC colour profiles are kept**, byte for byte, so colours render the same: WIC colour contexts for PNG, JPEG and TIFF; an ICCP chunk for WebP. BMP output has none.
+- **Resolution (DPI) is kept.**
+- **EXIF, GPS, XMP and text are not copied** by convert, resize, rotate or lossy compress. This is disclosed: it removes location data, but also the date taken and camera details. EXIF orientation is applied to the pixels first.
+- **Lossless PNG compression copies the source's ancillary chunks verbatim** (gAMA, cHRM, sRGB, iCCP, pHYs, text, eXIf, tIME). Only the image data's compression changes.
+- **16-bit images** (16-bit PNG, and TIFF above 8 bits per sample) are refused by operations that promise to keep the file (lossless compress, resize, rotate), with `UnsupportedContent`. Conversion produces 8-bit output.
+- **JPEG re-encoding for resize and rotate uses 4:4:4 chroma.** Lossy compression uses the encoder default (4:2:0).
+
 **Multi-page and animated inputs are refused** with `UnsupportedContent` (multi-page TIFF, animated WebP, APNG), rather than silently converting the first frame (decision 2026-10-21). Metadata (EXIF, GPS, ICC) is not copied.
 
 **Encoder output stream:** encoders write into a managed `IStream` over a `MemoryStream` that grows by doubling. With an HGLOBAL stream, the TIFF encoder's many small writes made encoding quadratic: 25 MP of photographic content took 132 s, and now takes 1.4 s. TIFF output uses Deflate compression, which is lossless.

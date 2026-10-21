@@ -137,12 +137,24 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
             var header = new byte[FileSignature.HeaderLength];
             var read = file.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
             var format = FileSignature.Detect(header.AsSpan(0, read));
-            var producible = op.Kind == OperationKind.Convert ? format == op.Target : op.AppliesTo(format);
+            var producible = format == op.OutputFormat(SourceFormat(request.SourcePath));
             if (!producible || !OutputNaming.Candidates(request.SourcePath, format, op.NameSuffix).Contains(result.OutputPath, StringComparer.OrdinalIgnoreCase)) return false;
             file.Position = 0;
             return string.Equals(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(file)), claimed, StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
+
+    /// <summary>The source's real format from its header (the hint from its name if it can no longer be read).</summary>
+    private static ImageFormat SourceFormat(string path)
+    {
+        try
+        {
+            using var source = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var header = new byte[FileSignature.HeaderLength];
+            return FileSignature.Detect(header.AsSpan(0, source.ReadAtLeast(header, header.Length, throwOnEndOfStream: false)));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return FormatHint.FromPath(path); }
     }
 
     private static void DeleteTemp(ConversionRequest request)

@@ -28,7 +28,7 @@ internal static class ConversionJob
         var id = request.Id;
         if (id is not { Length: > 0 and <= 64 } || id.Any(c => !char.IsAsciiLetterOrDigit(c)))
             return ConversionResult.Fail("invalid", ErrorCode.InvalidRequest, "Request id must be 1-64 ASCII letters or digits.");
-        var op = OperationCatalog.Find(request.OperationId);
+        var op = OperationCatalog.Find(request.OperationId); // null for a missing or unknown id
         if (op is null) return ConversionResult.Fail(id, ErrorCode.UnsupportedOperation, $"Unknown operation '{request.OperationId}'.");
         var source = request.SourcePath;
         if (!PathPolicy.IsSupported(source))

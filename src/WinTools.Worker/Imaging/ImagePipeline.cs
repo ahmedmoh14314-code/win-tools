@@ -26,6 +26,10 @@ internal static class ImagePipeline
     /// <summary>Runs one operation on the content of a file whose real format is <paramref name="source"/>.</summary>
     public static Encoded Run(byte[] input, ImageFormat source, Operation op)
     {
+        // Everything is processed at 8 bits per channel. Converting to another format says so in its docs; operations that
+        // promise to keep the file as it is (lossless compression, rotate, resize) refuse deeper images instead.
+        if (op.Kind != OperationKind.Convert && BitDepth.MoreThan8(input, source))
+            throw new ImagingException(ErrorCode.UnsupportedContent, "16-bit images are not supported by this operation yet (it would reduce them to 8 bits); converting is possible.");
         var (image, orientation) = Decode(input, source);
         image = Orientation.Apply(image, orientation);
         var output = op.OutputFormat(source);
@@ -47,7 +51,7 @@ internal static class ImagePipeline
                 bytes = EncodeKeepingQuality(image, output, keepLossless);
                 break;
             case OperationKind.Compress:
-                bytes = Compress(image, output, op.Compress);
+                bytes = Compress(image, output, op.Compress, input);
                 if (bytes.LongLength >= input.LongLength)
                     throw new ImagingException(ErrorCode.NothingToDo, "This setting would not make the file smaller; no copy was written.");
                 break;
@@ -56,9 +60,6 @@ internal static class ImagePipeline
         }
         return new Encoded(bytes, image.Width, image.Height, output);
     }
-
-    /// <summary>Plain conversion, kept for callers that only convert.</summary>
-    public static Encoded Convert(byte[] input, ImageFormat source, ImageFormat target) => Run(input, source, OperationCatalog.Convert(target));
 
     public static (RasterImage Image, int Orientation) Decode(byte[] bytes, ImageFormat format)
     {
@@ -77,13 +78,13 @@ internal static class ImagePipeline
 
     private static byte[] EncodeKeepingQuality(RasterImage image, ImageFormat format, bool losslessWebP) => format switch
     {
-        ImageFormat.Jpeg => WicCodec.Encode(image, format, KeepJpegQuality),
+        ImageFormat.Jpeg => WicCodec.Encode(image, format, KeepJpegQuality, fullChroma: true),
         ImageFormat.WebP => SkiaCodec.EncodeWebP(image, losslessWebP ? 100 : 95, losslessWebP),
         _ => Encode(image, format),
     };
 
     /// <summary>JPEG and WebP: lossy at High 90 / Balanced 80 / Smallest 65. PNG: lossless only, verified pixel for pixel.</summary>
-    private static byte[] Compress(RasterImage image, ImageFormat format, CompressLevel level)
+    private static byte[] Compress(RasterImage image, ImageFormat format, CompressLevel level, byte[] input)
     {
         var quality = level switch { CompressLevel.High => 90, CompressLevel.Small => 65, _ => 80 };
         switch (format)
@@ -93,7 +94,7 @@ internal static class ImagePipeline
             case ImageFormat.WebP when level != CompressLevel.Lossless:
                 return SkiaCodec.EncodeWebP(image, quality, lossless: false);
             case ImageFormat.Png when level == CompressLevel.Lossless:
-                var png = SkiaCodec.EncodePngSmallest(image);
+                var png = SkiaCodec.EncodePngSmallest(image, input);
                 var back = Decode(png, ImageFormat.Png).Image;
                 if (!back.Bgra.AsSpan().SequenceEqual(image.Bgra) && !EqualIgnoringHiddenColour(back.Bgra, image.Bgra))
                     throw new ImagingException(ErrorCode.OutputValidationFailed, "Lossless compression changed pixels.");
