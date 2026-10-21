@@ -1,26 +1,33 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
+using WinTools.Core.Capabilities;
 using WinTools.Core.Files;
+using WinTools.Core.Interaction;
+using WinTools.Core.Output;
+using WinTools.Core.Settings;
 using WinTools.EndToEnd;
 
 // Explorer end-to-end harness for the product host (local and interactive only; it drives the real mouse and keyboard).
-// Usage: WinTools.EndToEnd <png|jpg|bmp|tif|batch|escape|outside|unsupported|fast|worker-crash> [--batch N] [--target jpeg|png|webp|bmp|tiff] [--cycles N] [--fast-ms N] [--results file.jsonl]
-// Each scenario: fresh folder with copies of the committed samples, fresh host with its own log, one Explorer window on
-// that folder. Before every injection the window is re-verified; a release happens only over our overlay or over the
-// folder's own background, otherwise the drag is cancelled with Escape. After every cycle the folder must contain
-// exactly the expected files, the source must be byte-identical, and no temporary file may remain.
+// Usage: WinTools.EndToEnd <png|jpg|bmp|tif|batch|escape|outside|unsupported|category|fast|worker-crash>
+//          [--op <operation id>] [--target jpeg|png|webp|bmp|tiff] [--batch N] [--cycles N] [--fast-ms N] [--results file.jsonl]
+// Each scenario: fresh folder with copies of the committed samples, fresh host with its own log and default settings,
+// one Explorer window on that folder. Before every injection the window is re-verified; a release happens only over our
+// overlay or over the folder's own background, otherwise the drag is cancelled with Escape. After every cycle the folder
+// must contain exactly the expected files, the source must be byte-identical, and no temporary file may remain.
+// Navigation follows the product's two-level menu: point at the category, then move out to the command and wait.
 
 var scenario = args.Length > 0 ? args[0] : "png";
-var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; var batchSize = 12;
+var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; string? opArg = null; var batchSize = 12;
 for (var i = 1; i < args.Length; i++)
 {
     switch (args[i])
     {
         case "--cycles": cycles = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
         case "--fast-ms": fastMs = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
-        case "--target": targetArg = args[++i]; break;
-        case "--batch": batchSize = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break; // files for "batch"   // jpeg|png|webp|bmp|tiff: which command to drop on
+        case "--target": targetArg = args[++i]; break;                // jpeg|png|webp|bmp|tiff: which conversion to drop on
+        case "--op": opArg = args[++i]; break;                        // any menu operation id, e.g. resize.percent-50
+        case "--batch": batchSize = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break; // files for "batch"
         case "--results": resultsPath = Path.GetFullPath(args[++i]); break;
         default: Console.Error.WriteLine($"Unknown option {args[i]}"); return 64;
     }
@@ -34,15 +41,24 @@ var (sample, sourceName, defaultTarget) = scenario switch
     "unsupported" => ("", "notes.txt", ImageFormat.Unknown),
     _ => ("quadrants-64x48.png", "photo.png", ImageFormat.Jpeg),
 };
-var outputFormat = targetArg is null ? defaultTarget : Enum.Parse<ImageFormat>(targetArg, ignoreCase: true);
-var outputName = outputFormat == ImageFormat.Unknown ? null : Path.GetFileNameWithoutExtension(sourceName) + ImageFormats.Extension(outputFormat);
-var expectOutput = scenario is "png" or "jpg" or "bmp" or "tif" or "batch";
-var folder = Path.Combine(Path.GetTempPath(), "wintools-e2e", $"{scenario}-{DateTime.Now:HHmmss}");
+// The host runs with default settings, so the harness sees the same menu.
+var catalog = RadialMenu.Catalog(new AppSettings().CustomResizeId());
+var target = targetArg is null ? defaultTarget : Enum.Parse<ImageFormat>(targetArg, ignoreCase: true);
+var op = opArg is not null ? catalog.FirstOrDefault(o => o.Id == opArg) : target == ImageFormat.Unknown ? null : OperationCatalog.Convert(target);
+if (opArg is not null && op is null) { Console.Error.WriteLine($"Unknown operation {opArg}"); return 64; }
+var sourceFormat = FormatHint.FromPath(sourceName);
+var outputFormat = op is null || !op.WritesFile ? ImageFormat.Unknown : op.OutputFormat(sourceFormat);
+string? OutputNameFor(string path) => outputFormat == ImageFormat.Unknown ? null : Path.GetFileName(OutputNaming.Candidates(path, outputFormat, op!.NameSuffix).First());
+var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "batch";
+var expectOutput = producing && outputFormat != ImageFormat.Unknown;
+var stamp = DateTime.Now.ToString("HHmmss", System.Globalization.CultureInfo.InvariantCulture);
+var folder = Path.Combine(Path.GetTempPath(), "wintools-e2e", $"{scenario}-{stamp}");
 Directory.CreateDirectory(folder);
 var source = Path.Combine(folder, sourceName);
 if (sample.Length > 0) File.Copy(Path.Combine(AppContext.BaseDirectory, "samples", sample), source);
 else File.WriteAllText(source, "plain text, not an image");
 var sourceHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source)));
+var outputName = OutputNameFor(source);
 // Batch: the source plus copies with Unicode names, all selected with Ctrl+A and dragged together.
 var batchSources = new List<string> { source };
 if (scenario == "batch")
@@ -53,14 +69,22 @@ if (scenario == "batch")
         batchSources.Add(copy);
     }
 var batchHashes = batchSources.ToDictionary(f => f, f => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(f))));
-// The ring shows conversions only until the hierarchical menu lands; aim with the same list the host shows.
-var commands = WinTools.Core.Capabilities.CapabilityResolver.Default.Resolve([source]).Where(o => o.Kind == WinTools.Core.Capabilities.OperationKind.Convert).ToArray();
-var hostLog = Path.Combine(folder, "..", $"host-{scenario}-{DateTime.Now:HHmmss}.jsonl");
-resultsPath ??= Path.Combine(folder, "..", $"e2e-{scenario}-{DateTime.Now:HHmmss}.jsonl");
+var menu = RadialMenu.Build(new CapabilityResolver(catalog).Resolve(batchSources));
+var groupIndex = op is null ? -1 : menu.ToList().FindIndex(g => g.Commands.Any(c => c.Id == op.Id));
+var commandIndex = groupIndex < 0 ? -1 : menu[groupIndex].Commands.ToList().FindIndex(c => c.Id == op!.Id);
+if (producing && op is not null && groupIndex < 0) { Console.Error.WriteLine($"{op.Id} is not offered for {sourceName}"); return 4; }
+
+var hostLog = Path.Combine(folder, "..", $"host-{scenario}-{stamp}.jsonl");
+var settingsFile = Path.Combine(folder, "..", $"settings-{scenario}-{stamp}.json");
+resultsPath ??= Path.Combine(folder, "..", $"e2e-{scenario}-{stamp}.jsonl");
 using var results = new StreamWriter(resultsPath, append: false) { AutoFlush = true };
 void Record(object o) { var line = JsonSerializer.Serialize(o); results.WriteLine(line); Console.WriteLine(line); }
 
-var hostInfo = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "WinTools.Host.exe")) { UseShellExecute = false, CreateNoWindow = true, ArgumentList = { "--log", Path.GetFullPath(hostLog) } };
+var hostInfo = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "WinTools.Host.exe"))
+{
+    UseShellExecute = false, CreateNoWindow = true,
+    ArgumentList = { "--log", Path.GetFullPath(hostLog), "--settings", Path.GetFullPath(settingsFile) },
+};
 if (scenario == "worker-crash") hostInfo.Environment["WINTOOLS_WORKER_FAULT"] = "crash-after-temp";
 using var host = Process.Start(hostInfo)!;
 Thread.Sleep(1500);
@@ -69,155 +93,225 @@ if (host.HasExited) { Console.Error.WriteLine($"Host exited early ({host.ExitCod
 var exitCode = 0;
 var passed = 0;
 var hostLogLines = 0;
-// Host events since the previous cycle: how many DragEnters reached the overlay and how many drops it accepted.
-(int Enters, int Accepted) HostEventsSinceLastCycle()
-{
-    var lines = File.Exists(hostLog) ? ReadShared(hostLog) : [];
-    var fresh = lines.Skip(hostLogLines).ToArray();
-    hostLogLines = lines.Length;
-    return (fresh.Count(l => l.Contains("\"ev\":\"drag.enter\"", StringComparison.Ordinal)),
-            fresh.Count(l => l.Contains("\"ev\":\"drop\"", StringComparison.Ordinal) && l.Contains("\"accepted\":true", StringComparison.Ordinal)));
-}
 static string[] ReadShared(string path)
 {
     using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
     using var reader = new StreamReader(fs);
     return reader.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries);
 }
+string[] HostLines() => File.Exists(hostLog) ? ReadShared(hostLog) : [];
+// Host events since the previous cycle, parsed.
+List<JsonElement> HostEventsSinceLastCycle()
+{
+    var lines = HostLines();
+    var fresh = lines.Skip(hostLogLines).Select(l => JsonDocument.Parse(l).RootElement.Clone()).ToList();
+    hostLogLines = lines.Length;
+    return fresh;
+}
+static string Ev(JsonElement e) => e.TryGetProperty("ev", out var v) ? v.GetString() ?? "" : "";
+// Host log lines are {"t","wall","ev","data":{...}}: event fields live under "data".
+static JsonElement Data(JsonElement e) => e.TryGetProperty("data", out var d) && d.ValueKind == JsonValueKind.Object ? d : default;
+static bool Is(JsonElement e, string name, bool value) => Data(e) is { ValueKind: JsonValueKind.Object } d && d.TryGetProperty(name, out var v) && v.ValueKind == (value ? JsonValueKind.True : JsonValueKind.False);
+// The centre and DPI the host used for the overlay shown in this cycle, from its log.
+(int X, int Y, uint Dpi)? LastOverlay()
+{
+    foreach (var l in HostLines().Skip(hostLogLines).Reverse())
+    {
+        if (!l.Contains("\"ev\":\"overlay.show\"", StringComparison.Ordinal)) continue;
+        var e = Data(JsonDocument.Parse(l).RootElement);
+        if (e.ValueKind != JsonValueKind.Object || !e.TryGetProperty("centre", out var centre) || !e.TryGetProperty("dpi", out var dpi)) return null;
+        var c = centre.GetString()!.Split(',');
+        return (int.Parse(c[0], System.Globalization.CultureInfo.InvariantCulture), int.Parse(c[1], System.Globalization.CultureInfo.InvariantCulture), dpi.GetUInt32());
+    }
+    return null;
+}
+
 using (var explorer = ExplorerWindow.Open(folder))
 {
-    var scale = Math.Max(Desktop.GetDpiForWindow(explorer.Hwnd), 96u) / 96.0;
-    int Px(int v) => (int)Math.Round(v * scale);
+    var explorerScale = Math.Max(Desktop.GetDpiForWindow(explorer.Hwnd), 96u) / 96.0;
+    int Px(int v) => (int)Math.Round(v * explorerScale);
     for (var cycle = 1; cycle <= cycles; cycle++)
     {
-        // Batch: grab a copy (the view may sort the plain "photo" out of the realised, visible range).
-        var grabName = scenario == "batch" ? Path.GetFileName(batchSources[1]) : sourceName;
-        if (explorer.ItemCentre(grabName) is not { } item) { Record(new { cycle, abort = "item not found", items = explorer.DescribeItems() }); exitCode = 4; break; }
-        var (cx, cy) = item;
-        if (!explorer.EnsureForeground(cx, cy))
+        try
         {
-            Record(new { cycle, abort = "Explorer window not foreground or covered; refusing to inject",
-                underPoint = Desktop.ClassOf(Desktop.RootAt(cx, cy)), foreground = Desktop.ClassOf(Desktop.GetForegroundWindow()), at = $"{cx},{cy}" });
-            exitCode = 4; break;
-        }
-
-        if (scenario == "batch")
-        {
-            // Select everything in the harness's own folder (guarded), then drag one of the selected items.
-            Desktop.MoveTo(cx, cy); Thread.Sleep(40);
-            Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp();
-            Thread.Sleep((int)Desktop.GetDoubleClickTime() + 200);
-            if (!explorer.EnsureForeground(cx, cy)) { Record(new { cycle, abort = "foreground lost before Ctrl+A" }); exitCode = 4; break; }
-            Desktop.KeyDown(Desktop.VkControl); Desktop.Tap('A'); Desktop.KeyUp(Desktop.VkControl);
-            Thread.Sleep(250);
-        }
-        Desktop.MoveTo(cx, cy); Thread.Sleep(60);
-        Desktop.LeftDown(); Thread.Sleep(80);
-        Desktop.GlideTo(cx + Px(40), cy + Px(30));
-        Thread.Sleep(250);
-        Desktop.GetCursorPos(out var at);
-        // Aim at the middle of the sector of the wanted command, as the product lays them out (clockwise from 12).
-        var index = commands.ToList().FindIndex(o => o.Target == outputFormat);
-        if (index < 0 && expectOutput) { Record(new { cycle, abort = $"{outputFormat} is not offered for {sourceName}" }); exitCode = 4; break; }
-        index = Math.Max(0, index);
-        var angle = (index + 0.5) * 2 * Math.PI / Math.Max(1, commands.Length);
-        var drop = (X: at.X + (int)Math.Round(Px(70) * Math.Sin(angle)), Y: at.Y - (int)Math.Round(Px(70) * Math.Cos(angle)));
-        var outside = (X: at.X, Y: at.Y + Px(200));           // beyond the ring, over the folder background
-        string? releasedOver;
-        double? releaseAfterMs = null;
-
-        var tKey = Stopwatch.GetTimestamp();
-        Desktop.KeyDown(Desktop.VkSpace);
-        if (scenario == "fast")
-        {
-            Desktop.MoveTo(drop.X, drop.Y);
-            while (Stopwatch.GetElapsedTime(tKey).TotalMilliseconds < fastMs) Thread.SpinWait(50);
-            releasedOver = explorer.ReleaseTarget(drop.X, drop.Y); // what was under the pointer just before the release
-            releaseAfterMs = Math.Round(Stopwatch.GetElapsedTime(tKey).TotalMilliseconds, 2);
-            if (releasedOver is null) { Desktop.Tap(Desktop.VkEscape); Thread.Sleep(150); }
-            Desktop.LeftUp();
-            Thread.Sleep(40);
-            Desktop.KeyUp(Desktop.VkSpace);
-        }
-        else
-        {
-            Thread.Sleep(40);
-            Desktop.KeyUp(Desktop.VkSpace);
-            Thread.Sleep(250);
-            if (scenario == "escape")
+            // Batch: grab a copy (the view may sort the plain "photo" out of the realised, visible range).
+            var grabName = scenario == "batch" ? Path.GetFileName(batchSources[1]) : sourceName;
+            if (explorer.ItemCentre(grabName) is not { } item) { Record(new { cycle, abort = "item not found", items = explorer.DescribeItems() }); exitCode = 4; break; }
+            var (cx, cy) = item;
+            if (!explorer.EnsureForeground(cx, cy))
             {
-                releasedOver = "escape";
-                Desktop.Tap(Desktop.VkEscape); Thread.Sleep(150);
+                Record(new { cycle, abort = "Explorer window not foreground or covered; refusing to inject",
+                    underPoint = Desktop.ClassOf(Desktop.RootAt(cx, cy)), foreground = Desktop.ClassOf(Desktop.GetForegroundWindow()), at = $"{cx},{cy}" });
+                exitCode = 4; break;
+            }
+
+            if (scenario == "batch")
+            {
+                // Select everything in the harness's own folder (guarded), then drag one of the selected items.
+                Desktop.MoveTo(cx, cy); Thread.Sleep(40);
+                Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp();
+                Thread.Sleep((int)Desktop.GetDoubleClickTime() + 200);
+                if (!explorer.EnsureForeground(cx, cy)) { Record(new { cycle, abort = "foreground lost before Ctrl+A" }); exitCode = 4; break; }
+                Desktop.KeyDown(Desktop.VkControl); Desktop.Tap('A'); Desktop.KeyUp(Desktop.VkControl);
+                Thread.Sleep(250);
+            }
+            Desktop.MoveTo(cx, cy); Thread.Sleep(60);
+            Desktop.LeftDown(); Thread.Sleep(80);
+            Desktop.GlideTo(cx + Px(40), cy + Px(30));
+            Thread.Sleep(250);
+            Desktop.GetCursorPos(out var at);
+
+            // Points of the wanted category and command, as the product lays them out around the overlay's centre.
+            (int X, int Y) CategoryPoint((int X, int Y, uint Dpi) o)
+            {
+                var (dx, dy) = RingGeometry.PointAt(RingGeometry.SectorCentre(Math.Max(0, groupIndex), Math.Max(1, menu.Count)), (RingGeometry.InnerRadius96 + RingGeometry.OuterRadius96) / 2.0 * o.Dpi / 96);
+                return (o.X + (int)Math.Round(dx), o.Y + (int)Math.Round(dy));
+            }
+            (int X, int Y) CommandPoint((int X, int Y, uint Dpi) o)
+            {
+                if (groupIndex < 0) return CategoryPoint(o);
+                var (start, sweep) = RingGeometry.CommandArc(groupIndex, menu.Count, menu[groupIndex].Commands.Count);
+                var (dx, dy) = RingGeometry.PointAt(RingGeometry.CommandCentre(start, sweep, commandIndex), (RingGeometry.OuterRadius96 + RingGeometry.CommandRadius96) / 2.0 * o.Dpi / 96);
+                return (o.X + (int)Math.Round(dx), o.Y + (int)Math.Round(dy));
+            }
+            var assumed = (at.X, at.Y, Desktop.GetDpiForWindow(explorer.Hwnd));
+            (int X, int Y) release = (at.X, at.Y);
+            string? releasedOver;
+            double? releaseAfterMs = null;
+
+            var tKey = Stopwatch.GetTimestamp();
+            Desktop.KeyDown(Desktop.VkSpace);
+            if (scenario == "fast")
+            {
+                // As fast as a hand can: category and command right after the overlay appears, release at --fast-ms.
+                while (Desktop.ClassOf(Desktop.RootAt(at.X, at.Y)) != "WinTools.RadialOverlay" && Stopwatch.GetElapsedTime(tKey).TotalMilliseconds < fastMs) Thread.SpinWait(50);
+                var o = LastOverlay() ?? assumed;
+                var cat = CategoryPoint(o);
+                Desktop.MoveTo(cat.X, cat.Y); Thread.Sleep(8);
+                release = CommandPoint(o);
+                Desktop.MoveTo(release.X, release.Y);
+                while (Stopwatch.GetElapsedTime(tKey).TotalMilliseconds < fastMs) Thread.SpinWait(50);
+                releasedOver = explorer.ReleaseTarget(release.X, release.Y); // what was under the pointer just before the release
+                releaseAfterMs = Math.Round(Stopwatch.GetElapsedTime(tKey).TotalMilliseconds, 2);
+                if (releasedOver is null) { Desktop.Tap(Desktop.VkEscape); Thread.Sleep(150); }
+                Desktop.LeftUp();
+                Thread.Sleep(40);
+                Desktop.KeyUp(Desktop.VkSpace);
             }
             else
             {
-                var target = scenario == "outside" ? outside : drop;
-                Desktop.GlideTo(target.X, target.Y);
-                Thread.Sleep(120);
-                releasedOver = explorer.ReleaseTarget(target.X, target.Y);
-                var wanted = scenario == "outside" ? "explorer" : "overlay";
-                if (releasedOver != wanted) { Desktop.Tap(Desktop.VkEscape); Thread.Sleep(150); releasedOver = $"refused({releasedOver ?? "unsafe"})"; }
+                Thread.Sleep(40);
+                Desktop.KeyUp(Desktop.VkSpace);
+                Thread.Sleep(250);
+                var o = LastOverlay() ?? assumed;
+                if (scenario == "escape")
+                {
+                    releasedOver = "escape";
+                    Desktop.Tap(Desktop.VkEscape); Thread.Sleep(150);
+                }
+                else
+                {
+                    if (scenario == "outside")
+                        release = (o.X, o.Y + (int)Math.Round(240.0 * o.Dpi / 96)); // beyond the whole menu, over the folder background
+                    else
+                    {
+                        var cat = CategoryPoint(o);
+                        Desktop.GlideTo(cat.X, cat.Y);
+                        Thread.Sleep(120);
+                        // "category" and "unsupported" release on the category itself: that must run nothing.
+                        release = scenario is "category" or "unsupported" ? cat : CommandPoint(o);
+                    }
+                    Desktop.GlideTo(release.X, release.Y);
+                    Thread.Sleep(scenario == "outside" ? 120 : (int)MenuNavigator.ArmDelay.TotalMilliseconds + 150);
+                    releasedOver = explorer.ReleaseTarget(release.X, release.Y);
+                    var wanted = scenario == "outside" ? "explorer" : "overlay";
+                    if (releasedOver != wanted) { Desktop.Tap(Desktop.VkEscape); Thread.Sleep(150); releasedOver = $"refused({releasedOver ?? "unsafe"})"; }
+                }
+                Desktop.LeftUp();
             }
-            Desktop.LeftUp();
-        }
 
-        if (scenario == "batch")
-        {
-            var wanted = batchSources.Select(f => Path.Combine(folder, Path.GetFileNameWithoutExtension(f) + ImageFormats.Extension(outputFormat))).ToArray();
-            var waited = Stopwatch.GetTimestamp();
-            while (Stopwatch.GetElapsedTime(waited) < TimeSpan.FromSeconds(60) && !wanted.All(File.Exists)) Thread.Sleep(200);
-            Thread.Sleep(500);
-            var allValid = wanted.All(w => File.Exists(w) && File.ReadAllBytes(w) is var wb && FileSignature.Detect(wb) == outputFormat && ContainerCheck.IsComplete(wb, outputFormat, out _));
-            var intact = batchSources.All(f => File.Exists(f) && Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(f))) == batchHashes[f]);
-            var present = Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
-            var expectedSet = batchSources.Concat(wanted).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
-            var (benters, baccepted) = HostEventsSinceLastCycle();
-            var bok = allValid && intact && present.SequenceEqual(expectedSet) && baccepted == 1;
-            if (bok) passed++; else exitCode = 1;
-            Record(new { scenario, cycle, files = batchSources.Count, outputs = wanted.Count(File.Exists), allValid, sourcesIntact = intact, cleanFolder = present.SequenceEqual(expectedSet), hostEnters = benters, hostAccepted = baccepted, ok = bok });
-            foreach (var w in wanted) if (File.Exists(w)) File.Delete(w);
+            if (scenario == "batch")
+            {
+                var wanted = batchSources.Select(f => Path.Combine(folder, OutputNameFor(f)!)).ToArray();
+                var waited = Stopwatch.GetTimestamp();
+                while (Stopwatch.GetElapsedTime(waited) < TimeSpan.FromSeconds(60) && !wanted.All(File.Exists)) Thread.Sleep(200);
+                Thread.Sleep(500);
+                var allValid = wanted.All(w => File.Exists(w) && File.ReadAllBytes(w) is var wb && FileSignature.Detect(wb) == outputFormat && ContainerCheck.IsComplete(wb, outputFormat, out _));
+                var intact = batchSources.All(f => File.Exists(f) && Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(f))) == batchHashes[f]);
+                var present = Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
+                var expectedSet = batchSources.Concat(wanted).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
+                var bev = HostEventsSinceLastCycle();
+                var baccepted = bev.Count(e => Ev(e) == "drop" && Is(e, "accepted", true));
+                var bok = allValid && intact && present.SequenceEqual(expectedSet) && baccepted == 1;
+                if (bok) passed++; else exitCode = 1;
+                Record(new { scenario, cycle, op = op?.Id, files = batchSources.Count, outputs = wanted.Count(File.Exists), allValid, sourcesIntact = intact, cleanFolder = present.SequenceEqual(expectedSet), hostAccepted = baccepted, ok = bok });
+                foreach (var w in wanted) if (File.Exists(w)) File.Delete(w);
+                Thread.Sleep((int)Desktop.GetDoubleClickTime() + 300);
+                continue;
+            }
+
+            // Outcome: wait for the output where one is expected; otherwise give a wrong job time to show up.
+            string? output = null;
+            var deadline = Stopwatch.GetTimestamp();
+            var waitFor = expectOutput || scenario == "fast" ? TimeSpan.FromSeconds(scenario == "fast" ? 4 : 15) : TimeSpan.FromSeconds(3);
+            var infoShown = false;
+            while (Stopwatch.GetElapsedTime(deadline) < waitFor)
+            {
+                var produced = Directory.GetFiles(folder).Where(f => !string.Equals(f, source, StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (produced.Length > 0 && !produced.Any(f => Path.GetFileName(f).StartsWith("~wintools-", StringComparison.Ordinal))) { output = produced.Single(); break; }
+                if (op is { WritesFile: false } && Desktop.CloseDialogsOf(host.Id) > 0) { infoShown = true; break; } // "Image info": a box, no file
+                Thread.Sleep(100);
+            }
+            Thread.Sleep(300);
+            var files = Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
+            var sourceIntact = File.Exists(source) && Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source))) == sourceHash;
+            var outputValid = output is not null && File.ReadAllBytes(output) is var bytes && FileSignature.Detect(bytes) == outputFormat && ContainerCheck.IsComplete(bytes, outputFormat, out _);
+            var ev = HostEventsSinceLastCycle();
+            var enters = ev.Count(e => Ev(e) == "drag.enter");
+            var drops = ev.Where(e => Ev(e) == "drop").ToArray();
+            var accepted = drops.Count(e => Is(e, "accepted", true));
+            double? openMs = drops.FirstOrDefault(e => Is(e, "accepted", true)) is { ValueKind: JsonValueKind.Object } d && Data(d).TryGetProperty("openMs", out var om) ? om.GetDouble() : null;
+            // The drag ended on the overlay: a Drop, or a DragLeave after the release over a spot that offers nothing.
+            var endedOnOverlay = drops.Length > 0 || ev.Any(e => Ev(e) == "overlay.hide" && Data(e).TryGetProperty("reason", out var r) && r.GetString() == "dragLeave");
+            var expectedFiles = output is null ? [sourceName] : new[] { sourceName, Path.GetFileName(output) }.Order(StringComparer.Ordinal).ToArray();
+            var cleanFolder = files.SequenceEqual(expectedFiles);
+            var ok = sourceIntact && cleanFolder && scenario switch
+            {
+                "png" or "jpg" or "bmp" or "tif" when op is { WritesFile: false } => output is null && infoShown && accepted == 1,
+                "png" or "jpg" or "bmp" or "tif" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
+                // Fast release, judged by the host: a drag that reached the overlay ends there (no drop lost to the window
+                // below), a command runs only once its category has been open for the arm delay, and an accepted drop must
+                // produce a valid output while a refused one produces nothing.
+                "fast" => (enters == 0 || endedOnOverlay) && (accepted == 0) == (output is null) && (output is null || outputValid)
+                          && (accepted == 0 || openMs >= MenuNavigator.ArmDelay.TotalMilliseconds),
+                "worker-crash" => output is null && accepted == 1, // the drop ran; the crashed job left nothing behind
+                _ => output is null && accepted == 0,              // escape, outside, unsupported, category: nothing runs
+            };
+            if (ok) passed++; else exitCode = 1;
+            Record(new { scenario, cycle, op = op?.Id, releasedOver, releaseAfterMs, hostEnters = enters, hostAccepted = accepted, openMs, endedOnOverlay, infoShown,
+                triggerAt = $"{at.X},{at.Y}", releaseAt = $"{release.X},{release.Y}", output = output is null ? null : Path.GetFileName(output), outputValid, sourceIntact, cleanFolder, files, ok });
+            if (output is not null) File.Delete(output); // the harness's own result file, so the next cycle starts clean
             Thread.Sleep((int)Desktop.GetDoubleClickTime() + 300);
-            continue;
         }
-
-        // Outcome: wait for the output where one is expected; otherwise give a wrong job time to show up.
-        string? output = null;
-        var deadline = Stopwatch.GetTimestamp();
-        var waitFor = expectOutput || scenario == "fast" ? TimeSpan.FromSeconds(scenario == "fast" ? 4 : 15) : TimeSpan.FromSeconds(3);
-        while (Stopwatch.GetElapsedTime(deadline) < waitFor)
+        catch
         {
-            var produced = Directory.GetFiles(folder).Where(f => !string.Equals(f, source, StringComparison.OrdinalIgnoreCase)).ToArray();
-            if (produced.Length > 0 && !produced.Any(f => Path.GetFileName(f).StartsWith("~wintools-", StringComparison.Ordinal))) { output = produced.Single(); break; }
-            Thread.Sleep(100);
+            // Never leave a synthetic drag behind: cancel it, release everything, stop the host, then fail loudly.
+            Desktop.Tap(Desktop.VkEscape); Desktop.KeyUp(Desktop.VkSpace); Desktop.LeftUp();
+            if (!host.HasExited) host.Kill();
+            throw;
         }
-        Thread.Sleep(300);
-        var files = Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
-        var sourceIntact = File.Exists(source) && Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source))) == sourceHash;
-        var outputValid = output is not null && File.ReadAllBytes(output) is var bytes && FileSignature.Detect(bytes) == outputFormat && ContainerCheck.IsComplete(bytes, outputFormat, out _);
-        var (enters, accepted) = HostEventsSinceLastCycle();
-        var expectedFiles = output is null ? [sourceName] : new[] { sourceName, Path.GetFileName(output) }.Order(StringComparer.Ordinal).ToArray();
-        var cleanFolder = files.SequenceEqual(expectedFiles);
-        var ok = sourceIntact && cleanFolder && scenario switch
-        {
-            "png" or "jpg" or "bmp" or "tif" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
-            // Fast release, judged by the host: a drag that entered the overlay must end in an accepted drop (no lost
-            // drop), an accepted drop must produce a valid output, and no drag that missed the overlay may produce one.
-            "fast" => (enters == 0 || accepted == 1) && (accepted == 0) == (output is null) && (output is null || outputValid),
-            "worker-crash" => output is null && accepted == 1, // the drop ran; the crashed job left nothing behind
-            _ => output is null && accepted == 0,
-        };
-        if (ok) passed++; else exitCode = 1;
-        Record(new { scenario, cycle, releasedOver, releaseAfterMs, hostEnters = enters, hostAccepted = accepted, triggerAt = $"{at.X},{at.Y}", releaseAt = scenario == "outside" ? $"{outside.X},{outside.Y}" : $"{drop.X},{drop.Y}", output = output is null ? null : Path.GetFileName(output), outputValid, sourceIntact, cleanFolder, files, ok });
-        if (output is not null) File.Delete(output); // the harness's own result file, so the next cycle starts clean
-        Thread.Sleep((int)Desktop.GetDoubleClickTime() + 300);
     }
 }
 
 var hostAlive = !host.HasExited;
 double? hostPrivateMb = null, hostWorkingSetMb = null;
 if (hostAlive) { host.Refresh(); hostPrivateMb = Math.Round(host.PrivateMemorySize64 / 1048576.0, 1); hostWorkingSetMb = Math.Round(host.WorkingSet64 / 1048576.0, 1); }
-if (hostAlive) { host.Kill(); host.WaitForExit(5000); }
-Record(new { scenario, summary = true, cycles, passed, hostAliveAtEnd = hostAlive, hostPrivateMb, hostWorkingSetMb, hostLog = Path.GetFullPath(hostLog), folder });
+if (hostAlive) { Desktop.CloseDialogsOf(host.Id); host.Kill(); host.WaitForExit(5000); }
+// The harness must leave no injected input behind; say so in the summary and fail if it did.
+var leftDownAtEnd = Desktop.IsDown(0x01);
+var spaceDownAtEnd = Desktop.IsDown(Desktop.VkSpace);
+if (leftDownAtEnd || spaceDownAtEnd) { Desktop.Tap(Desktop.VkEscape); Desktop.KeyUp(Desktop.VkSpace); Desktop.LeftUp(); exitCode = 5; }
+Record(new { scenario, summary = true, cycles, passed, hostAliveAtEnd = hostAlive, leftDownAtEnd, spaceDownAtEnd, hostPrivateMb, hostWorkingSetMb, hostLog = Path.GetFullPath(hostLog), folder });
 if (!hostAlive) exitCode = 2;
 try { Directory.Delete(folder, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
 return exitCode;

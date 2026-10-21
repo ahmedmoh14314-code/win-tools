@@ -105,11 +105,12 @@
         "The radial UI contains no per-format branching.",
         "Adding a new format or operation requires no change to the radial menu architecture (demonstrated by adding one in a test)."
       ],
-      "status": "unverified",
+      "status": "in-progress",
       "source": "brief.md §Context-aware radial menu",
       "relatedAdrs": [
-        "ADR-0007"
-      ]
+        "ADR-0014"
+      ],
+      "evidence": "CapabilityResolver answers the question (CapabilityResolverTests, CapabilityMatrixTests). RadialMenu.Build groups the resolver's answer by operation kind; the overlay paints a MenuView of labels only (no per-format branching). RadialMenuTests.A_new_operation_appears_without_any_menu_change adds an operation in a test and it appears with no menu change. Explorer runs of the menu: png and jpg conversion passed (2026-10-21); the other scenarios are still to be recorded."
     },
     {
       "id": "UX-005",
@@ -463,7 +464,7 @@
       "relatedAdrs": [
         "ADR-0006"
       ],
-      "evidence": "MetadataTests and MetadataAllowListTests (Core: C2PA/private/legacy PNG chunks, data after IEND/EOI/RIFF, comments between JPEG scans, vendor APP14, JFIF thumbnails, padded orientation EXIF, truncated input refused); MetadataOperationTests, MetadataHardeningTests, TiffMetadataTests (Worker). Not yet in the menu (hierarchical menu, TASK 4)."
+      "evidence": "MetadataTests and MetadataAllowListTests (Core: C2PA/private/legacy PNG chunks, data after IEND/EOI/RIFF, comments between JPEG scans, vendor APP14, JFIF thumbnails, padded orientation EXIF, truncated input refused); MetadataOperationTests, MetadataHardeningTests, TiffMetadataTests (Worker). Reachable through Tools in the two-level menu (ADR-0014)."
     },
     {
       "id": "OPS-002",
@@ -478,7 +479,7 @@
       "relatedAdrs": [
         "ADR-0006"
       ],
-      "evidence": "MetadataOperationTests.Image_info_reports_facts_and_writes_nothing. Shown in a plain message box; not yet in the menu (TASK 4)."
+      "evidence": "MetadataOperationTests.Image_info_reports_facts_and_writes_nothing. Shown in a plain message box; reachable through Tools in the two-level menu (ADR-0014)."
     },
     {
       "id": "OPS-003",

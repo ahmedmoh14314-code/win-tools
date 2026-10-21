@@ -18,19 +18,22 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
 
     private readonly HostLog _log;
     private readonly JobRunner _jobs;
-    private readonly CapabilityResolver _resolver = CapabilityResolver.Default;
+    private readonly CapabilityResolver _resolver;
     private readonly InteractionSession _session = new();
     private readonly MessageWindow _window;
     private readonly RadialOverlay _overlay;
     private readonly LowLevelHooks _hooks;
-    private IReadOnlyList<Operation> _commands = [];
-    private long _triggerTimestamp;
+    private MenuNavigator? _navigator; // built on the first DragEnter of each overlay session
+    private long _triggerTimestamp, _shownTimestamp;
+    private uint _dpi = 96;
     private (int X, int Y) _anchor;
 
-    public InteractionCoordinator(HostLog log, JobRunner jobs, int triggerVirtualKey)
+    /// <param name="catalog">The operations the menu may offer (<see cref="RadialMenu.Catalog"/>).</param>
+    public InteractionCoordinator(HostLog log, JobRunner jobs, int triggerVirtualKey, IReadOnlyList<Operation> catalog)
     {
         _log = log;
         _jobs = jobs;
+        _resolver = new CapabilityResolver(catalog);
         _window = new MessageWindow(OnMessage);
         _overlay = new RadialOverlay(this);
         _hooks = new LowLevelHooks(_window.Handle, triggerVirtualKey);
@@ -82,9 +85,11 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         switch (action)
         {
             case SessionAction.ShowOverlay:
-                _commands = [];
-                var centre = _overlay.ShowAt(_anchor.X, _anchor.Y);
-                _log.Event("overlay.show", new { hookToShownMs = Math.Round(Stopwatch.GetElapsedTime(_triggerTimestamp).TotalMilliseconds, 3), anchor = $"{_anchor.X},{_anchor.Y}", centre = $"{centre.X},{centre.Y}" });
+                _navigator = null;
+                var placed = _overlay.ShowAt(_anchor.X, _anchor.Y);
+                _shownTimestamp = Stopwatch.GetTimestamp();
+                _dpi = placed.Dpi;
+                _log.Event("overlay.show", new { hookToShownMs = Math.Round(Stopwatch.GetElapsedTime(_triggerTimestamp).TotalMilliseconds, 3), anchor = $"{_anchor.X},{_anchor.Y}", centre = $"{placed.CentreX},{placed.CentreY}", dpi = placed.Dpi });
                 break;
             case SessionAction.HideOverlay:
                 _window.StopTimer(SessionTimer);
@@ -102,13 +107,33 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         }
     }
 
-    void IOverlayEvents.DragEntered(IReadOnlyList<string> paths)
+    bool IOverlayEvents.DragEntered(IReadOnlyList<string> paths, int dx, int dy)
     {
         var action = _session.OnDragEntered();
-        _commands = Shown(_resolver.Resolve(paths));
-        _overlay.SetCommands(_commands.Select(c => c.Label).ToArray());
+        var first = _navigator is null;
+        // One menu per overlay session: a drag that leaves and comes back keeps the open category and its timing.
+        _navigator ??= new MenuNavigator(RadialMenu.Build(_resolver.Resolve(paths)), _dpi);
+        var armed = Track(dx, dy);
         Apply(action, "dragEnterAfterRelease");
-        _log.Event("drag.enter", new { files = paths.Count, commands = _commands.Select(c => c.Id), hookToEnterMs = Math.Round(Stopwatch.GetElapsedTime(_triggerTimestamp).TotalMilliseconds, 3) });
+        if (first)
+            _log.Event("drag.enter", new { files = paths.Count, groups = _navigator.Groups.Select(g => $"{g.Label}:{g.Commands.Count}"), hookToEnterMs = Math.Round(Stopwatch.GetElapsedTime(_triggerTimestamp).TotalMilliseconds, 3) });
+        else
+            _log.Event("drag.reenter");
+        return armed;
+    }
+
+    bool IOverlayEvents.DragMoved(int dx, int dy) => _navigator is not null && Track(dx, dy);
+
+    /// <summary>Feeds the pointer to the navigator, repaints if the view changed, and says whether a drop now would run.</summary>
+    private bool Track(int dx, int dy)
+    {
+        var nav = _navigator!;
+        var now = Stopwatch.GetElapsedTime(_shownTimestamp);
+        var before = nav.Active;
+        nav.Move(dx, dy, now);
+        if (nav.Active != before) _log.Event("menu.open", new { group = nav.Active!.Label, msSinceShown = Math.Round(now.TotalMilliseconds, 1) });
+        _overlay.SetView(nav.View(now));
+        return nav.Armed(now) is not null;
     }
 
     void IOverlayEvents.DragLeft()
@@ -117,34 +142,37 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         Apply(_session.OnDragLeft(), "dragLeave");
     }
 
-    bool IOverlayEvents.Dropped(IReadOnlyList<string> paths, int sector, int dropX, int dropY)
+    bool IOverlayEvents.Dropped(IReadOnlyList<string> paths, int dx, int dy, bool copyAllowed)
     {
-        var shown = _commands;
-        var execute = _session.OnDrop(sector, shown.Count);
+        var now = Stopwatch.GetElapsedTime(_shownTimestamp);
+        Operation? chosen = null, hot = null;
+        var openMs = 0.0;
+        if (copyAllowed && _navigator is { } nav)
+        {
+            nav.Move(dx, dy, now);
+            chosen = nav.Armed(now);
+            hot = nav.Hot;
+            openMs = Math.Round(nav.ActiveFor(now).TotalMilliseconds, 1);
+        }
+        var execute = _session.OnDrop(chosen is null ? -1 : 0, 1);
         _window.StopTimer(SessionTimer);
         _overlay.Hide();
-        if (execute is not int index)
+        if (execute is null || chosen is null)
         {
-            _log.Event("drop", new { sector, accepted = false, files = paths.Count, at = $"{dropX},{dropY}" });
+            var reason = !copyAllowed ? "copyNotAllowed" : hot is not null ? "notArmed" : "noCommand";
+            _log.Event("drop", new { accepted = false, reason, hot = hot?.Id, openMs, files = paths.Count, at = $"{dx},{dy}" });
             return false;
         }
-        // Re-resolve from the drop's own data object; run only if it still offers the command that was shown.
-        var now = Shown(_resolver.Resolve(paths));
-        if (index >= now.Length || now[index] != shown[index])
+        // Re-resolve from the drop's own data object; run only if it still offers the command that was armed.
+        if (!_resolver.Resolve(paths).Any(o => o.Id == chosen.Id))
         {
-            _log.Event("drop", new { sector, accepted = false, files = paths.Count, reason = "commandsChanged" });
+            _log.Event("drop", new { accepted = false, reason = "commandsChanged", files = paths.Count });
             return false;
         }
-        _log.Event("drop", new { sector, accepted = true, op = now[index].Id, files = paths.Count });
-        _ = _jobs.Start(now[index], paths);
+        _log.Event("drop", new { accepted = true, op = chosen.Id, openMs, files = paths.Count });
+        _ = _jobs.Start(chosen, paths);
         return true;
     }
-
-    /// <summary>
-    /// The flat ring shows conversions only. Resize, compress and rotate are complete in the worker, and reach the
-    /// ring through the hierarchical menu (next slice): fourteen sectors on one ring are not usable.
-    /// </summary>
-    private static Operation[] Shown(IReadOnlyList<Operation> ops) => ops.Where(o => o.Kind == OperationKind.Convert).ToArray();
 
     public void Dispose()
     {

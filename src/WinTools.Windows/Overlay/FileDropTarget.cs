@@ -4,32 +4,30 @@ using WinTools.Windows.Native;
 namespace WinTools.Windows.Overlay;
 
 /// <summary>
-/// The overlay's OLE drop target. Accepts only CF_HDROP, from sources that allow COPY. The effect is DROPEFFECT_COPY over a valid command and
-/// DROPEFFECT_NONE everywhere else; it is never DROPEFFECT_MOVE, which would let a shell source delete the originals.
-/// Callbacks run on the overlay's (STA) thread.
+/// The overlay's OLE drop target. Accepts only CF_HDROP, from sources that allow COPY. The effect is DROPEFFECT_COPY over
+/// an armed command and DROPEFFECT_NONE everywhere else; it is never DROPEFFECT_MOVE, which would let a shell source
+/// delete the originals. Callbacks run on the overlay's (STA) thread.
 /// </summary>
 public sealed class FileDropTarget(RadialOverlay overlay) : IDropTarget
 {
     private bool _hasFiles, _copyAllowed;
 
-    // COPY over a command, and only if the source allows COPY; NONE everywhere else.
-    private uint Effect(POINTL pt) => _hasFiles && _copyAllowed && overlay.IsCommandAt(pt.X, pt.Y) ? Ole32.DROPEFFECT_COPY : Ole32.DROPEFFECT_NONE;
+    // COPY over an armed command, and only if the source allows COPY; NONE everywhere else.
+    private uint Effect(bool armed) => _hasFiles && _copyAllowed && armed ? Ole32.DROPEFFECT_COPY : Ole32.DROPEFFECT_NONE;
 
     public int DragEnter(IDataObject dataObject, uint keyState, POINTL pt, ref uint effect)
     {
         var paths = HDrop.TryRead(dataObject);
         _hasFiles = paths.Count > 0;
         _copyAllowed = (effect & Ole32.DROPEFFECT_COPY) != 0;
-        overlay.OnDragEnter(_copyAllowed ? paths : [], pt.X, pt.Y);
-        effect = Effect(pt);
+        effect = Effect(overlay.OnDragEnter(_copyAllowed ? paths : [], pt.X, pt.Y));
         return 0;
     }
 
     public int DragOver(uint keyState, POINTL pt, ref uint effect)
     {
-        overlay.OnDragOver(pt.X, pt.Y);
         _copyAllowed = (effect & Ole32.DROPEFFECT_COPY) != 0;
-        effect = Effect(pt);
+        effect = Effect(overlay.OnDragOver(pt.X, pt.Y));
         return 0;
     }
 

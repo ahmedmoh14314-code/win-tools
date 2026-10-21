@@ -10,18 +10,18 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 | 0. Stabilise main | Done (PR #1 merged) |
 | 1. Formats and capability matrix | Done (PR #2 merged) |
 | 2. Resize, compress, rotate | Done (PR #3 merged) |
-| 3. Metadata, image info, batch, settings, output folder | In review (branch `feat/metadata-batch-settings`) |
-| 4. Hierarchical radial menu | Next |
+| 3. Metadata, image info, batch, settings, output folder | Done (PR #4 merged) |
+| 4. Hierarchical radial menu | In review (branch `feat/hierarchical-menu`) |
 | 5. V1 hardening | Pending |
 | 6. Final acceptance gate | Pending |
 
 ## Last known-good commit
-`main` at the merge of PR #3 (CI `build-and-test` green). `main` is protected: pull request and a green `build-and-test` required.
+`main` at the merge of PR #4 (CI `build-and-test` green). `main` is protected: pull request and a green `build-and-test` required.
 
 ## Work completed
 - Formats: PNG, JPEG, WebP, BMP, TIFF in every direction (ADR-0006). SVG and HEIC deferred (ADR-0012).
 - Operations: convert; resize (percent and boxes); compress (three levels, PNG lossless); rotate; remove metadata; image info. Batch up to 1000 files through a pool of at most 4 workers (ADR-0005). Settings data layer (ADR-0013).
-- The ring still shows Convert commands only; the other operations reach the menu with the hierarchical menu (TASK 4).
+- The radial menu has two levels: categories (Convert, Compress, Resize, Rotate, Tools) in the inner ring and the commands of the open category in an outer arc (ADR-0014). Every operation is reachable from Explorer.
 - Measurements: `docs/performance/2026-10-21-first-slice.md`, `docs/performance/2026-10-21-batch.md`. Threat model: `docs/security/threat-model.md`. Dependency matrix: `docs/architecture/dependency-matrix.md` (SkiaSharp for WebP, worker only).
 
 ## Decisions made
@@ -32,7 +32,7 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 ## Open questions (each with the experiment or decision that closes it)
 - Multi-monitor and mixed DPI; the Desktop as drag source; Windows 10. These need the manual protocol or Windows Sandbox.
 - A user-visible failure state (notifications or a tray icon). Today a failure gives only the error sound and a log entry.
-- Accidental activation: minimum visible time and movement threshold before a drop runs a command (TASK 4, measured).
+- Accidental activation: a 28 px dead zone and a 150 ms minimum open time are implemented and unit-tested (ADR-0014). The Explorer `fast` and `category` runs that measure them are still to be recorded.
 - JPEGs with benign codec warnings are refused; not yet measured on a real-world photo set (TASK 5).
 - Image limits (100 MP) are high for 4 parallel workers; lower limits and a job-object memory cap (TASK 5).
 - Overlay accessibility: its own provider, which must not block the overlay thread.
@@ -41,4 +41,4 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 None.
 
 ## Next recommended task
-Merge TASK 3 after review, then TASK 4: the hierarchical radial menu fed by the capability resolver.
+Finish the TASK 4 Explorer runs (they need the desktop free), the evaluator, and the merge; then TASK 5 hardening.

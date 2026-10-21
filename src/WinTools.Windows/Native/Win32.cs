@@ -101,12 +101,14 @@ internal static partial class User32
 internal static partial class Gdi32
 {
     private const string Lib = "gdi32.dll";
-    public const int TRANSPARENT = 1, PS_SOLID = 0;
+    public const int TRANSPARENT = 1, PS_SOLID = 0, WINDING = 2, RGN_OR = 2;
     public const uint SRCCOPY = 0x00CC0020;
 
     public static uint Rgb(byte r, byte g, byte b) => (uint)(r | g << 8 | b << 16);
 
     [LibraryImport(Lib)] public static partial nint CreateEllipticRgn(int l, int t, int r, int b);
+    [LibraryImport(Lib)] public static partial nint CreatePolygonRgn([In] POINT[] points, int count, int fillMode);
+    [LibraryImport(Lib)] public static partial int CombineRgn(nint dst, nint src1, nint src2, int mode);
     [LibraryImport(Lib)] public static partial nint CreateCompatibleDC(nint hdc);
     [LibraryImport(Lib)] public static partial nint CreateCompatibleBitmap(nint hdc, int w, int h);
     [LibraryImport(Lib)] public static partial nint SelectObject(nint hdc, nint obj);

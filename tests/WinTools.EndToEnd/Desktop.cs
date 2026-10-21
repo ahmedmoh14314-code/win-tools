@@ -20,9 +20,16 @@ internal static partial class Desktop
     [LibraryImport("user32.dll")] public static partial nint GetAncestor(nint hwnd, uint flags);
     [LibraryImport("user32.dll")] public static partial nint GetForegroundWindow();
     [LibraryImport("user32.dll")] public static partial uint GetDoubleClickTime();
+    [LibraryImport("user32.dll")] private static partial short GetAsyncKeyState(int vk);
+    /// <summary>Whether a key or button is down right now (VK_LBUTTON = 1).</summary>
+    public static bool IsDown(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool SetWindowPos(nint hwnd, nint after, int x, int y, int cx, int cy, uint flags);
     [LibraryImport("user32.dll")] public static partial uint GetDpiForWindow(nint hwnd);
     [LibraryImport("user32.dll")] private static unsafe partial int GetClassNameW(nint hwnd, char* name, int max);
+    [LibraryImport("user32.dll")] private static partial uint GetWindowThreadProcessId(nint hwnd, out uint pid);
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool PostMessageW(nint hwnd, uint msg, nuint w, nint l);
+    [LibraryImport("user32.dll")] private static partial nint FindWindowExW(nint parent, nint after, nint className, nint title);
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool IsWindowVisible(nint hwnd);
 
     public static readonly nint HwndTopmost = -1, HwndNoTopmost = -2;
     public const uint SwpNoMove = 0x2, SwpNoSize = 0x1, SwpNoActivate = 0x10, SwpNoZOrder = 0x4;
@@ -33,6 +40,19 @@ internal static partial class Desktop
         var n = GetClassNameW(hwnd, buf, 256);
         return n > 0 ? new string(buf, 0, n) : "";
     }
+    /// <summary>Closes the visible message boxes (dialog class #32770) owned by <paramref name="pid"/>; returns how many.</summary>
+    public static int CloseDialogsOf(int pid)
+    {
+        var closed = 0;
+        for (nint w = FindWindowExW(0, 0, 0, 0); w != 0; w = FindWindowExW(0, w, 0, 0))
+        {
+            if (!IsWindowVisible(w) || ClassOf(w) != "#32770") continue;
+            _ = GetWindowThreadProcessId(w, out var owner);
+            if (owner == (uint)pid && PostMessageW(w, 0x0010 /* WM_CLOSE */, 0, 0)) closed++;
+        }
+        return closed;
+    }
+
     public static nint RootAt(int x, int y) => GetAncestor(WindowFromPoint(new POINT { X = x, Y = y }), 2 /* GA_ROOT */);
 
     public static void MoveTo(int x, int y)
