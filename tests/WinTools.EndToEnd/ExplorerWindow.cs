@@ -84,6 +84,19 @@ internal sealed class ExplorerWindow : IDisposable
         return null;
     }
 
+    /// <summary>Diagnostics: the control types and names of the first few items in the view.</summary>
+    public string DescribeItems()
+    {
+        try
+        {
+            var items = _root.FindAll(TreeScope.Descendants, new OrCondition(
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem),
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.DataItem)));
+            return string.Join(" | ", items.Cast<AutomationElement>().Take(6).Select(e => $"{e.Current.ControlType.ProgrammaticName}:{e.Current.Name}")) + $" (count {items.Count})";
+        }
+        catch (ElementNotAvailableException) { return "unavailable"; }
+    }
+
     /// <summary>
     /// Whether releasing at (x, y) is safe and what is there: our overlay, or this window's folder background (a drop on
     /// the folder that holds the file is a no-op for Explorer). Anything else, including an item, is refused (null).

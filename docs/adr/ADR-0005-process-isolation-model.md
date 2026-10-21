@@ -8,7 +8,20 @@
 Converters parse untrusted input and may crash, hang or exhaust memory. The main UI process must survive and stay responsive. Preferred model: Main app → Job → Worker process → Engine. Open questions: one worker per job vs a pooled worker; IPC mechanism (stdin/stdout framing, named pipes, anonymous pipes); progress reporting; cancellation (cooperative via IPC, hard via `Process.Kill`); timeouts; job objects to cap memory/CPU and kill child trees; whether to lower the worker's integrity level or use a restricted token; how the worker gets engine assemblies loaded on demand.
 
 ## Decision
-**One disposable worker process per batch, started on demand; line-delimited JSON over redirected stdin/stdout.**
+**A bounded pool of disposable worker processes per batch, started on demand; line-delimited JSON over redirected stdin/stdout.**
+- **Parallelism:** half the logical processors, capped at 4, and never more lanes than files. Each lane takes files from one queue with its own worker. Measured on 12 logical processors, 100 photos of 1200×900 converted to WebP:
+
+  | Lanes | Time |
+  |---|---|
+  | 1 | 20.9 s |
+  | 2 | 9.9 s |
+  | 4 | 6.1 s |
+  | 6 | 4.7 s |
+  | 8 | 4.1 s |
+
+  4 lanes give a 3.4× speed-up; more add little and multiply the worst-case memory.
+- **Failure containment:** a crash, hang or protocol violation fails only the current file. The lane kills its worker, deletes that file's temporary file, and starts a new worker for the next file. A lane stops after 3 failures in a row (a success resets the count) and reports what is left as not run, so scattered bad files never end a long batch. One invalid file never takes down the rest of the batch.
+- **Cancellation:** lanes stop taking files; unfinished files are reported as `Cancelled`, never as crashes.
 - The host starts `WinTools.Worker.exe` (next to the host) when a drop runs a command. It uses `ProcessStartInfo` with no arguments, no shell, no window, a working directory it owns, and below-normal priority. The worker exits when its stdin closes. Nothing runs while idle.
 - Protocol: one `ConversionRequest {id, operationId, sourcePath}` per line in, one `ConversionResult {id, success, error, message, outputPath}` per line out. Non-ASCII is JSON-escaped, so the pipe is ASCII. Lines are limited to 64 KiB. Stderr is kept, bounded to 4 KiB.
 - Failure handling in the host (`WorkerClient`):

@@ -9,23 +9,90 @@ using WinTools.Windows;
 namespace WinTools.Host.Jobs;
 
 /// <summary>
-/// Runs a batch of conversions in a fresh worker process and maps every way the worker can fail to a structured
-/// result. The worker is disposable: on a crash, a hang past the per-job timeout or a protocol violation the process is
-/// killed, the request's known temporary file is deleted, and the rest of the batch is reported as not run. The host
-/// also re-checks every success claim (the file exists and has a name the naming policy allows for that source).
+/// Runs a batch in a bounded pool of disposable worker processes and maps every way a worker can fail to a structured
+/// result per file.
+/// <list type="bullet">
+/// <item>Lanes (at most <see cref="DefaultParallelism"/>, never more than the number of files) take files from one queue,
+/// each with its own worker.</item>
+/// <item>A crash, a hang past the per-job timeout or a protocol violation fails only the file being processed: its worker
+/// is killed, its known temporary file is deleted, and the lane starts a new worker for the next file. A lane gives up
+/// after <see cref="MaxRestartsPerLane"/> failures in a row (a success resets the count); what is left is reported as not run.</item>
+/// <item>Cancellation stops taking new files; the unfinished ones are reported as Cancelled.</item>
+/// <item>The host re-checks every success claim (allowed name, real format, SHA-256).</item>
+/// </list>
 /// </summary>
-internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IReadOnlyDictionary<string, string>? environment = null)
+internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IReadOnlyDictionary<string, string>? environment = null, int parallelism = 0)
 {
-    /// <summary>Whether the last worker was placed in the host's kill-on-close job object (logged by the caller).</summary>
+    /// <summary>Measured choice (docs/performance): half the logical processors, between 1 and 4.</summary>
+    public static int DefaultParallelism => Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
+
+    public const int MaxRestartsPerLane = 3;
+
+    /// <summary>Whether every worker of the last batch was placed in the host's kill-on-close job object (logged by the caller).</summary>
     public bool JobObjectAssigned { get; private set; }
 
     public async Task<IReadOnlyList<ConversionResult>> RunAsync(IReadOnlyList<ConversionRequest> requests, CancellationToken cancellationToken)
     {
-        var results = new List<ConversionResult>(requests.Count);
-        if (requests.Count == 0) return results;
+        if (requests.Count == 0) return [];
         if (requests.Any(r => !PathPolicy.IsSupported(r.SourcePath))) // also checked by the resolver; the pipe must never carry one
             return requests.Select(r => ConversionResult.Fail(r.Id, ErrorCode.InvalidRequest, "Unsupported source path.")).ToArray();
 
+        var results = new ConversionResult?[requests.Count];
+        var queue = new System.Collections.Concurrent.ConcurrentQueue<int>(Enumerable.Range(0, requests.Count));
+        var lanes = Math.Clamp(parallelism > 0 ? parallelism : DefaultParallelism, 1, requests.Count);
+        var allAssigned = true;
+        await Task.WhenAll(Enumerable.Range(0, lanes).Select(_ => Task.Run(async () =>
+        {
+            if (!await RunLaneAsync(queue, requests, results, cancellationToken).ConfigureAwait(false)) allAssigned = false;
+        }, CancellationToken.None))).ConfigureAwait(false);
+        JobObjectAssigned = allAssigned;
+        for (var i = 0; i < results.Length; i++)
+            results[i] ??= cancellationToken.IsCancellationRequested
+                ? ConversionResult.Fail(requests[i].Id, ErrorCode.Cancelled, "Cancelled before it ran.")
+                : ConversionResult.Fail(requests[i].Id, ErrorCode.WorkerCrashed, "Not run: the workers kept failing.");
+        return results!;
+    }
+
+    /// <summary>One lane: a worker that processes files from the queue until it is empty. Returns whether every worker it started joined the job object.</summary>
+    private async Task<bool> RunLaneAsync(System.Collections.Concurrent.ConcurrentQueue<int> queue, IReadOnlyList<ConversionRequest> requests,
+        ConversionResult?[] results, CancellationToken cancellationToken)
+    {
+        Process? process = null;
+        var restarts = 0;
+        var assigned = true;
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested && queue.TryDequeue(out var i))
+            {
+                var request = requests[i];
+                if (process is null)
+                {
+                    process = Start(out var inJob);
+                    assigned &= inJob;
+                    if (process is null) { results[i] = ConversionResult.Fail(request.Id, ErrorCode.WorkerCrashed, "The conversion worker could not be started."); return assigned; }
+                }
+                var attempt = await RunOneAsync(process, request, cancellationToken).ConfigureAwait(false);
+                if (attempt.Result is { } ok) { results[i] = ok; restarts = 0; continue; }
+
+                Kill(process);
+                process.Dispose();
+                process = null;
+                DeleteTemp(request);
+                results[i] = attempt.Error!;
+                if (cancellationToken.IsCancellationRequested) return assigned;
+                if (++restarts > MaxRestartsPerLane) return assigned; // the remaining files are reported as not run
+            }
+            return assigned;
+        }
+        finally
+        {
+            if (process is not null) await CloseAsync(process).ConfigureAwait(false);
+        }
+    }
+
+    private Process? Start(out bool inJob)
+    {
+        inJob = false;
         var psi = new ProcessStartInfo(workerPath)
         {
             UseShellExecute = false,
@@ -39,44 +106,26 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
             WorkingDirectory = Path.GetDirectoryName(workerPath)!,
         };
         if (environment is not null) foreach (var (k, v) in environment) psi.Environment[k] = v;
-
         Process process;
         try { process = Process.Start(psi) ?? throw new InvalidOperationException("Process.Start returned null."); }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { return null; }
+        process.ErrorDataReceived += static (_, _) => { }; // drained so the pipe can never fill; codec text is handled in the worker
+        process.BeginErrorReadLine();
+        inJob = WorkerJobObject.TryAssign(process); // if the host dies, Windows kills the worker with it
+        try { process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch (InvalidOperationException) { } catch (System.ComponentModel.Win32Exception) { }
+        return process;
+    }
+
+    private static async Task CloseAsync(Process process)
+    {
+        try
         {
-            return requests.Select(r => ConversionResult.Fail(r.Id, ErrorCode.WorkerCrashed, "The conversion worker could not be started.")).ToArray();
+            process.StandardInput.Close();
+            using var exit = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await process.WaitForExitAsync(exit.Token).ConfigureAwait(false);
         }
-
-        using (process)
-        {
-            process.ErrorDataReceived += static (_, _) => { }; // drained so the pipe can never fill; codec text is handled in the worker
-            process.BeginErrorReadLine();
-            JobObjectAssigned = WorkerJobObject.TryAssign(process); // if the host dies, Windows kills the worker with it
-            try { process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch (InvalidOperationException) { } catch (System.ComponentModel.Win32Exception) { }
-
-            for (var i = 0; i < requests.Count; i++)
-            {
-                var request = requests[i];
-                var failure = await RunOneAsync(process, request, cancellationToken).ConfigureAwait(false);
-                if (failure.Result is { } ok) { results.Add(ok); continue; }
-
-                Kill(process);
-                DeleteTemp(request);
-                results.Add(failure.Error!);
-                for (var j = i + 1; j < requests.Count; j++)
-                    results.Add(ConversionResult.Fail(requests[j].Id, ErrorCode.WorkerCrashed, "Not run: the worker stopped earlier in this batch."));
-                break;
-            }
-
-            try
-            {
-                process.StandardInput.Close();
-                using var exit = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                await process.WaitForExitAsync(exit.Token).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is OperationCanceledException or IOException or InvalidOperationException) { Kill(process); }
-        }
-        return results;
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or InvalidOperationException) { Kill(process); }
+        finally { process.Dispose(); }
     }
 
     private readonly record struct Attempt(ConversionResult? Result, ConversionResult? Error);
@@ -98,7 +147,7 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
         }
         catch (OperationCanceledException)
         {
-            return new(null, ConversionResult.Fail(request.Id, ErrorCode.WorkerCrashed, "Cancelled."));
+            return new(null, ConversionResult.Fail(request.Id, ErrorCode.Cancelled, "Cancelled."));
         }
         catch (IOException)
         {
@@ -130,7 +179,9 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
     internal static bool IsBelievable(ConversionRequest request, ConversionResult result)
     {
         if (!result.Success) return result.OutputPath is null && result.Error != ErrorCode.None;
-        if (result.OutputPath is null || result.OutputSha256 is not { Length: 64 } claimed || OperationCatalog.Find(request.OperationId) is not { } op) return false;
+        if (OperationCatalog.Find(request.OperationId) is not { } op) return false;
+        if (!op.WritesFile) return result.OutputPath is null && result.Info is not null; // "Image info": facts, no file
+        if (result.OutputPath is null || result.OutputSha256 is not { Length: 64 } claimed) return false;
         try
         {
             using var file = new FileStream(result.OutputPath, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -138,11 +189,11 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
             var read = file.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
             var format = FileSignature.Detect(header.AsSpan(0, read));
             var producible = format == op.OutputFormat(SourceFormat(request.SourcePath));
-            if (!producible || !OutputNaming.Candidates(request.SourcePath, format, op.NameSuffix).Contains(result.OutputPath, StringComparer.OrdinalIgnoreCase)) return false;
+            if (!producible || !OutputNaming.Candidates(request.SourcePath, format, op.NameSuffix, request.OutputDirectory).Contains(result.OutputPath, StringComparer.OrdinalIgnoreCase)) return false;
             file.Position = 0;
             return string.Equals(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(file)), claimed, StringComparison.OrdinalIgnoreCase);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return false; } // incl. empty or NUL-containing paths
     }
 
     /// <summary>The source's real format from its header (the hint from its name if it can no longer be read).</summary>
@@ -159,7 +210,7 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
 
     private static void DeleteTemp(ConversionRequest request)
     {
-        try { File.Delete(OutputNaming.TempPath(request.SourcePath, request.Id)); }
+        try { File.Delete(OutputNaming.TempPath(request.SourcePath, request.Id, request.OutputDirectory)); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { }
     }
 

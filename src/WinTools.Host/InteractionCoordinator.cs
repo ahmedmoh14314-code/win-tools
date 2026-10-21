@@ -27,13 +27,13 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     private long _triggerTimestamp;
     private (int X, int Y) _anchor;
 
-    public InteractionCoordinator(HostLog log, JobRunner jobs)
+    public InteractionCoordinator(HostLog log, JobRunner jobs, int triggerVirtualKey)
     {
         _log = log;
         _jobs = jobs;
         _window = new MessageWindow(OnMessage);
         _overlay = new RadialOverlay(this);
-        _hooks = new LowLevelHooks(_window.Handle);
+        _hooks = new LowLevelHooks(_window.Handle, triggerVirtualKey);
     }
 
     public void Start() => _hooks.Start();

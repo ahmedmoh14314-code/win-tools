@@ -1,0 +1,42 @@
+namespace WinTools.Worker.Tests;
+
+/// <summary>EXIF TIFF block with camera Make, Orientation and a GPS IFD (same shape as the Core test data).</summary>
+public static class MetadataTestData
+{
+    public static byte[] RichExif(int orientation)
+    {
+        var o = new List<byte>();
+        void U16(int v) { o.Add((byte)v); o.Add((byte)(v >> 8)); }
+        void U32(int v) { o.Add((byte)v); o.Add((byte)(v >> 8)); o.Add((byte)(v >> 16)); o.Add((byte)(v >> 24)); }
+        o.AddRange("II*\0"u8.ToArray()); U32(8);
+        U16(3);
+        U16(0x010F); U16(2); U32(4); o.AddRange("Cam\0"u8.ToArray());
+        U16(0x0112); U16(3); U32(1); U16(orientation); U16(0);
+        U16(0x8825); U16(4); U32(1); U32(8 + 2 + 3 * 12 + 4);
+        U32(0);
+        U16(1); U16(0x0000); U16(1); U32(4); o.AddRange(new byte[] { 2, 3, 0, 0 }); U32(0);
+        return [.. o];
+    }
+}
+
+public sealed class TiffMetadataTests : IDisposable
+{
+    private readonly TempFolder _dir = new();
+    public void Dispose() => _dir.Dispose();
+
+    [Fact]
+    public void Remove_metadata_from_a_tiff_re_encodes_pixel_identically_without_text_tags()
+    {
+        var tiff = TiffWriter.Rgb(40, 30, rowsPerStrip: 8, compression: 1, (x, y) => ((byte)(x * 6), (byte)(y * 8), 90));
+        var tagged = TiffWriter.WithExtraShortTag(TiffWriter.WithExtraShortTag(tiff, 305 /* Software */, 1), 34853 /* GPS IFD */, 8);
+        Assert.True(WinTools.Core.Files.Metadata.Inspect(tagged, WinTools.Core.Files.ImageFormat.Tiff).AnyRemovable);
+        var src = _dir.Write("scan.tif", tagged);
+
+        var r = WinTools.Worker.ConversionJob.Run(new WinTools.Core.Jobs.ConversionRequest("t1", "metadata.strip", src));
+
+        Assert.True(r.Success, r.Message);
+        var outBytes = File.ReadAllBytes(r.OutputPath!);
+        Assert.False(WinTools.Core.Files.Metadata.Inspect(outBytes, WinTools.Core.Files.ImageFormat.Tiff).AnyRemovable);
+        Assert.Equal(Pixels.Load(src).Bgra, Pixels.Load(r.OutputPath!).Bgra);
+    }
+}

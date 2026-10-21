@@ -33,6 +33,9 @@ internal static class ConversionJob
         var source = request.SourcePath;
         if (!PathPolicy.IsSupported(source))
             return ConversionResult.Fail(id, ErrorCode.InvalidRequest, "Source path must be a canonical, fully qualified file path.");
+        var outputDir = request.OutputDirectory;
+        if (outputDir is not null && !PathPolicy.IsSupported(Path.Combine(outputDir, "x.png")))
+            return ConversionResult.Fail(id, ErrorCode.InvalidRequest, "The output folder must be a canonical, fully qualified path.");
         DecoderDiagnostics.Reset();
 
         string? temp = null;
@@ -47,24 +50,29 @@ internal static class ConversionJob
                     ? "The file is not a supported image."
                     : $"The file content is {ImageFormats.DisplayName(actual)}; \"{op.Label}\" does not apply to it.");
 
-            var encoded = ImagePipeline.Run(input, actual, op);
+            if (op.Kind == OperationKind.Info) return ConversionResult.Facts(id, ImagePipeline.Describe(input, actual));
 
-            var dirInfo = new DirectoryInfo(Path.GetDirectoryName(source)!);
-            if (!dirInfo.Exists) return ConversionResult.Fail(id, ErrorCode.SourceNotFound, "The source folder no longer exists.");
+            var encoded = ImagePipeline.Run(input, actual, op, request.JpegQuality, request.WebPQuality);
+
+            var dirInfo = new DirectoryInfo(outputDir ?? Path.GetDirectoryName(source)!);
+            if (!dirInfo.Exists)
+                return outputDir is null
+                    ? ConversionResult.Fail(id, ErrorCode.SourceNotFound, "The source folder no longer exists.")
+                    : ConversionResult.Fail(id, ErrorCode.OutputDirectoryNotWritable, "The configured output folder does not exist.");
             for (var d = dirInfo; d is not null; d = d.Parent)
                 if (d.LinkTarget is not null) return ConversionResult.Fail(id, ErrorCode.OutputDirectoryIsLink, "The destination folder is, or is inside, a symbolic link or junction.");
 
-            var tempPath = OutputNaming.TempPath(source, id);
+            var tempPath = OutputNaming.TempPath(source, id, outputDir);
             WriteTemp(tempPath, encoded.Bytes); // CreateNew: an existing file with this name is never touched
             temp = tempPath;
-            FaultInjection.At("after-temp");
+            FaultInjection.At("after-temp", source);
             hooks?.AfterTempWritten?.Invoke(tempPath);
 
             ImagePipeline.Validate(File.ReadAllBytes(tempPath), encoded.Format, encoded.Width, encoded.Height);
             File.SetAttributes(tempPath, FileAttributes.Normal);
             hooks?.BeforeFinalize?.Invoke();
 
-            foreach (var candidate in OutputNaming.Candidates(source, encoded.Format, op.NameSuffix))
+            foreach (var candidate in OutputNaming.Candidates(source, encoded.Format, op.NameSuffix, outputDir))
             {
                 try
                 {

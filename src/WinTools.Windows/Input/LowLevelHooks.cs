@@ -17,7 +17,7 @@ public sealed class LowLevelHooks : IDisposable
     public const uint SignalMessage = Msg.APP + 1;
 
     private readonly nint _target;
-    private readonly TriggerDetector _detector = new();
+    private readonly TriggerDetector _detector;
     private readonly HookProc _keyboardProc, _mouseProc; // referenced for the hooks' lifetime
     private readonly Thread _thread;
     private readonly ManualResetEventSlim _ready = new();
@@ -25,9 +25,11 @@ public sealed class LowLevelHooks : IDisposable
     private uint _threadId;
     private int _installError;
 
-    public LowLevelHooks(nint targetWindow)
+    /// <param name="triggerVirtualKey">The trigger key from the settings (Space by default).</param>
+    public LowLevelHooks(nint targetWindow, int triggerVirtualKey = TriggerDetector.VkSpace)
     {
         _target = targetWindow;
+        _detector = new TriggerDetector(triggerVirtualKey);
         _keyboardProc = KeyboardProc;
         _mouseProc = MouseProc;
         _thread = new Thread(Run) { Name = "low-level hooks", IsBackground = true, Priority = ThreadPriority.AboveNormal };
