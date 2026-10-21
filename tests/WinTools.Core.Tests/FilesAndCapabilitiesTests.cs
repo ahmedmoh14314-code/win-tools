@@ -8,20 +8,24 @@ namespace WinTools.Core.Tests;
 public sealed class CapabilityResolverTests
 {
     private static readonly CapabilityResolver R = CapabilityResolver.Default;
+    private static string[] Ids(IEnumerable<Operation> ops) => ops.Select(o => o.Id).ToArray();
 
     [Theory]
-    [InlineData(@"C:\p\photo.png", "convert.png-to-jpeg")]
-    [InlineData(@"C:\p\photo.PNG", "convert.png-to-jpeg")]
-    [InlineData(@"C:\p\photo.jpg", "convert.jpeg-to-png")]
-    [InlineData(@"C:\p\photo.JPEG", "convert.jpeg-to-png")]
-    public void Supported_files_get_exactly_their_conversion(string path, string op)
+    [InlineData(@"C:\p\photo.png", "convert.to-jpeg convert.to-webp convert.to-bmp convert.to-tiff")]
+    [InlineData(@"C:\p\photo.JPG", "convert.to-png convert.to-webp convert.to-bmp convert.to-tiff")]
+    [InlineData(@"C:\p\photo.jfif", "convert.to-png convert.to-webp convert.to-bmp convert.to-tiff")]
+    [InlineData(@"C:\p\photo.webp", "convert.to-jpeg convert.to-png convert.to-bmp convert.to-tiff")]
+    [InlineData(@"C:\p\photo.bmp", "convert.to-jpeg convert.to-png convert.to-webp convert.to-tiff")]
+    [InlineData(@"C:\p\photo.tiff", "convert.to-jpeg convert.to-png convert.to-webp convert.to-bmp")]
+    public void Each_format_gets_every_other_format_as_a_target_and_never_itself(string path, string expected)
     {
-        Assert.Equal([op], R.Resolve([path]).Select(o => o.Id));
+        Assert.Equal(expected.Split(' '), Ids(R.Resolve([path])));
     }
 
     [Theory]
     [InlineData(@"C:\p\notes.txt")]
-    [InlineData(@"C:\p\image.webp")]
+    [InlineData(@"C:\p\image.heic")]
+    [InlineData(@"C:\p\drawing.svg")]
     [InlineData(@"C:\p\no-extension")]
     [InlineData(@"C:\p\archive.png.zip")]
     public void Unsupported_files_get_no_commands(string path)
@@ -30,15 +34,16 @@ public sealed class CapabilityResolverTests
     }
 
     [Fact]
-    public void Several_files_of_one_format_share_the_command()
+    public void Mixed_selections_get_the_intersection()
     {
-        Assert.Equal([OperationCatalog.PngToJpeg], R.Resolve([@"C:\a.png", @"C:\b.png"]));
+        // PNG and JPEG: "To PNG" is invalid for the PNG and "To JPEG" for the JPEG, so only the shared targets remain.
+        Assert.Equal(["convert.to-webp", "convert.to-bmp", "convert.to-tiff"], Ids(R.Resolve([@"C:\a.png", @"C:\b.jpg"])));
+        Assert.Equal(["convert.to-bmp", "convert.to-tiff"], Ids(R.Resolve([@"C:\a.png", @"C:\b.jpg", @"C:\c.webp"])));
     }
 
     [Fact]
-    public void Mixed_selections_get_no_commands()
+    public void One_unsupported_file_removes_every_command()
     {
-        Assert.Empty(R.Resolve([@"C:\a.png", @"C:\b.jpg"]));
         Assert.Empty(R.Resolve([@"C:\a.png", @"C:\b.txt"]));
     }
 
@@ -52,9 +57,45 @@ public sealed class CapabilityResolverTests
     [Fact]
     public void The_catalog_drives_the_answer()
     {
-        var onlyPng = new CapabilityResolver([OperationCatalog.JpegToPng]);
+        var onlyPng = new CapabilityResolver([OperationCatalog.Convert(ImageFormat.Png)]);
         Assert.Empty(onlyPng.Resolve([@"C:\a.png"]));
-        Assert.Equal([OperationCatalog.JpegToPng], onlyPng.Resolve([@"C:\a.jpg"]));
+        Assert.Equal([OperationCatalog.Convert(ImageFormat.Png)], onlyPng.Resolve([@"C:\a.jpg"]));
+    }
+}
+
+public sealed class CapabilityMatrixTests
+{
+    [Fact]
+    public void Every_decodable_source_converts_to_every_other_encodable_target()
+    {
+        foreach (var source in ImageFormats.Decodable)
+            foreach (var target in ImageFormats.Encodable)
+                Assert.Equal(source != target, OperationCatalog.Convert(target).AppliesTo(source));
+    }
+
+    [Fact]
+    public void Nothing_applies_to_unknown_content()
+    {
+        Assert.All(OperationCatalog.All, op => Assert.False(op.AppliesTo(ImageFormat.Unknown)));
+    }
+
+    [Fact]
+    public void Labels_and_ids_come_from_the_format_table()
+    {
+        Assert.Equal(["To JPEG", "To PNG", "To WebP", "To BMP", "To TIFF"], OperationCatalog.All.Select(o => o.Label));
+        Assert.Equal(OperationCatalog.All.Count, OperationCatalog.All.Select(o => o.Id).Distinct().Count());
+    }
+
+    [Theory]
+    [InlineData(ImageFormat.Png, ".png", true)]
+    [InlineData(ImageFormat.Jpeg, ".jpg", false)]
+    [InlineData(ImageFormat.WebP, ".webp", true)]
+    [InlineData(ImageFormat.Bmp, ".bmp", false)]
+    [InlineData(ImageFormat.Tiff, ".tif", true)]
+    public void Output_extension_and_alpha_policy(ImageFormat format, string extension, bool keepsAlpha)
+    {
+        Assert.Equal(extension, ImageFormats.Extension(format));
+        Assert.Equal(keepsAlpha, ImageFormats.KeepsAlpha(format));
     }
 }
 
@@ -67,11 +108,22 @@ public sealed class FileSignatureTests
         Assert.Equal(ImageFormat.Jpeg, FileSignature.Detect([0xFF, 0xD8, 0xFF, 0xE0]));
     }
 
+    [Fact]
+    public void WebP_bmp_and_tiff_are_recognised()
+    {
+        Assert.Equal(ImageFormat.WebP, FileSignature.Detect("RIFF\0\0\0\0WEBPVP8 "u8));
+        Assert.Equal(ImageFormat.Tiff, FileSignature.Detect([0x49, 0x49, 0x2A, 0x00, 8, 0, 0, 0]));
+        Assert.Equal(ImageFormat.Tiff, FileSignature.Detect([0x4D, 0x4D, 0x00, 0x2A, 0, 0, 0, 8]));
+        Assert.Equal(ImageFormat.Bmp, FileSignature.Detect([0x42, 0x4D, 0, 0, 0, 0, 0, 0, 0, 0, 54, 0, 0, 0, 40, 0, 0, 0]));
+        Assert.Equal(ImageFormat.Unknown, FileSignature.Detect("RIFF\0\0\0\0WAVEfmt "u8));                       // RIFF, not WebP
+        Assert.Equal(ImageFormat.Unknown, FileSignature.Detect([0x42, 0x4D, 0, 0, 0, 0, 0, 0, 0, 0, 54, 0, 0, 0, 99, 0, 0, 0])); // "BM" text
+    }
+
     [Theory]
     [InlineData(new byte[] { })]
     [InlineData(new byte[] { 0x89, 0x50, 0x4E })]
     [InlineData(new byte[] { 0xFF, 0xD8 })]
-    [InlineData(new byte[] { 0x52, 0x49, 0x46, 0x46 })] // RIFF (WebP)
+    [InlineData(new byte[] { 0x52, 0x49, 0x46, 0x46 })] // RIFF without a WebP form type
     [InlineData(new byte[] { 0x25, 0x50, 0x44, 0x46 })] // %PDF
     public void Anything_else_is_unknown(byte[] header)
     {

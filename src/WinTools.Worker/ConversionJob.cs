@@ -40,13 +40,14 @@ internal static class ConversionJob
         {
             var input = ReadSource(source);
             hooks?.AfterSourceRead?.Invoke();
+            // The format is decided by content, never by the name; the operation must apply to what the file really is.
             var actual = FileSignature.Detect(input);
-            if (actual != op.Source)
+            if (!op.AppliesTo(actual))
                 return ConversionResult.Fail(id, ErrorCode.ContentMismatch, actual == ImageFormat.Unknown
-                    ? $"The file is not a {op.Source} image."
-                    : $"The file content is {actual}, not {op.Source}.");
+                    ? "The file is not a supported image."
+                    : $"The file content is {ImageFormats.DisplayName(actual)}; \"{op.Label}\" does not apply to it.");
 
-            var encoded = ImageTranscoder.Transcode(input, op.Source, op.Target);
+            var encoded = ImagePipeline.Convert(input, actual, op.Target);
 
             var dirInfo = new DirectoryInfo(Path.GetDirectoryName(source)!);
             if (!dirInfo.Exists) return ConversionResult.Fail(id, ErrorCode.SourceNotFound, "The source folder no longer exists.");
@@ -59,7 +60,7 @@ internal static class ConversionJob
             FaultInjection.At("after-temp");
             hooks?.AfterTempWritten?.Invoke(tempPath);
 
-            ImageTranscoder.Validate(File.ReadAllBytes(tempPath), op.Target, encoded.Width, encoded.Height);
+            ImagePipeline.Validate(File.ReadAllBytes(tempPath), op.Target, encoded.Width, encoded.Height);
             File.SetAttributes(tempPath, FileAttributes.Normal);
             hooks?.BeforeFinalize?.Invoke();
 

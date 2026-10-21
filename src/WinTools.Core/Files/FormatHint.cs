@@ -9,8 +9,12 @@ public static class FormatHint
     public static ImageFormat FromPath(string path)
     {
         var ext = Path.GetExtension(path.AsSpan());
-        if (ext.Equals(".png", StringComparison.OrdinalIgnoreCase)) return ImageFormat.Png;
-        if (ext.Equals(".jpg", StringComparison.OrdinalIgnoreCase) || ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)) return ImageFormat.Jpeg;
+        static bool Is(ReadOnlySpan<char> e, string candidate) => e.Equals(candidate, StringComparison.OrdinalIgnoreCase);
+        if (Is(ext, ".png")) return ImageFormat.Png;
+        if (Is(ext, ".jpg") || Is(ext, ".jpeg") || Is(ext, ".jpe") || Is(ext, ".jfif")) return ImageFormat.Jpeg;
+        if (Is(ext, ".webp")) return ImageFormat.WebP;
+        if (Is(ext, ".bmp") || Is(ext, ".dib")) return ImageFormat.Bmp;
+        if (Is(ext, ".tif") || Is(ext, ".tiff")) return ImageFormat.Tiff;
         return ImageFormat.Unknown;
     }
 }

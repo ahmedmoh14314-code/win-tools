@@ -5,38 +5,44 @@ using WinTools.Core.Files;
 using WinTools.EndToEnd;
 
 // Explorer end-to-end harness for the product host (local and interactive only; it drives the real mouse and keyboard).
-// Usage: WinTools.EndToEnd <png|jpg|escape|outside|unsupported|fast|worker-crash> [--cycles N] [--fast-ms N] [--results file.jsonl]
+// Usage: WinTools.EndToEnd <png|jpg|bmp|tif|escape|outside|unsupported|fast|worker-crash> [--target jpeg|png|webp|bmp|tiff] [--cycles N] [--fast-ms N] [--results file.jsonl]
 // Each scenario: fresh folder with copies of the committed samples, fresh host with its own log, one Explorer window on
 // that folder. Before every injection the window is re-verified; a release happens only over our overlay or over the
 // folder's own background, otherwise the drag is cancelled with Escape. After every cycle the folder must contain
 // exactly the expected files, the source must be byte-identical, and no temporary file may remain.
 
 var scenario = args.Length > 0 ? args[0] : "png";
-var cycles = 10; var fastMs = 25; string? resultsPath = null;
+var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null;
 for (var i = 1; i < args.Length; i++)
 {
     switch (args[i])
     {
         case "--cycles": cycles = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
         case "--fast-ms": fastMs = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
+        case "--target": targetArg = args[++i]; break;   // jpeg|png|webp|bmp|tiff: which command to drop on
         case "--results": resultsPath = Path.GetFullPath(args[++i]); break;
         default: Console.Error.WriteLine($"Unknown option {args[i]}"); return 64;
     }
 }
 
-var (sample, sourceName, outputName, outputFormat) = scenario switch
+var (sample, sourceName, defaultTarget) = scenario switch
 {
-    "jpg" => ("quadrants-64x48.jpg", "photo.jpg", "photo.png", ImageFormat.Png),
-    "unsupported" => ("", "notes.txt", null, ImageFormat.Unknown),
-    _ => ("quadrants-64x48.png", "photo.png", (string?)"photo.jpg", ImageFormat.Jpeg),
+    "jpg" => ("quadrants-64x48.jpg", "photo.jpg", ImageFormat.Png),
+    "bmp" => ("quadrants-64x48.bmp", "photo.bmp", ImageFormat.WebP),
+    "tif" => ("quadrants-64x48.tif", "photo.tif", ImageFormat.Jpeg),
+    "unsupported" => ("", "notes.txt", ImageFormat.Unknown),
+    _ => ("quadrants-64x48.png", "photo.png", ImageFormat.Jpeg),
 };
-var expectOutput = scenario is "png" or "jpg";
+var outputFormat = targetArg is null ? defaultTarget : Enum.Parse<ImageFormat>(targetArg, ignoreCase: true);
+var outputName = outputFormat == ImageFormat.Unknown ? null : Path.GetFileNameWithoutExtension(sourceName) + ImageFormats.Extension(outputFormat);
+var expectOutput = scenario is "png" or "jpg" or "bmp" or "tif";
 var folder = Path.Combine(Path.GetTempPath(), "wintools-e2e", $"{scenario}-{DateTime.Now:HHmmss}");
 Directory.CreateDirectory(folder);
 var source = Path.Combine(folder, sourceName);
 if (sample.Length > 0) File.Copy(Path.Combine(AppContext.BaseDirectory, "samples", sample), source);
 else File.WriteAllText(source, "plain text, not an image");
 var sourceHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source)));
+var commands = WinTools.Core.Capabilities.CapabilityResolver.Default.Resolve([source]);
 var hostLog = Path.Combine(folder, "..", $"host-{scenario}-{DateTime.Now:HHmmss}.jsonl");
 resultsPath ??= Path.Combine(folder, "..", $"e2e-{scenario}-{DateTime.Now:HHmmss}.jsonl");
 using var results = new StreamWriter(resultsPath, append: false) { AutoFlush = true };
@@ -81,7 +87,10 @@ using (var explorer = ExplorerWindow.Open(folder))
         Desktop.GlideTo(cx + Px(40), cy + Px(30));
         Thread.Sleep(250);
         Desktop.GetCursorPos(out var at);
-        var drop = (X: at.X + Px(50), Y: at.Y + Px(50));       // inside the ring, outside the dead zone
+        // Aim at the middle of the sector of the wanted command, as the product lays them out (clockwise from 12).
+        var index = Math.Max(0, commands.ToList().FindIndex(o => o.Target == outputFormat));
+        var angle = (index + 0.5) * 2 * Math.PI / Math.Max(1, commands.Count);
+        var drop = (X: at.X + (int)Math.Round(Px(70) * Math.Sin(angle)), Y: at.Y - (int)Math.Round(Px(70) * Math.Cos(angle)));
         var outside = (X: at.X, Y: at.Y + Px(200));           // beyond the ring, over the folder background
         string? releasedOver;
         double? releaseAfterMs = null;
@@ -140,7 +149,7 @@ using (var explorer = ExplorerWindow.Open(folder))
         var cleanFolder = files.SequenceEqual(expectedFiles);
         var ok = sourceIntact && cleanFolder && scenario switch
         {
-            "png" or "jpg" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
+            "png" or "jpg" or "bmp" or "tif" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
             // Fast release, judged by the host: a drag that entered the overlay must end in an accepted drop (no lost
             // drop), an accepted drop must produce a valid output, and no drag that missed the overlay may produce one.
             "fast" => (enters == 0 || accepted == 1) && (accepted == 0) == (output is null) && (output is null || outputValid),

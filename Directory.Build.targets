@@ -1,0 +1,7 @@
+<Project>
+  <!-- The SkiaSharp native package ships a 96 MB symbols file that nothing needs at run time; keep it out of build and publish folders. -->
+  <Target Name="DropNativeSkiaSymbols" AfterTargets="Build;Publish">
+    <Delete Files="$(OutDir)libSkiaSharp.pdb" ContinueOnError="true" />
+    <Delete Files="$(PublishDir)libSkiaSharp.pdb" Condition="'$(PublishDir)' != ''" ContinueOnError="true" />
+  </Target>
+</Project>

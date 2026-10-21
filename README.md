@@ -4,7 +4,7 @@ A lightweight, local-first Windows desktop utility: drag a file, press a trigger
 a radial menu appears around the cursor, drop the file on an action, and the
 operation runs safely (e.g. `photo.png` → Convert → WebP → `photo.webp`).
 
-**Status: first product slice in review. PNG → JPEG and JPEG → PNG work end to end from Windows Explorer. No installer, tray or settings yet; see `docs/progress.md`.**
+**Status: functional V1 in progress. Conversion between PNG, JPEG, WebP, BMP and TIFF works end to end from Windows Explorer. SVG and HEIC input are deferred (ADR-0012). No installer, tray or settings UI yet; see `docs/progress.md`.**
 
 ## Start here (every session)
 
@@ -44,4 +44,4 @@ dotnet test tests/WinTools.Worker.Tests
 src/WinTools.Host/bin/Debug/net10.0-windows/win-x64/WinTools.Host.exe
 ```
 
-While the host runs, drag a `.png` or `.jpg` in Explorer, press **Space** without releasing the mouse, and drop the file on the ring. The output appears next to the source, as `photo.jpg` or `photo (1).jpg` if that name is taken. **Escape** cancels. **Ctrl+C** in the host's console exits.
+While the host runs, drag an image (PNG, JPEG, WebP, BMP or TIFF) in Explorer, press **Space** without releasing the mouse, and drop the file on the ring. The output appears next to the source, as `photo.jpg` or `photo (1).jpg` if that name is taken. **Escape** cancels. **Ctrl+C** in the host's console exits.

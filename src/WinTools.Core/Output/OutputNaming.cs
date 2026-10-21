@@ -11,12 +11,7 @@ public static class OutputNaming
 {
     public const int MaxCollisionIndex = 999;
 
-    public static string Extension(ImageFormat format) => format switch
-    {
-        ImageFormat.Png => ".png",
-        ImageFormat.Jpeg => ".jpg",
-        _ => throw new ArgumentOutOfRangeException(nameof(format), format, "No output extension for this format."),
-    };
+    public static string Extension(ImageFormat format) => ImageFormats.Extension(format);
 
     /// <summary>Candidate output paths in the order they must be tried.</summary>
     public static IEnumerable<string> Candidates(string sourcePath, ImageFormat target)

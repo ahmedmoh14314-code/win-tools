@@ -4,7 +4,8 @@ namespace WinTools.Core.Files;
 /// Structural completeness check run before decoding, because decoders can paper over damage: the Windows PNG decoder
 /// fills the rows of a truncated IDAT without reporting an error, which would turn a damaged file into a believable
 /// but wrong output. PNG: every chunk fits in the file, every CRC matches, IHDR comes first, IDAT is present, IEND
-/// is reached, and the image data inflates to exactly the size IHDR implies. JPEG: the marker segments and entropy-coded scans can be walked from SOI to an EOI.
+/// is reached, and the image data inflates to exactly the size IHDR implies. WebP: the RIFF size and chunk walk are
+/// consistent. BMP: the uncompressed pixel array fits in the file. JPEG: the marker segments and entropy-coded scans can be walked from SOI to an EOI.
 /// Bytes after the end marker are ignored (some cameras append trailers).
 /// </summary>
 public static class ContainerCheck
@@ -15,6 +16,11 @@ public static class ContainerCheck
         {
             ImageFormat.Png => CheckPng(data),
             ImageFormat.Jpeg => CheckJpeg(data),
+            ImageFormat.WebP => CheckWebP(data),
+            ImageFormat.Bmp => CheckBmp(data),
+            // TIFF strips and tiles are located through offsets anywhere in the file; a structural walk would mean
+            // re-implementing the format. TIFF relies on the full decode and the codec's own diagnostics.
+            ImageFormat.Tiff => FileSignature.Detect(data) == ImageFormat.Tiff ? null : "not a TIFF signature",
             _ => "unsupported format",
         } ?? "";
         return reason.Length == 0;
@@ -129,6 +135,46 @@ public static class ContainerCheck
                 break; // a real marker starts at i
             }
         }
+    }
+
+    /// <summary>RIFF container: the declared size fits the file and the chunks inside it are complete.</summary>
+    private static string? CheckWebP(ReadOnlySpan<byte> d)
+    {
+        if (FileSignature.Detect(d) != ImageFormat.WebP) return "not a WebP signature";
+        var riffSize = (long)(uint)(d[4] | d[5] << 8 | d[6] << 16 | d[7] << 24);
+        if (riffSize + 8 > d.Length) return "truncated (RIFF size exceeds the file)";
+        var end = (int)(riffSize + 8);
+        var i = 12;
+        var sawImage = false;
+        while (i < end)
+        {
+            if (end - i < 8) return "truncated chunk header";
+            var size = (long)(uint)(d[i + 4] | d[i + 5] << 8 | d[i + 6] << 16 | d[i + 7] << 24);
+            if (size > end - i - 8) return "chunk runs past the end of the file";
+            var id = d.Slice(i, 4);
+            if (id.SequenceEqual("VP8 "u8) || id.SequenceEqual("VP8L"u8) || id.SequenceEqual("ANMF"u8)) sawImage = true;
+            i += 8 + (int)size + (int)(size & 1);
+        }
+        return sawImage ? null : "no image data";
+    }
+
+    /// <summary>BMP: the pixel array the header describes fits in the file (uncompressed bitmaps).</summary>
+    private static string? CheckBmp(ReadOnlySpan<byte> d)
+    {
+        if (FileSignature.Detect(d) != ImageFormat.Bmp) return "not a BMP signature";
+        static int I32(ReadOnlySpan<byte> b, int o) => b[o] | b[o + 1] << 8 | b[o + 2] << 16 | b[o + 3] << 24;
+        var pixelOffset = (long)(uint)I32(d, 10);
+        var dibSize = I32(d, 14);
+        if (pixelOffset >= d.Length || pixelOffset < 14 + dibSize) return "pixel data offset is outside the file";
+        if (dibSize < 40) return null; // OS/2 BITMAPCOREHEADER: rare, let the decoder judge
+        var width = (long)I32(d, 18);
+        var height = Math.Abs((long)I32(d, 22));
+        var bitCount = d[28] | d[29] << 8;
+        var compression = I32(d, 30);
+        if (width <= 0 || height == 0 || bitCount is not (1 or 4 or 8 or 16 or 24 or 32)) return "invalid header";
+        if (compression is not (0 or 3 or 6)) return null; // RLE/JPEG/PNG payloads: sizes are not implied by the header
+        var stride = (width * bitCount + 31) / 32 * 4;
+        return pixelOffset + stride * height <= d.Length ? null : "truncated pixel data";
     }
 
     private static readonly uint[] CrcTable = BuildCrcTable();

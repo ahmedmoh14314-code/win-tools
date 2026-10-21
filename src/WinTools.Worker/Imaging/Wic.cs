@@ -16,6 +16,13 @@ internal static class WicIds
     public static readonly Guid PngEncoder = new("27949969-876a-41d7-9447-568f6a35a4dc");     // CLSID_WICPngEncoder
     public static readonly Guid JpegEncoder = new("1a34f5c1-4a5a-46dc-b644-1f4567e7a676");    // CLSID_WICJpegEncoder
 
+    public static readonly Guid BmpDecoder = new("6b462062-7cbf-400d-9fdb-813dd10f2778");     // CLSID_WICBmpDecoder
+    public static readonly Guid BmpEncoder = new("69be8bb4-d66d-47c8-865a-ed1589433782");     // CLSID_WICBmpEncoder
+    public static readonly Guid TiffDecoder = new("b54e85d9-fe23-499f-8b88-6acea713752b");    // CLSID_WICTiffDecoder
+    public static readonly Guid TiffEncoder = new("0131be10-2001-4c5f-a9b0-cc88fab64ce8");    // CLSID_WICTiffEncoder
+    public static readonly Guid ContainerBmp = new("0af1d87e-fcfe-4188-bdeb-a7906471cbe3");
+    public static readonly Guid ContainerTiff = new("163bcc30-e2e9-4f0b-961d-a3e9fdb788a3");
+
     public static readonly Guid VendorMicrosoft = new("f0e749ca-edef-4589-a73a-ee0e626a2a2b");
 
     public static readonly Guid ContainerPng = new("1b7cfaf4-713f-473c-bbcd-6137425faeaf");

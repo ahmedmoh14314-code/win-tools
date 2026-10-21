@@ -23,6 +23,8 @@ function New-Quadrants {
 
 Save-Png (New-Quadrants) 'quadrants-64x48.png'
 Save-Jpeg (New-Quadrants) 'quadrants-64x48.jpg'
+$q = New-Quadrants; $q.Save((Join-Path $dir 'quadrants-64x48.bmp'), [System.Drawing.Imaging.ImageFormat]::Bmp); $q.Dispose()
+$q = New-Quadrants; $q.Save((Join-Path $dir 'quadrants-64x48.tif'), [System.Drawing.Imaging.ImageFormat]::Tiff); $q.Dispose()
 
 # 32x32 with alpha: left half fully transparent red, right half 50% (alpha 128) blue.
 $a = New-Object System.Drawing.Bitmap 32, 32, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
@@ -31,4 +33,4 @@ for ($y = 0; $y -lt 32; $y++) { for ($x = 0; $x -lt 32; $x++) {
     $a.SetPixel($x, $y, $c) } }
 Save-Png $a 'alpha-32x32.png'
 
-Get-ChildItem $dir -Include *.png, *.jpg -Recurse | ForEach-Object { '{0}  {1} bytes  {2}' -f $_.Name, $_.Length, (Get-FileHash $_.FullName -Algorithm SHA256).Hash }
+Get-ChildItem $dir -Include *.png, *.jpg, *.bmp, *.tif -Recurse | ForEach-Object { '{0}  {1} bytes  {2}' -f $_.Name, $_.Length, (Get-FileHash $_.FullName -Algorithm SHA256).Hash }
