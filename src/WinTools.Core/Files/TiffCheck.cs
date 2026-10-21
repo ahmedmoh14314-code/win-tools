@@ -116,6 +116,10 @@ internal static class TiffCheck
             perPlane = (height + chunkRows - 1) / chunkRows;
         }
         if (offsets.Length < perPlane * planes) return "strips are missing";
+        // Exactly as many as the image needs: extra entries are never decoded, but each would be inflated here, so a few
+        // kilobytes of table pointing at one compressed blob could keep the worker busy for minutes (security review M2).
+        // With the exact count, the work is bounded by the image's own size, which the pixel limit has already checked.
+        if (offsets.Length > perPlane * planes) return "the strip table does not match the image size";
 
         var rowBytes = (chunkWidth * bitsPerPixel + 7) / 8;
         for (var i = 0; i < offsets.Length; i++)

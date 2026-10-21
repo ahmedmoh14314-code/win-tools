@@ -450,7 +450,7 @@ public static class Metadata
         if (t.Length < 8 || !(t.StartsWith("II*\0"u8) || t.StartsWith("MM\0*"u8))) return 1;
         var le = t[0] == 0x49;
         var ifd = Read32(t, 4, le);
-        if (ifd < 8 || ifd + 2 > t.Length) return 1;
+        if (ifd < 8 || (long)ifd + 2 > t.Length) return 1; // long: an offset near int.MaxValue must not wrap past the check
         var n = Read16(t, ifd, le);
         for (var i = 0; i < n && ifd + 2 + (i + 1) * 12 <= t.Length; i++)
         {
@@ -466,7 +466,7 @@ public static class Metadata
         if (t.Length < 8 || !(t.StartsWith("II*\0"u8) || t.StartsWith("MM\0*"u8))) return false;
         var le = t[0] == 0x49;
         var ifd = Read32(t, 4, le);
-        if (ifd < 8 || ifd + 2 > t.Length) return false;
+        if (ifd < 8 || (long)ifd + 2 > t.Length) return false;
         var n = Read16(t, ifd, le);
         for (var i = 0; i < n && ifd + 2 + (i + 1) * 12 <= t.Length; i++)
             if (Read16(t, ifd + 2 + i * 12, le) == tag) return true;

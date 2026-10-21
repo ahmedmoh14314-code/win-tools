@@ -18,7 +18,7 @@ V1 needs decode/encode for JPEG, PNG and WebP plus resize and quality control. C
 
 Pipeline (`ImagePipeline`):
 1. **Signature:** the content signature decides the format, never the extension.
-2. **Header and limits:** the header is read and the size limits checked (100 MP, 65,535 px per side, 256 MB input; revisited in hardening) before any pixel buffer is allocated.
+2. **Header and limits:** the header is read and the size limits checked (50 MP, 65,535 px per side, 256 MB input; ADR-0015) before any pixel buffer is allocated.
 3. **Structure check (`ContainerCheck`):**
    - PNG: chunks, CRCs, and the zlib stream inflating to exactly the size IHDR implies.
    - JPEG: markers and scans through to EOI.

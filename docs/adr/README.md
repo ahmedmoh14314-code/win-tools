@@ -19,5 +19,7 @@ Template: `template.md`. Numbering is sequential and never reused. Old ADRs are 
 | [ADR-0012](ADR-0012-svg-and-heic-input.md) | SVG and HEIC/HEIF as input formats | Accepted (both deferred for V1) | — |
 | [ADR-0013](ADR-0013-settings-and-output-policy.md) | Settings foundation and output policy | Accepted (data layer; UI deferred) | — |
 | [ADR-0014](ADR-0014-hierarchical-radial-menu.md) | Hierarchical radial menu during the drag | Accepted | — |
+| [ADR-0015](ADR-0015-worker-resource-limits.md) | Worker resource limits: pixels, memory cap, memory-bounded pool | Accepted | — |
+| [ADR-0015](ADR-0015-worker-resource-limits.md) | Worker resource limits: pixels, memory cap, memory-bounded pool | Accepted | — |
 
 Decision order recommended: 0002 → 0003 → 0001/0004 (same spike) → 0005 → 0011 → 0007 → 0006 → 0008. 0009 and 0010 can be confirmed any time.
