@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Local tool: renders the product's native surfaces (radial menu states, toasts, info panel) off screen to PNG files
+       for design review and documentation. Shows no window and injects no input. Not run in CI. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ApplicationManifest>..\..\src\WinTools.Host\app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="System.IO" />
+    <ProjectReference Include="..\..\src\WinTools.Core\WinTools.Core.csproj" />
+    <ProjectReference Include="..\..\src\WinTools.Windows\WinTools.Windows.csproj" />
+  </ItemGroup>
+</Project>

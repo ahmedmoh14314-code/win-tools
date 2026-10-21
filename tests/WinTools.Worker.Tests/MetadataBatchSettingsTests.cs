@@ -2,8 +2,8 @@ using WinTools.Core.Capabilities;
 using WinTools.Core.Files;
 using WinTools.Core.Jobs;
 using WinTools.Core.Settings;
-using WinTools.Host;
 using WinTools.Host.Jobs;
+using WinTools.Windows.Settings;
 using WinTools.Worker.Imaging;
 
 namespace WinTools.Worker.Tests;

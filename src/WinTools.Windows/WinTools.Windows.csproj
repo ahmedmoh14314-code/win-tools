@@ -5,5 +5,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\WinTools.Core\WinTools.Core.csproj" />
+    <InternalsVisibleTo Include="WinTools.Host" />
+    <InternalsVisibleTo Include="WinTools.Worker.Tests" />
+    <InternalsVisibleTo Include="WinTools.Preview" />
   </ItemGroup>
 </Project>

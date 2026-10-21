@@ -52,7 +52,9 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
     /// <summary>How many workers the last batch used (logged by the caller).</summary>
     public int LastLaneCount { get; private set; }
 
-    public async Task<IReadOnlyList<ConversionResult>> RunAsync(IReadOnlyList<ConversionRequest> requests, CancellationToken cancellationToken)
+    /// <param name="onFileDone">Called on a pool thread with the number of files finished so far, after each one (progress).</param>
+    public async Task<IReadOnlyList<ConversionResult>> RunAsync(IReadOnlyList<ConversionRequest> requests, CancellationToken cancellationToken,
+        Action<int>? onFileDone = null)
     {
         if (requests.Count == 0) return [];
         if (requests.Any(r => !PathPolicy.IsSupported(r.SourcePath))) // also checked by the resolver; the pipe must never carry one
@@ -63,9 +65,11 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
         var lanes = Math.Clamp(parallelism > 0 ? parallelism : DefaultParallelism, 1, requests.Count);
         LastLaneCount = lanes;
         var allAssigned = true;
+        var done = 0;
+        void Done() => onFileDone?.Invoke(Interlocked.Increment(ref done));
         await Task.WhenAll(Enumerable.Range(0, lanes).Select(_ => Task.Run(async () =>
         {
-            if (!await RunLaneAsync(queue, requests, results, cancellationToken).ConfigureAwait(false)) allAssigned = false;
+            if (!await RunLaneAsync(queue, requests, results, Done, cancellationToken).ConfigureAwait(false)) allAssigned = false;
         }, CancellationToken.None))).ConfigureAwait(false);
         JobObjectAssigned = allAssigned;
         for (var i = 0; i < results.Length; i++)
@@ -77,7 +81,7 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
 
     /// <summary>One lane: a worker that processes files from the queue until it is empty. Returns whether every worker it started joined the job object.</summary>
     private async Task<bool> RunLaneAsync(System.Collections.Concurrent.ConcurrentQueue<int> queue, IReadOnlyList<ConversionRequest> requests,
-        ConversionResult?[] results, CancellationToken cancellationToken)
+        ConversionResult?[] results, Action done, CancellationToken cancellationToken)
     {
         Process? process = null;
         var restarts = 0;
@@ -91,16 +95,17 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
                 {
                     process = Start(out var inJob);
                     assigned &= inJob;
-                    if (process is null) { results[i] = ConversionResult.Fail(request.Id, ErrorCode.WorkerCrashed, "The conversion worker could not be started."); return assigned; }
+                    if (process is null) { results[i] = ConversionResult.Fail(request.Id, ErrorCode.WorkerCrashed, "The conversion worker could not be started."); done(); return assigned; }
                 }
                 var attempt = await RunOneAsync(process, request, cancellationToken).ConfigureAwait(false);
-                if (attempt.Result is { } ok) { results[i] = ok; restarts = 0; continue; }
+                if (attempt.Result is { } ok) { results[i] = ok; restarts = 0; done(); continue; }
 
                 Kill(process);
                 process.Dispose();
                 process = null;
                 DeleteTemp(request);
                 results[i] = attempt.Error!;
+                done();
                 if (cancellationToken.IsCancellationRequested) return assigned;
                 if (++restarts > MaxRestartsPerLane) return assigned; // the remaining files are reported as not run
             }

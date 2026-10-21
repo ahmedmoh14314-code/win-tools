@@ -67,16 +67,28 @@ internal static partial class Desktop
         return n > 0 ? new string(buf, 0, n) : "";
     }
     /// <summary>Closes the visible message boxes (dialog class #32770) owned by <paramref name="pid"/>; returns how many.</summary>
-    public static int CloseDialogsOf(int pid)
+    public static int CloseDialogsOf(int pid) => CloseWindowsOf(pid, "#32770");
+
+    /// <summary>Posts WM_CLOSE to the visible top-level windows of class <paramref name="className"/> owned by <paramref name="pid"/>; returns how many.</summary>
+    public static int CloseWindowsOf(int pid, string className)
     {
         var closed = 0;
+        foreach (var w in VisibleWindowsOf(pid, className))
+            if (PostMessageW(w, 0x0010 /* WM_CLOSE */, 0, 0)) closed++;
+        return closed;
+    }
+
+    /// <summary>The visible top-level windows of class <paramref name="className"/> owned by <paramref name="pid"/>.</summary>
+    public static List<nint> VisibleWindowsOf(int pid, string className)
+    {
+        var found = new List<nint>();
         for (nint w = FindWindowExW(0, 0, 0, 0); w != 0; w = FindWindowExW(0, w, 0, 0))
         {
-            if (!IsWindowVisible(w) || ClassOf(w) != "#32770") continue;
+            if (!IsWindowVisible(w) || ClassOf(w) != className) continue;
             _ = GetWindowThreadProcessId(w, out var owner);
-            if (owner == (uint)pid && PostMessageW(w, 0x0010 /* WM_CLOSE */, 0, 0)) closed++;
+            if (owner == (uint)pid) found.Add(w);
         }
-        return closed;
+        return found;
     }
 
     public static nint RootAt(int x, int y) => GetAncestor(WindowFromPoint(new POINT { X = x, Y = y }), 2 /* GA_ROOT */);

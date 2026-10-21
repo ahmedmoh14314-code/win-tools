@@ -11,6 +11,7 @@ using WinTools.EndToEnd;
 // Explorer end-to-end harness for the product host (local and interactive only; it drives the real mouse and keyboard).
 // Usage: WinTools.EndToEnd <png|jpg|bmp|tif|webp|batch|escape|outside|unsupported|category|fast|edge|worker-crash>
 //          [--op <operation id>] [--target jpeg|png|webp|bmp|tiff] [--batch N] [--cycles N] [--fast-ms N] [--results file.jsonl]
+//          [--animations on|off|system]   (default on: the menu's animations run, the heavier path for latency)
 // Each scenario: fresh folder with copies of the committed samples, fresh host with its own log and default settings,
 // one Explorer window on that folder. Before every injection the window is re-verified; a release happens only over our
 // overlay or over the folder's own background, otherwise the drag is cancelled with Escape. After every cycle the folder
@@ -20,9 +21,12 @@ using WinTools.EndToEnd;
 // ignores its raise of the Explorer window, and the guard (correctly) refuses to inject.
 // "edge": the window sits in the bottom-right corner of its monitor's work area and the trigger comes deep inside a
 // sector of the ring that the corner pushed aside; nothing may open until the pointer has been to the ring's centre.
+// UI feedback (V1 UI phase): every producing cycle must show the result toast, "Image info" must show the info panel,
+// and the Explorer window must still be the foreground window when they appear (no focus stealing). Every navigation
+// sound the host logged must follow the rules: one level sound per level change, never more ticks than sector changes.
 
 var scenario = args.Length > 0 ? args[0] : "png";
-var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; string? opArg = null; var batchSize = 12;
+var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; string? opArg = null; var batchSize = 12; var animations = "On";
 for (var i = 1; i < args.Length; i++)
 {
     switch (args[i])
@@ -33,6 +37,7 @@ for (var i = 1; i < args.Length; i++)
         case "--op": opArg = args[++i]; break;                        // any menu operation id, e.g. resize.percent-50
         case "--batch": batchSize = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break; // files for "batch"
         case "--results": resultsPath = Path.GetFullPath(args[++i]); break;
+        case "--animations": animations = args[++i] switch { "on" => "On", "off" => "Off", "system" => "System", var a => throw new ArgumentException($"--animations {a}") }; break;
         default: Console.Error.WriteLine($"Unknown option {args[i]}"); return 64;
     }
 }
@@ -90,6 +95,8 @@ if (producing && op is not null && groupIndex < 0) { Console.Error.WriteLine($"{
 
 var hostLog = Path.Combine(folder, "..", $"host-{scenario}-{stamp}.jsonl");
 var settingsFile = Path.Combine(folder, "..", $"settings-{scenario}-{stamp}.json");
+// Default settings except the animations (on unless asked otherwise), so the menu's commands are the defaults' ones.
+File.WriteAllText(settingsFile, new AppSettings { Animations = animations }.ToJson());
 resultsPath ??= Path.Combine(folder, "..", $"e2e-{scenario}-{stamp}.jsonl");
 using var results = new StreamWriter(resultsPath, append: false) { AutoFlush = true };
 void Record(object o) { var line = JsonSerializer.Serialize(o); results.WriteLine(line); Console.WriteLine(line); }
@@ -126,6 +133,22 @@ static string Ev(JsonElement e) => e.TryGetProperty("ev", out var v) ? v.GetStri
 // Host log lines are {"t","wall","ev","data":{...}}: event fields live under "data".
 static JsonElement Data(JsonElement e) => e.TryGetProperty("data", out var d) && d.ValueKind == JsonValueKind.Object ? d : default;
 static bool Is(JsonElement e, string name, bool value) => Data(e) is { ValueKind: JsonValueKind.Object } d && d.TryGetProperty(name, out var v) && v.ValueKind == (value ? JsonValueKind.True : JsonValueKind.False);
+// The host's sound counters on every event that carries them: one level sound per level change, no more ticks than
+// sector changes (the sounds are on with default settings).
+static bool SoundsHeld(IEnumerable<JsonElement> events) => events.Where(e => Data(e) is { ValueKind: JsonValueKind.Object } d && d.TryGetProperty("sounds", out _))
+    .All(e => Data(e).GetProperty("sounds") is var s && s.GetProperty("ticks").GetInt32() <= s.GetProperty("sectorChanges").GetInt32()
+        && s.GetProperty("levels").GetInt32() == s.GetProperty("levelChanges").GetInt32());
+// Waits for a visible window of the host's (the toast, the info panel) and reports whether Explorer still had the foreground.
+(bool Shown, bool FocusKept) WaitForSurface(string className, nint explorerHwnd, TimeSpan timeout)
+{
+    var waited = Stopwatch.GetTimestamp();
+    while (Stopwatch.GetElapsedTime(waited) < timeout)
+    {
+        if (Desktop.VisibleWindowsOf(host.Id, className).Count > 0) return (true, Desktop.GetForegroundWindow() == explorerHwnd);
+        Thread.Sleep(50);
+    }
+    return (false, Desktop.GetForegroundWindow() == explorerHwnd);
+}
 // The centre and DPI of the ring on screen in this cycle, from the host log: the menu re-centres when it changes level.
 (int X, int Y, uint Dpi)? LastOverlay()
 {
@@ -329,11 +352,14 @@ using (var explorer = ExplorerWindow.Open(folder))
                 var intact = batchSources.All(f => File.Exists(f) && Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(f))) == batchHashes[f]);
                 var present = Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
                 var expectedSet = batchSources.Concat(wanted).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
+                var (btoast, bfocus) = WaitForSurface("WinTools.Toast", explorer.Hwnd, TimeSpan.FromSeconds(3));
                 var bev = HostEventsSinceLastCycle();
                 var baccepted = bev.Count(e => Ev(e) == "drop" && Is(e, "accepted", true));
-                var bok = allValid && intact && present.SequenceEqual(expectedSet) && baccepted == 1;
+                var bsounds = SoundsHeld(bev);
+                var bok = allValid && intact && present.SequenceEqual(expectedSet) && baccepted == 1 && btoast && bfocus && bsounds;
                 if (bok) passed++; else exitCode = 1;
-                Record(new { scenario, cycle, op = op?.Id, files = batchSources.Count, outputs = wanted.Count(File.Exists), allValid, sourcesIntact = intact, cleanFolder = present.SequenceEqual(expectedSet), hostAccepted = baccepted, ok = bok });
+                Record(new { scenario, cycle, op = op?.Id, files = batchSources.Count, outputs = wanted.Count(File.Exists), allValid, sourcesIntact = intact, cleanFolder = present.SequenceEqual(expectedSet), hostAccepted = baccepted,
+                    toastShown = btoast, focusKept = bfocus, soundsHeld = bsounds, ok = bok });
                 foreach (var w in wanted) if (File.Exists(w)) File.Delete(w);
                 Thread.Sleep((int)Desktop.GetDoubleClickTime() + 300);
                 continue;
@@ -344,13 +370,22 @@ using (var explorer = ExplorerWindow.Open(folder))
             var deadline = Stopwatch.GetTimestamp();
             var waitFor = expectOutput || scenario == "fast" ? TimeSpan.FromSeconds(scenario == "fast" ? 4 : 15) : TimeSpan.FromSeconds(3);
             var infoShown = false;
+            bool? toastShown = null, focusKept = null;
             while (Stopwatch.GetElapsedTime(deadline) < waitFor)
             {
                 var produced = Directory.GetFiles(folder).Where(f => !string.Equals(f, source, StringComparison.OrdinalIgnoreCase)).ToArray();
                 if (produced.Length > 0 && !produced.Any(f => Path.GetFileName(f).StartsWith("~wintools-", StringComparison.Ordinal))) { output = produced.Single(); break; }
-                if (op is { WritesFile: false } && Desktop.CloseDialogsOf(host.Id) > 0) { infoShown = true; break; } // "Image info": a box, no file
+                if (op is { WritesFile: false } && Desktop.VisibleWindowsOf(host.Id, "WinTools.InfoPanel").Count > 0)
+                {
+                    // "Image info": the panel, no file. Explorer must still be in front; then close it as a user would.
+                    infoShown = true;
+                    focusKept = Desktop.GetForegroundWindow() == explorer.Hwnd;
+                    Desktop.CloseWindowsOf(host.Id, "WinTools.InfoPanel");
+                    break;
+                }
                 Thread.Sleep(100);
             }
+            if (output is not null) (toastShown, focusKept) = WaitForSurface("WinTools.Toast", explorer.Hwnd, TimeSpan.FromSeconds(3));
             Thread.Sleep(300);
             var files = Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
             var sourceIntact = File.Exists(source) && Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source))) == sourceHash;
@@ -371,9 +406,12 @@ using (var explorer = ExplorerWindow.Open(folder))
             var cleanFolder = files.SequenceEqual(expectedFiles);
             var menuOpens = ev.Where(e => Ev(e) == "menu.open").Select(e => Data(e).TryGetProperty("group", out var gr) ? gr.GetString() : null).ToArray();
             var menuBacks = ev.Count(e => Ev(e) == "menu.back");
-            var ok = sourceIntact && cleanFolder && scenario switch
+            var soundsHeld = SoundsHeld(ev);
+            // Every result the user can see came without taking the foreground from Explorer.
+            var feedbackOk = output is null || (toastShown == true && focusKept == true);
+            var ok = sourceIntact && cleanFolder && soundsHeld && feedbackOk && scenario switch
             {
-                "png" or "jpg" or "bmp" or "tif" or "webp" when op is { WritesFile: false } => output is null && infoShown && accepted == 1,
+                "png" or "jpg" or "bmp" or "tif" or "webp" when op is { WritesFile: false } => output is null && infoShown && focusKept == true && accepted == 1,
                 "png" or "jpg" or "bmp" or "tif" or "webp" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 // Corner: the trigger really was off-centre and deep in a sector, nothing opened before the centre was
                 // reached, then exactly the wanted category opened and the wanted command ran.
@@ -397,6 +435,7 @@ using (var explorer = ExplorerWindow.Open(folder))
             };
             if (ok) passed++; else exitCode = 1;
             Record(new { scenario, cycle, op = op?.Id, releasedOver, releaseAfterMs, hostEnters = enters, hostDrops = drops.Length, hostAccepted = accepted, openMs, ruleHeld, endedOnOverlay, infoShown,
+                toastShown, focusKept, soundsHeld,
                 startOffset, opensBeforeCentre, levelPushed, categorySeen, menuOpens, menuBacks,
                 triggerAt = $"{at.X},{at.Y}", releaseAt = $"{release.X},{release.Y}", output = output is null ? null : Path.GetFileName(output), outputValid, sourceIntact, cleanFolder, files, ok });
             if (output is not null) File.Delete(output); // the harness's own result file, so the next cycle starts clean
@@ -415,7 +454,7 @@ using (var explorer = ExplorerWindow.Open(folder))
 var hostAlive = !host.HasExited;
 double? hostPrivateMb = null, hostWorkingSetMb = null;
 if (hostAlive) { host.Refresh(); hostPrivateMb = Math.Round(host.PrivateMemorySize64 / 1048576.0, 1); hostWorkingSetMb = Math.Round(host.WorkingSet64 / 1048576.0, 1); }
-if (hostAlive) { Desktop.CloseDialogsOf(host.Id); host.Kill(); host.WaitForExit(5000); }
+if (hostAlive) { Desktop.CloseWindowsOf(host.Id, "WinTools.InfoPanel"); host.Kill(); host.WaitForExit(5000); }
 // The harness must leave no injected input behind; say so in the summary and fail if it did.
 var leftDownAtEnd = Desktop.IsDown(0x01);
 var spaceDownAtEnd = Desktop.IsDown(Desktop.VkSpace);

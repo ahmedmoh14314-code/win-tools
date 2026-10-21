@@ -1,0 +1,177 @@
+<Window x:Class="WinTools.Settings.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WinTools Settings" Width="580" Height="720" MinWidth="500" MinHeight="420"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource Base}"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display" Icon="Assets/WinTools.ico">
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <!-- Header -->
+    <Grid Grid.Row="0" Margin="28,22,28,6">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+      <Image Source="Assets/WinTools.ico" Width="36" Height="36" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" />
+      <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+        <TextBlock Text="WinTools" FontSize="20" FontWeight="SemiBold" />
+        <TextBlock x:Name="Status" Style="{StaticResource Hint}" Text="Changes are saved and applied at once." />
+      </StackPanel>
+    </Grid>
+
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="28,0,28,24" Focusable="False">
+      <StackPanel x:Name="Sections">
+        <Border x:Name="ReadOnlyBanner" Visibility="Collapsed" Margin="0,14,0,0" Padding="14,10" CornerRadius="8" Background="#2A2416" BorderBrush="{StaticResource Warning}" BorderThickness="1">
+          <TextBlock x:Name="ReadOnlyText" TextWrapping="Wrap" Foreground="{StaticResource Warning}" />
+        </Border>
+
+        <!-- General -->
+        <TextBlock Style="{StaticResource SectionTitle}" Text="GENERAL" />
+        <Border Style="{StaticResource Card}">
+          <StackPanel>
+            <Grid Style="{StaticResource Row}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel Margin="0,0,16,0">
+                <TextBlock Text="Activation key" />
+                <TextBlock Style="{StaticResource Hint}" Text="While dragging files, press this key to open the menu." />
+              </StackPanel>
+              <ComboBox x:Name="TriggerKey" Grid.Column="1" Width="120" Height="32" VerticalAlignment="Center" AutomationProperties.Name="Activation key" />
+            </Grid>
+            <Border Height="1" Background="{StaticResource Edge}" />
+            <Grid Style="{StaticResource Row}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel Margin="0,0,16,0">
+                <TextBlock Text="UI sounds" />
+                <TextBlock Style="{StaticResource Hint}" Text="Soft ticks while you move through the menu, and a sound when a job ends." />
+              </StackPanel>
+              <CheckBox x:Name="UiSounds" Grid.Column="1" Style="{StaticResource Switch}" VerticalAlignment="Center" AutomationProperties.Name="UI sounds" />
+            </Grid>
+            <Border Height="1" Background="{StaticResource Edge}" />
+            <Grid Style="{StaticResource Row}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel Margin="0,0,16,0">
+                <TextBlock Text="Start with Windows" />
+                <TextBlock x:Name="StartupHint" Style="{StaticResource Hint}" Text="Start WinTools when you sign in, for this Windows account only." />
+              </StackPanel>
+              <CheckBox x:Name="StartWithWindows" Grid.Column="1" Style="{StaticResource Switch}" VerticalAlignment="Center" AutomationProperties.Name="Start with Windows" />
+            </Grid>
+          </StackPanel>
+        </Border>
+
+        <!-- Output -->
+        <TextBlock Style="{StaticResource SectionTitle}" Text="OUTPUT" />
+        <Border Style="{StaticResource Card}">
+          <StackPanel Margin="0,10">
+            <TextBlock Text="Where new files are saved" />
+            <TextBlock Style="{StaticResource Hint}" Text="Originals are never changed. A new name is chosen when a file already exists." />
+            <RadioButton x:Name="SameFolder" GroupName="Output" Content="Next to the original" Margin="0,12,0,0" />
+            <RadioButton x:Name="CustomFolder" GroupName="Output" Content="In this folder:" Margin="0,10,0,0" />
+            <Grid Margin="28,8,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <TextBox x:Name="FolderPath" Height="32" IsReadOnly="True" AutomationProperties.Name="Output folder" />
+              <Button x:Name="Browse" Grid.Column="1" Content="Browse…" Margin="8,0,0,0" Height="32" />
+            </Grid>
+            <TextBlock x:Name="FolderError" Style="{StaticResource Hint}" Foreground="{StaticResource Warning}" Margin="28,6,0,0" Visibility="Collapsed" />
+          </StackPanel>
+        </Border>
+
+        <!-- Images -->
+        <TextBlock Style="{StaticResource SectionTitle}" Text="IMAGES" />
+        <Border Style="{StaticResource Card}">
+          <StackPanel>
+            <Grid Style="{StaticResource Row}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="150" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="44" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="JPEG quality" VerticalAlignment="Center" />
+              <Slider x:Name="JpegQuality" Grid.Column="1" Minimum="1" Maximum="100" SmallChange="1" LargeChange="5" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center" AutomationProperties.Name="JPEG quality" />
+              <TextBlock x:Name="JpegValue" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold" />
+            </Grid>
+            <Grid Style="{StaticResource Row}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="150" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="44" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="WebP quality" VerticalAlignment="Center" />
+              <Slider x:Name="WebPQuality" Grid.Column="1" Minimum="1" Maximum="100" SmallChange="1" LargeChange="5" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center" AutomationProperties.Name="WebP quality" />
+              <TextBlock x:Name="WebPValue" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" FontWeight="SemiBold" />
+            </Grid>
+            <TextBlock Style="{StaticResource Hint}" Text="Used by Convert to JPEG and Convert to WebP. Compress has its own levels." Margin="0,0,0,8" />
+            <Border Height="1" Background="{StaticResource Edge}" />
+            <StackPanel Margin="0,10">
+              <TextBlock Text="Custom size in the Resize menu" />
+              <TextBlock Style="{StaticResource Hint}" Text="Fit inside this box. Leave a side at 0 to let it follow the other." />
+              <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                <TextBox x:Name="ResizeWidth" Width="86" Height="32" HorizontalContentAlignment="Center" AutomationProperties.Name="Custom width in pixels" />
+                <TextBlock Text="×" Margin="10,0" VerticalAlignment="Center" Foreground="{StaticResource TextSecondary}" />
+                <TextBox x:Name="ResizeHeight" Width="86" Height="32" HorizontalContentAlignment="Center" AutomationProperties.Name="Custom height in pixels" />
+                <TextBlock Text="px" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource TextSecondary}" />
+              </StackPanel>
+              <TextBlock x:Name="SizeError" Style="{StaticResource Hint}" Foreground="{StaticResource Warning}" Visibility="Collapsed" />
+              <CheckBox x:Name="KeepAspect" Content="Keep the aspect ratio" Margin="0,12,0,0" />
+              <CheckBox x:Name="NoUpscale" Content="Never enlarge a smaller image" Margin="0,10,0,0" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- Appearance -->
+        <TextBlock Style="{StaticResource SectionTitle}" Text="APPEARANCE" />
+        <Border Style="{StaticResource Card}">
+          <StackPanel Margin="0,10">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel Margin="0,0,16,0">
+                <TextBlock Text="Theme" />
+                <TextBlock Style="{StaticResource Hint}" Text="This version has the dark theme only." />
+              </StackPanel>
+              <TextBlock Grid.Column="1" Text="Dark" VerticalAlignment="Center" FontWeight="SemiBold" />
+            </Grid>
+            <Border Height="1" Background="{StaticResource Edge}" Margin="0,12,0,0" />
+            <Grid Margin="0,12,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel Margin="0,0,16,0">
+                <TextBlock Text="Animations" />
+                <TextBlock x:Name="AnimationsHint" Style="{StaticResource Hint}" Text="Short movements when the menu opens and changes." />
+              </StackPanel>
+              <ComboBox x:Name="Animations" Grid.Column="1" Width="160" Height="32" VerticalAlignment="Center" AutomationProperties.Name="Animations" />
+            </Grid>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- Footer -->
+    <Border Grid.Row="2" BorderBrush="{StaticResource Edge}" BorderThickness="0,1,0,0" Padding="28,10">
+      <Grid>
+        <TextBlock x:Name="Footer" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0" />
+        <Button x:Name="Done" Content="Done" HorizontalAlignment="Right" IsDefault="True" IsCancel="True" Background="{StaticResource Green}" Foreground="{StaticResource TextOnGreen}" BorderBrush="{StaticResource Green}" FontWeight="SemiBold" Padding="20,6" />
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

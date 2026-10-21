@@ -8,10 +8,16 @@ public enum InputSignal { None, Trigger, LeftButtonReleased, Escape }
 /// <summary>
 /// Allocation-free decision logic that runs inside the low-level hook callbacks: it tracks the left button and the
 /// drag threshold and recognises the trigger key (Space, without Ctrl/Shift/Alt, key auto-repeat ignored).
-/// Not thread-safe: the hook thread owns it.
+/// Not thread-safe: the hook thread owns it, except <see cref="TriggerVirtualKey"/>, which the settings may change from
+/// another thread (a single atomic field).
 /// </summary>
 public sealed class TriggerDetector(int triggerVirtualKey = TriggerDetector.VkSpace, int dragThresholdPx = 4)
 {
+    private int _triggerVk = triggerVirtualKey;
+
+    /// <summary>The trigger key; changing it takes effect from the next key event.</summary>
+    public int TriggerVirtualKey { get => Volatile.Read(ref _triggerVk); set => Volatile.Write(ref _triggerVk, value); }
+
     public const int VkSpace = 0x20;
     private const int VkEscape = 0x1B, VkShift = 0x10, VkControl = 0x11, VkMenu = 0x12;
     private const int VkLShift = 0xA0, VkRShift = 0xA1, VkLControl = 0xA2, VkRControl = 0xA3, VkLMenu = 0xA4, VkRMenu = 0xA5;
@@ -57,7 +63,7 @@ public sealed class TriggerDetector(int triggerVirtualKey = TriggerDetector.VkSp
         if (!leftDown) { _leftDown = false; _dragging = false; }
     }
 
-    public bool IsTriggerKey(int virtualKey) => virtualKey == triggerVirtualKey;
+    public bool IsTriggerKey(int virtualKey) => virtualKey == TriggerVirtualKey;
 
     public InputSignal OnKey(int virtualKey, bool isDown)
     {
@@ -68,7 +74,7 @@ public sealed class TriggerDetector(int triggerVirtualKey = TriggerDetector.VkSp
             case VkMenu or VkLMenu or VkRMenu: _alt = isDown; return InputSignal.None;
             case VkEscape: return isDown ? InputSignal.Escape : InputSignal.None;
         }
-        if (virtualKey != triggerVirtualKey) return InputSignal.None;
+        if (virtualKey != TriggerVirtualKey) return InputSignal.None;
         if (!isDown) { _triggerHeld = false; return InputSignal.None; }
         if (_triggerHeld) return InputSignal.None; // auto-repeat
         _triggerHeld = true;

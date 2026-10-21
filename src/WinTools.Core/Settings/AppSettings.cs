@@ -32,8 +32,20 @@ public sealed record AppSettings
     public int ResizeHeight { get; init; } = 1600;
     public bool KeepAspectRatio { get; init; } = true;
     public bool NoUpscale { get; init; } = true;
-    /// <summary>Placeholder for the UI phase: "System", "Light" or "Dark".</summary>
+    /// <summary>"System", "Light" or "Dark". V1 ships the dark theme only; the field is kept for a later light theme.</summary>
     public string Theme { get; init; } = "System";
+    /// <summary>The radial menu's navigation ticks and the success and failure sounds.</summary>
+    public bool UiSounds { get; init; } = true;
+    /// <summary>"System" (follow Windows' "Animation effects"), "On" or "Off".</summary>
+    public string Animations { get; init; } = "System";
+
+    /// <summary>Whether the UI should show changes at once, given Windows' own setting.</summary>
+    public bool ReducedMotion(bool systemReducedMotion) => Normalized().Animations switch
+    {
+        "On" => false,
+        "Off" => true,
+        _ => systemReducedMotion,
+    };
 
     public int TriggerVirtualKey => TriggerKeys.TryGetValue(TriggerKey, out var vk) ? vk : 0x20;
 
@@ -53,6 +65,7 @@ public sealed record AppSettings
             ResizeWidth = Math.Clamp(ResizeWidth, 0, 65_535),
             ResizeHeight = Math.Clamp(ResizeHeight, 0, 65_535),
             Theme = Theme is "System" or "Light" or "Dark" ? Theme : "System",
+            Animations = Animations is "System" or "On" or "Off" ? Animations : "System",
         };
     }
 

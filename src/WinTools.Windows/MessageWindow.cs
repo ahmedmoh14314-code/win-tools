@@ -10,8 +10,10 @@ namespace WinTools.Windows;
 public sealed class MessageWindow : IDisposable
 {
     private const string ClassName = "WinTools.MessageWindow";
+    private const uint InvokeMessage = Msg.APP + 40;
     private readonly WndProc _wndProc;
     private readonly Func<uint, nuint, nint, bool> _handler;
+    private readonly System.Collections.Concurrent.ConcurrentQueue<Action> _posted = new();
 
     public nint Handle { get; private set; }
 
@@ -19,7 +21,7 @@ public sealed class MessageWindow : IDisposable
     public MessageWindow(Func<uint, nuint, nint, bool> handler)
     {
         _handler = handler;
-        _wndProc = (h, m, w, l) => m == Msg.CLOSE ? Quit() : _handler(m, w, l) ? 0 : User32.DefWindowProcW(h, m, w, l);
+        _wndProc = (h, m, w, l) => m == Msg.CLOSE ? Quit() : m == InvokeMessage ? RunPosted() : _handler(m, w, l) ? 0 : User32.DefWindowProcW(h, m, w, l);
         var instance = Kernel32.GetModuleHandleW(0);
         var wc = new WNDCLASSEXW
         {
@@ -34,6 +36,19 @@ public sealed class MessageWindow : IDisposable
     }
 
     private static nint Quit() { User32.PostQuitMessage(0); return 0; }
+
+    /// <summary>Runs <paramref name="action"/> on this window's thread, after the messages already queued; callable from any thread.</summary>
+    public void Post(Action action)
+    {
+        _posted.Enqueue(action);
+        User32.PostMessageW(Handle, InvokeMessage, 0, 0);
+    }
+
+    private nint RunPosted()
+    {
+        while (_posted.TryDequeue(out var action)) action();
+        return 0;
+    }
 
     /// <summary>Asks the loop to end; callable from any thread.</summary>
     public void RequestClose() => User32.PostMessageW(Handle, Msg.CLOSE, 0, 0);
@@ -53,17 +68,11 @@ public sealed class MessageWindow : IDisposable
         }
     }
 
-    /// <summary>Audible failure cue (no notification UI in this slice).</summary>
-    public static void FailureBeep() => User32.MessageBeep(User32.MB_ICONHAND);
-
     /// <summary>
-    /// Shows a plain informational message box (topmost, owned by no window) and returns when it is closed. Call it off
-    /// the UI thread: it runs its own modal loop. Used for "Image info" until the UI phase designs a proper surface.
+    /// Shows a plain message box for a problem the user must see before the app can run at all (no tray icon or toast
+    /// exists yet). Not used once the host is running.
     /// </summary>
-    public static void ShowInfo(string title, string text) => _ = User32.MessageBoxW(0, text, title, 0x40 | 0x40000 /* MB_ICONINFORMATION | MB_TOPMOST */);
-
-    /// <summary>Audible "nothing to do" cue (the image already fits, or compression would not shrink it).</summary>
-    public static void InfoBeep() => User32.MessageBeep(0x40 /* MB_ICONASTERISK */);
+    public static void ShowStartupError(string text) => _ = User32.MessageBoxW(0, text, "WinTools", 0x10 /* MB_ICONERROR */);
 
     public void Dispose()
     {

@@ -1,7 +1,7 @@
 using System.Globalization;
 using WinTools.Core.Settings;
 
-namespace WinTools.Host;
+namespace WinTools.Windows.Settings;
 
 /// <summary>
 /// Loads and saves <see cref="AppSettings"/> at %APPDATA%\WinTools\settings.json (or a given path).
@@ -16,7 +16,7 @@ namespace WinTools.Host;
 /// it return false, and the host runs on with the settings in memory.</item>
 /// </list>
 /// </summary>
-internal sealed class SettingsStore(string path)
+public sealed class SettingsStore(string path)
 {
     public string Path { get; } = path;
 
