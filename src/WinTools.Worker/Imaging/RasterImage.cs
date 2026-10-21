@@ -24,11 +24,20 @@ internal sealed class RasterImage
     public double DpiX { get; }
     public double DpiY { get; }
 
-    public RasterImage(int width, int height, byte[] bgra, double dpiX = 96, double dpiY = 96)
+    /// <summary>The source's embedded ICC colour profile, carried to every output so colours render the same; null if none.</summary>
+    public byte[]? IccProfile { get; }
+
+    public RasterImage(int width, int height, byte[] bgra, double dpiX = 96, double dpiY = 96, byte[]? iccProfile = null)
     {
         if (width <= 0 || height <= 0 || bgra.Length != (long)width * height * 4) throw new ArgumentException("Pixel buffer does not match the size.");
-        (Width, Height, Bgra, DpiX, DpiY) = (width, height, bgra, Sane(dpiX), Sane(dpiY));
+        // Only a well-formed RGB profile can describe these (always RGB) pixels; anything else is dropped here, at the source.
+        var icc = iccProfile is not null && WinTools.Core.Files.IccProfile.IsUsableRgb(iccProfile) ? iccProfile : null;
+        (Width, Height, Bgra, DpiX, DpiY, IccProfile) = (width, height, bgra, Sane(dpiX), Sane(dpiY), icc);
     }
+
+    /// <summary>Same metadata (resolution, ICC), new pixels.</summary>
+    public RasterImage WithPixels(int width, int height, byte[] bgra, bool swapDpi = false) =>
+        new(width, height, bgra, swapDpi ? DpiY : DpiX, swapDpi ? DpiX : DpiY, IccProfile);
 
     /// <summary>Allocates the pixel buffer for a decode after checking the limits, so a hostile header cannot ask for gigabytes.</summary>
     public static byte[] AllocateFor(long width, long height)
@@ -93,6 +102,6 @@ internal static class Orientation
                 output[y * dw + x] = input[sy * w + sx];
             }
         }
-        return swap ? new RasterImage(dw, dh, bytes, src.DpiY, src.DpiX) : new RasterImage(dw, dh, bytes, src.DpiX, src.DpiY);
+        return src.WithPixels(dw, dh, bytes, swapDpi: swap);
     }
 }

@@ -53,7 +53,7 @@ internal static class WicCodec
             bgra.Initialize((IWICBitmapSource)frame, WicIds.Format32bppBGRA, WicDitherType.None, 0, 0, WicPaletteType.Custom);
             fixed (byte* p = pixels) bgra.CopyPixels(null, width * 4, (uint)pixels.Length, p); // one sequential decode
             DecoderDiagnostics.ThrowIfWarned();
-            return (new RasterImage((int)width, (int)height, pixels, dpiX, dpiY), orientation);
+            return (new RasterImage((int)width, (int)height, pixels, dpiX, dpiY, ReadIccProfile(com, frame)), orientation);
         }
         catch (COMException ex) when (ex.HResult == unchecked((int)0x8007000E)) { throw new ImagingException(ErrorCode.ImageTooLarge, "Not enough memory to decode this image.", ex); }
         catch (COMException ex) { throw new ImagingException(ErrorCode.DecodeFailed, $"The file could not be decoded (0x{ex.HResult:X8}).", ex); }
@@ -63,9 +63,16 @@ internal static class WicCodec
     /// Encodes BGRA. Formats that keep alpha get 32-bit BGRA only when some pixel is transparent; everything else is
     /// 24-bit BGR, composited onto white. <paramref name="jpegQuality"/> (0–1) sets the JPEG encoder's ImageQuality.
     /// </summary>
-    public static unsafe byte[] Encode(RasterImage image, ImageFormat format, float? jpegQuality = null)
+    public static unsafe byte[] Encode(RasterImage image, ImageFormat format, float? jpegQuality = null, bool fullChroma = false)
     {
         using var com = new ComScope();
+        var pins = new List<GCHandle>(); // buffers handed to WIC stay pinned until the encoder has committed
+        try { return EncodeCore(com, image, format, jpegQuality, fullChroma, pins); }
+        finally { foreach (var h in pins) h.Free(); }
+    }
+
+    private static unsafe byte[] EncodeCore(ComScope com, RasterImage image, ImageFormat format, float? jpegQuality, bool fullChroma, List<GCHandle> pins)
+    {
         try
         {
             var stream = new GrowableStream();
@@ -76,6 +83,8 @@ internal static class WicCodec
             try
             {
                 if (jpegQuality is { } q && format == ImageFormat.Jpeg && options != 0) PropertyBag.WriteFloat(options, "ImageQuality", Math.Clamp(q, 0f, 1f));
+                // 4:4:4 keeps full colour resolution when a JPEG is only rotated or resized (the default is 4:2:0).
+                if (fullChroma && format == ImageFormat.Jpeg && options != 0) PropertyBag.WriteByte(options, "JpegYCrCbSubsampling", 3 /* WICJpegYCrCbSubsampling444 */);
                 // The TIFF encoder's default ("don't care") compression takes minutes on photographic content; Deflate is
                 // lossless, widely read, and fast.
                 if (format == ImageFormat.Tiff && options != 0) PropertyBag.WriteByte(options, "TiffCompressionMethod", 6 /* WICTiffCompressionZIP */);
@@ -89,6 +98,7 @@ internal static class WicCodec
             var pf = wanted;
             frameEncode.SetPixelFormat(ref pf);
             if (pf != wanted) throw new ImagingException(ErrorCode.EncodeFailed, "The encoder refused the pixel format.");
+            if (image.IccProfile is { Length: > 0 } icc && format != ImageFormat.Bmp) WriteIccProfile(com, frameEncode, icc, pins);
 
             const int band = 64;
             var w = image.Width;
@@ -134,6 +144,45 @@ internal static class WicCodec
             return value.UInt16 is >= 1 and <= 8 ? value.UInt16 : 1;
         }
         finally { _ = WicNative.PropVariantClear(&value); }
+    }
+
+    /// <summary>The frame's embedded ICC profile bytes, or null (no profile, or only an EXIF colour-space tag).</summary>
+    private static unsafe byte[]? ReadIccProfile(ComScope com, IWICBitmapFrameDecode frame)
+    {
+        if (frame.GetColorContexts(0, null, out var count) < 0 || count == 0) return null;
+        var contexts = new IWICColorContext[count];
+        var raw = new nint[count];
+        try
+        {
+            for (var i = 0; i < count; i++)
+            {
+                contexts[i] = com.Add(Factory(com).CreateColorContext());
+                raw[i] = Marshal.GetComInterfaceForObject(contexts[i], typeof(IWICColorContext));
+            }
+            fixed (nint* p = raw) if (frame.GetColorContexts(count, p, out _) < 0) return null;
+            foreach (var ctx in contexts)
+            {
+                if (ctx.GetType_() != 1 /* WICColorContextProfile */) continue;
+                if (ctx.GetProfileBytes(0, null, out var size) < 0 || size == 0 || size > 16 * 1024 * 1024) continue;
+                var bytes = new byte[size];
+                fixed (byte* b = bytes) if (ctx.GetProfileBytes(size, b, out _) < 0) continue;
+                return bytes;
+            }
+            return null;
+        }
+        finally { foreach (var r in raw) if (r != 0) Marshal.Release(r); }
+    }
+
+    private static unsafe void WriteIccProfile(ComScope com, IWICBitmapFrameEncode frameEncode, byte[] icc, List<GCHandle> pins)
+    {
+        var ctx = com.Add(Factory(com).CreateColorContext());
+        // Not documented whether WIC copies the buffer, so it stays pinned until Commit (released by Encode's caller frame).
+        var pin = GCHandle.Alloc(icc, GCHandleType.Pinned);
+        pins.Add(pin);
+        ctx.InitializeFromMemory((byte*)pin.AddrOfPinnedObject(), (uint)icc.Length);
+        var raw = Marshal.GetComInterfaceForObject(ctx, typeof(IWICColorContext));
+        try { frameEncode.SetColorContexts(1, &raw); }
+        finally { Marshal.Release(raw); }
     }
 
     private static IWICImagingFactory Factory(ComScope com) => com.Factory ??= com.Add(WicNative.Create<IWICImagingFactory>(WicIds.ImagingFactory));

@@ -1,6 +1,6 @@
 # ADR-0006: Image conversion engine for V1 (JPG/PNG/WebP; convert, compress, resize)
 
-- **Status:** Accepted (2026-10-21). Formats: PNG, JPEG, WebP, BMP and TIFF as both input and output. SVG and HEIC are deferred (ADR-0012). Resize, compression and rotation get their own update.
+- **Status:** Accepted (2026-10-21). Formats: PNG, JPEG, WebP, BMP and TIFF as both input and output. Operations: convert, resize, compress, rotate. SVG and HEIC are deferred (ADR-0012).
 - **Date:** 2026-10-19
 - **Related requirements:** SCOPE-001, ARCH-002, DEP-001, SEC-001
 
@@ -33,6 +33,30 @@ Pipeline (`ImagePipeline`):
    - WebP is lossy at quality 90 by default, with alpha kept.
    - JPEG uses the WIC default quality (0.9); `ImageQuality` can be set through the encoder property bag.
 7. **Validation:** the written temp file is read back, and its signature, structure, full decode and dimensions are checked.
+
+**Operations (all keep the original untouched, and write a new validated file):**
+- **Resize:**
+  - Presets: 25 / 50 / 75 %, and fit-inside 1920×1080 / 1280×720 / 1080×1080. Parameterised ids cover exact width, exact height, a box, and a stretched box (settings).
+  - The aspect ratio is kept and nothing is upscaled; an image that already fits gives `NothingToDo`, with no file.
+  - Resampling is WIC `HighQualityCubic` on premultiplied BGRA, so transparent neighbours do not darken edges (tested).
+  - Output: `photo (resized 50%).png`, `photo (1920x1080).jpg`.
+- **Rotate:** left, right and 180°, applied after the EXIF orientation, so it rotates what the user sees. Output: `photo (rotated left).jpg`.
+- **Re-encoding for resize and rotate:** JPEG at quality 0.95 (re-encoding JPEG is never bit-exact). WebP stays lossless if the source was lossless, otherwise lossy 95.
+- **Compress** keeps the format. Output: `photo (compressed).jpg`.
+  - JPEG and WebP: High 90, Balanced 80 or Smallest 65 (lossy).
+  - PNG: **lossless only**, with zlib level 9 and every filter tried through SkiaSharp. The result is decoded and compared pixel for pixel with the input before it is accepted.
+  - Not offered for BMP or TIFF, where it means nothing; converting is the useful action there.
+  - If the result would not be smaller than the input, the job reports `NothingToDo` and writes nothing.
+
+**What carries over, and what does not (all operations):**
+- **ICC colour profiles are kept** when they are well-formed **RGB** profiles: WIC colour contexts for PNG, JPEG and TIFF; the original bytes in an ICCP chunk for WebP. BMP output has none.
+  - CMYK or gray profiles (the pixels were converted to RGB without them) and malformed profiles are dropped, because they would mislabel the output.
+  - A PNG with only gAMA/cHRM gets the profile WIC derives from them, which renders the same in colour-managed viewers.
+- **Resolution (DPI) is kept.**
+- **EXIF, GPS, XMP and text are not copied** by convert, resize, rotate or lossy compress. This is disclosed: it removes location data, but also the date taken and camera details. EXIF orientation is applied to the pixels first.
+- **Lossless PNG compression copies the source's ancillary chunks verbatim** (gAMA, cHRM, sRGB, iCCP, pHYs, text, eXIf, tIME). Only the image data's compression changes.
+- **16-bit images** (16-bit PNG, and TIFF above 8 bits per sample) are refused by operations that promise to keep the file (lossless compress, resize, rotate), with `UnsupportedContent`. Conversion produces 8-bit output.
+- **JPEG re-encoding for resize and rotate uses 4:4:4 chroma.** Lossy compression uses the encoder default (4:2:0).
 
 **Multi-page and animated inputs are refused** with `UnsupportedContent` (multi-page TIFF, animated WebP, APNG), rather than silently converting the first frame (decision 2026-10-21). Metadata (EXIF, GPS, ICC) is not copied.
 

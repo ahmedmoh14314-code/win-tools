@@ -304,9 +304,38 @@ public static class BmpWriter
     }
 }
 
-/// <summary>Writes test inputs that need a real WIC encoder (multi-page TIFF).</summary>
+/// <summary>Writes test inputs that need a real WIC encoder (multi-page TIFF, JPEG tagged with an arbitrary profile).</summary>
 public static class WicTestEncoder
 {
+    /// <summary>A JPEG of the given pixels carrying <paramref name="profile"/> as its ICC profile, whatever it is.</summary>
+    internal static unsafe byte[] JpegWithProfile(RasterImage image, byte[] profile)
+    {
+        var stream = new GrowableStream();
+        var factory = WicNative.Create<IWICImagingFactory>(WicIds.ImagingFactory);
+        var encoder = WicNative.Create<IWICBitmapEncoder>(WicIds.JpegEncoder);
+        encoder.Initialize(stream, WicEncoderCacheOption.NoCache);
+        encoder.CreateNewFrame(out var frame, out var bag);
+        frame.Initialize(bag);
+        if (bag != 0) Marshal.Release(bag);
+        frame.SetSize((uint)image.Width, (uint)image.Height);
+        var format = WicIds.Format24bppBGR;
+        frame.SetPixelFormat(ref format);
+        var ctx = factory.CreateColorContext();
+        fixed (byte* p = profile)
+        {
+            ctx.InitializeFromMemory(p, (uint)profile.Length);
+            var raw = Marshal.GetComInterfaceForObject(ctx, typeof(IWICColorContext));
+            try { frame.SetColorContexts(1, &raw); } finally { Marshal.Release(raw); }
+            var bgr = new byte[image.Width * image.Height * 3];
+            RasterImage.CompositeOnWhite(image.Bgra, bgr);
+            fixed (byte* px = bgr) frame.WritePixels((uint)image.Height, (uint)image.Width * 3, (uint)bgr.Length, px);
+            frame.Commit();
+            encoder.Commit();
+        }
+        foreach (var o in new object[] { ctx, frame, encoder, factory }) Marshal.FinalReleaseComObject(o);
+        return stream.ToArray();
+    }
+
     public static unsafe byte[] MultiPageTiff(int pages)
     {
         var stream = new GrowableStream();

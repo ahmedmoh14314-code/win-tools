@@ -105,7 +105,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     void IOverlayEvents.DragEntered(IReadOnlyList<string> paths)
     {
         var action = _session.OnDragEntered();
-        _commands = _resolver.Resolve(paths);
+        _commands = Shown(_resolver.Resolve(paths));
         _overlay.SetCommands(_commands.Select(c => c.Label).ToArray());
         Apply(action, "dragEnterAfterRelease");
         _log.Event("drag.enter", new { files = paths.Count, commands = _commands.Select(c => c.Id), hookToEnterMs = Math.Round(Stopwatch.GetElapsedTime(_triggerTimestamp).TotalMilliseconds, 3) });
@@ -129,8 +129,8 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             return false;
         }
         // Re-resolve from the drop's own data object; run only if it still offers the command that was shown.
-        var now = _resolver.Resolve(paths);
-        if (index >= now.Count || now[index] != shown[index])
+        var now = Shown(_resolver.Resolve(paths));
+        if (index >= now.Length || now[index] != shown[index])
         {
             _log.Event("drop", new { sector, accepted = false, files = paths.Count, reason = "commandsChanged" });
             return false;
@@ -139,6 +139,12 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         _ = _jobs.Start(now[index], paths);
         return true;
     }
+
+    /// <summary>
+    /// The flat ring shows conversions only. Resize, compress and rotate are complete in the worker, and reach the
+    /// ring through the hierarchical menu (next slice): fourteen sectors on one ring are not usable.
+    /// </summary>
+    private static Operation[] Shown(IReadOnlyList<Operation> ops) => ops.Where(o => o.Kind == OperationKind.Convert).ToArray();
 
     public void Dispose()
     {

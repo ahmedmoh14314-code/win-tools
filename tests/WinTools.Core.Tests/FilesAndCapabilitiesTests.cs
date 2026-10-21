@@ -8,7 +8,7 @@ namespace WinTools.Core.Tests;
 public sealed class CapabilityResolverTests
 {
     private static readonly CapabilityResolver R = CapabilityResolver.Default;
-    private static string[] Ids(IEnumerable<Operation> ops) => ops.Select(o => o.Id).ToArray();
+    private static string[] Ids(IEnumerable<Operation> ops) => ops.Where(o => o.Kind == OperationKind.Convert).Select(o => o.Id).ToArray();
 
     [Theory]
     [InlineData(@"C:\p\photo.png", "convert.to-jpeg convert.to-webp convert.to-bmp convert.to-tiff")]
@@ -82,7 +82,8 @@ public sealed class CapabilityMatrixTests
     [Fact]
     public void Labels_and_ids_come_from_the_format_table()
     {
-        Assert.Equal(["To JPEG", "To PNG", "To WebP", "To BMP", "To TIFF"], OperationCatalog.All.Select(o => o.Label));
+        Assert.Equal(["To JPEG", "To PNG", "To WebP", "To BMP", "To TIFF"],
+            OperationCatalog.All.Where(o => o.Kind == OperationKind.Convert).Select(o => o.Label));
         Assert.Equal(OperationCatalog.All.Count, OperationCatalog.All.Select(o => o.Id).Distinct().Count());
     }
 

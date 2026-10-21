@@ -56,6 +56,9 @@ public sealed class MessageWindow : IDisposable
     /// <summary>Audible failure cue (no notification UI in this slice).</summary>
     public static void FailureBeep() => User32.MessageBeep(User32.MB_ICONHAND);
 
+    /// <summary>Audible "nothing to do" cue (the image already fits, or compression would not shrink it).</summary>
+    public static void InfoBeep() => User32.MessageBeep(0x40 /* MB_ICONASTERISK */);
+
     public void Dispose()
     {
         if (Handle == 0) return;

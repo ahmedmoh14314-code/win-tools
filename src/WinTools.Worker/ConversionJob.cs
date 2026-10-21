@@ -28,7 +28,7 @@ internal static class ConversionJob
         var id = request.Id;
         if (id is not { Length: > 0 and <= 64 } || id.Any(c => !char.IsAsciiLetterOrDigit(c)))
             return ConversionResult.Fail("invalid", ErrorCode.InvalidRequest, "Request id must be 1-64 ASCII letters or digits.");
-        var op = OperationCatalog.Find(request.OperationId);
+        var op = OperationCatalog.Find(request.OperationId); // null for a missing or unknown id
         if (op is null) return ConversionResult.Fail(id, ErrorCode.UnsupportedOperation, $"Unknown operation '{request.OperationId}'.");
         var source = request.SourcePath;
         if (!PathPolicy.IsSupported(source))
@@ -47,7 +47,7 @@ internal static class ConversionJob
                     ? "The file is not a supported image."
                     : $"The file content is {ImageFormats.DisplayName(actual)}; \"{op.Label}\" does not apply to it.");
 
-            var encoded = ImagePipeline.Convert(input, actual, op.Target);
+            var encoded = ImagePipeline.Run(input, actual, op);
 
             var dirInfo = new DirectoryInfo(Path.GetDirectoryName(source)!);
             if (!dirInfo.Exists) return ConversionResult.Fail(id, ErrorCode.SourceNotFound, "The source folder no longer exists.");
@@ -60,11 +60,11 @@ internal static class ConversionJob
             FaultInjection.At("after-temp");
             hooks?.AfterTempWritten?.Invoke(tempPath);
 
-            ImagePipeline.Validate(File.ReadAllBytes(tempPath), op.Target, encoded.Width, encoded.Height);
+            ImagePipeline.Validate(File.ReadAllBytes(tempPath), encoded.Format, encoded.Width, encoded.Height);
             File.SetAttributes(tempPath, FileAttributes.Normal);
             hooks?.BeforeFinalize?.Invoke();
 
-            foreach (var candidate in OutputNaming.Candidates(source, op.Target))
+            foreach (var candidate in OutputNaming.Candidates(source, encoded.Format, op.NameSuffix))
             {
                 try
                 {

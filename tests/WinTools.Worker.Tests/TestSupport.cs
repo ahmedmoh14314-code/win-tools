@@ -58,7 +58,7 @@ public sealed record Pixels(int Width, int Height, byte[] Bgra)
 /// <summary>Minimal PNG writer (RGBA 8-bit, filter 0) independent of WIC, for crafted inputs.</summary>
 public static class PngWriter
 {
-    public static byte[] Rgba(int width, int height, Func<int, int, (byte R, byte G, byte B, byte A)> pixel)
+    public static byte[] Rgba(int width, int height, Func<int, int, (byte R, byte G, byte B, byte A)> pixel, CompressionLevel level = CompressionLevel.Optimal)
     {
         var raw = new MemoryStream();
         for (var y = 0; y < height; y++)
@@ -67,7 +67,7 @@ public static class PngWriter
             for (var x = 0; x < width; x++) { var (r, g, b, a) = pixel(x, y); raw.Write([r, g, b, a]); }
         }
         var z = new MemoryStream();
-        using (var zs = new ZLibStream(z, CompressionLevel.Optimal, leaveOpen: true)) raw.WriteTo(zs);
+        using (var zs = new ZLibStream(z, level, leaveOpen: true)) raw.WriteTo(zs);
         return Build(width, height, z.ToArray());
     }
 
@@ -85,6 +85,32 @@ public static class PngWriter
         }
         var z = idat.ToArray();
         return Build(width, height, z[..(int)(z.Length * fraction)]);
+    }
+
+    /// <summary>A PNG with an arbitrary IHDR bit depth / colour type and the given compressed IDAT payload.</summary>
+    public static byte[] Custom(int width, int height, byte bitDepth, byte colorType, byte[] idat)
+    {
+        var png = new MemoryStream();
+        png.Write([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        var ihdr = new byte[13];
+        BigEndian(ihdr, 0, (uint)width); BigEndian(ihdr, 4, (uint)height);
+        ihdr[8] = bitDepth; ihdr[9] = colorType;
+        Chunk(png, "IHDR", ihdr);
+        Chunk(png, "IDAT", idat);
+        Chunk(png, "IEND", []);
+        return png.ToArray();
+    }
+
+    public static List<string> ChunkTypes(byte[] png)
+    {
+        var types = new List<string>();
+        for (var i = 8; i + 12 <= png.Length;)
+        {
+            var len = png[i] << 24 | png[i + 1] << 16 | png[i + 2] << 8 | png[i + 3];
+            types.Add(System.Text.Encoding.ASCII.GetString(png, i + 4, 4));
+            i += 12 + len;
+        }
+        return types;
     }
 
     /// <summary>Inserts an extra chunk (with a valid CRC) right after IHDR.</summary>

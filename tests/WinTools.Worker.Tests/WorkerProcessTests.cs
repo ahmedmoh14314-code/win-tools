@@ -102,7 +102,9 @@ public sealed class WorkerProcessTests : IDisposable
         var req = new ConversionRequest("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src);
         Assert.False(WorkerClient.IsBelievable(req, ConversionResult.Ok("r1", elsewhere, Hash.Of(elsewhere))));
         Assert.False(WorkerClient.IsBelievable(req, ConversionResult.Ok("r1", Path.Combine(_dir.Path, "photo.jpg"), new string('0', 64)))); // does not exist
-        var real = _dir.Write("photo (3).jpg", [1, 2, 3]);
+        var notAJpeg = _dir.Write("photo (2).jpg", [1, 2, 3]);
+        Assert.False(WorkerClient.IsBelievable(req, ConversionResult.Ok("r1", notAJpeg, Hash.Of(notAJpeg)))); // right name, wrong content
+        var real = _dir.CopySample("quadrants-64x48.jpg", "photo (3).jpg");
         Assert.False(WorkerClient.IsBelievable(req, ConversionResult.Ok("r1", real, new string('0', 64)))); // a file that is not the worker's output
         Assert.True(WorkerClient.IsBelievable(req, ConversionResult.Ok("r1", real, Hash.Of(real))));
     }

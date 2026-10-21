@@ -6,7 +6,10 @@ namespace WinTools.Core.Jobs;
 /// <summary>One conversion job sent from the host to the worker. The output always goes next to the source (OutputNaming).</summary>
 public sealed record ConversionRequest(string Id, string OperationId, string SourcePath);
 
-/// <summary>Why a job failed. Stable names: they cross the process boundary and appear in logs.</summary>
+/// <summary>
+/// Why a job did not produce an output. Stable names: they cross the process boundary and appear in logs.
+/// <see cref="NothingToDo"/> is not a failure: the image already fits, or compression would not make it smaller.
+/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<ErrorCode>))]
 public enum ErrorCode
 {
@@ -18,6 +21,7 @@ public enum ErrorCode
     InputTooLarge,
     ContentMismatch,
     UnsupportedContent,
+    NothingToDo,
     DecodeFailed,
     ImageTooLarge,
     EncodeFailed,

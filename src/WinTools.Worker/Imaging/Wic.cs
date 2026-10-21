@@ -30,11 +30,13 @@ internal static class WicIds
 
     public static readonly Guid Format24bppBGR = new("6fddc324-4e03-4bfe-b185-3d77768dc90c");
     public static readonly Guid Format32bppBGRA = new("6fddc324-4e03-4bfe-b185-3d77768dc90f");
+    public static readonly Guid Format32bppPBGRA = new("6fddc324-4e03-4bfe-b185-3d77768dc910");
 }
 
 internal enum WicDecodeOptions { MetadataCacheOnDemand = 0, MetadataCacheOnLoad = 1 }
 internal enum WicEncoderCacheOption { InMemory = 0, TempFile = 1, NoCache = 2 }
 internal enum WicDitherType { None = 0 }
+internal enum WicInterpolationMode { NearestNeighbor = 0, Linear = 1, Cubic = 2, Fant = 3, HighQualityCubic = 4 }
 internal enum WicCacheOption { NoCache = 0, CacheOnDemand = 1, CacheOnLoad = 2 }
 internal enum WicPaletteType { Custom = 0 }
 
@@ -55,15 +57,29 @@ internal interface IWICImagingFactory
     void CreateEncoder_Unused();
     void CreatePalette_Unused();
     IWICFormatConverter CreateFormatConverter();
-    void CreateBitmapScaler_Unused();
+    IWICBitmapScaler CreateBitmapScaler();
     void CreateBitmapClipper_Unused();
     IWICBitmapFlipRotator CreateBitmapFlipRotator();
     void CreateStream_Unused();
-    void CreateColorContext_Unused();
+    IWICColorContext CreateColorContext();
     void CreateColorTransformer_Unused();
     void CreateBitmap_Unused();
     /// <summary>Returns an IWICBitmap (declared by its IWICBitmapSource base, the only part used).</summary>
     IWICBitmapSource CreateBitmapFromSource(IWICBitmapSource source, WicCacheOption option);
+    void CreateBitmapFromSourceRect_Unused();
+    /// <summary>Returns an IWICBitmap over a copy of the buffer (declared by its IWICBitmapSource base).</summary>
+    unsafe IWICBitmapSource CreateBitmapFromMemory(uint width, uint height, in Guid pixelFormat, uint stride, uint bufferSize, byte* buffer);
+}
+
+[ComImport, Guid("00000302-a8f2-4877-ba0a-fd2b6645fb94"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IWICBitmapScaler // : IWICBitmapSource
+{
+    void GetSize(out uint width, out uint height);
+    Guid GetPixelFormat();
+    void GetResolution(out double dpiX, out double dpiY);
+    void CopyPalette(nint palette);
+    unsafe void CopyPixels(WicRect* rect, uint stride, uint bufferSize, byte* buffer);
+    void Initialize(IWICBitmapSource source, uint width, uint height, WicInterpolationMode mode);
 }
 
 [ComImport, Guid("00000120-a8f2-4877-ba0a-fd2b6645fb94"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -85,6 +101,17 @@ internal interface IWICBitmapFrameDecode // : IWICBitmapSource
     void CopyPalette(nint palette);
     unsafe void CopyPixels(WicRect* rect, uint stride, uint bufferSize, byte* buffer);
     [PreserveSig] int GetMetadataQueryReader(out IWICMetadataQueryReader? reader);
+    [PreserveSig] unsafe int GetColorContexts(uint count, nint* contexts, out uint actual);
+}
+
+[ComImport, Guid("3c613a02-34b2-44ea-9a7c-45aea9c6fd6d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IWICColorContext
+{
+    void InitializeFromFilename_Unused();
+    unsafe void InitializeFromMemory(byte* buffer, uint size);
+    void InitializeFromExifColorSpace_Unused();
+    uint GetType_();
+    [PreserveSig] unsafe int GetProfileBytes(uint size, byte* buffer, out uint actual);
 }
 
 [ComImport, Guid("00000301-a8f2-4877-ba0a-fd2b6645fb94"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -146,7 +173,7 @@ internal interface IWICBitmapFrameEncode
     void SetSize(uint width, uint height);
     void SetResolution(double dpiX, double dpiY);
     void SetPixelFormat(ref Guid pixelFormat);
-    void SetColorContexts_Unused();
+    unsafe void SetColorContexts(uint count, nint* contexts);
     void SetPalette_Unused();
     void SetThumbnail_Unused();
     unsafe void WritePixels(uint lineCount, uint stride, uint bufferSize, byte* pixels);
