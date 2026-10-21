@@ -1,0 +1,33 @@
+# Build and non-interactive tests on Windows. No secrets, no deployment.
+# The Explorer end-to-end harness (tests/WinTools.EndToEnd) drives the real desktop and is run locally only.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Restore
+        run: dotnet restore WinTools.slnx
+      - name: Build (Debug, includes the fault-injection hooks the crash tests need)
+        run: dotnet build WinTools.slnx --no-restore -c Debug
+      - name: Unit tests
+        run: dotnet test tests/WinTools.Core.Tests --no-build -c Debug --logger "console;verbosity=normal"
+      - name: Conversion and worker-process tests
+        run: dotnet test tests/WinTools.Worker.Tests --no-build -c Debug --logger "console;verbosity=normal"
+      - name: Build (Release)
+        run: dotnet build WinTools.slnx --no-restore -c Release
+      - name: Vulnerable package check
+        run: dotnet list WinTools.slnx package --vulnerable --include-transitive
