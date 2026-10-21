@@ -27,7 +27,10 @@ public sealed class ResourceLimitTests : IDisposable
         Assert.Equal(ErrorCode.ImageTooLarge, ConversionJob.Run(new ConversionRequest("o1", "convert.to-jpeg", over)).Error);
     }
 
-    /// <summary>The costliest operation at the largest allowed size fits under the cap (measured peak 1.06 GB of 1.5).</summary>
+    /// <summary>
+    /// The costliest operation at the largest allowed size fits under the cap (measured peak 1.06 GB of 1.5). Needs about
+    /// 1.1 GB of free commit and writes a 150 MB file; CI's Windows runners have room for it.
+    /// </summary>
     [Fact]
     public async Task An_image_at_the_pixel_limit_is_processed_under_the_worker_memory_cap()
     {
@@ -38,7 +41,11 @@ public sealed class ResourceLimitTests : IDisposable
     }
 
 #if DEBUG
-    /// <summary>Native memory is outside the GC heap limit: only the job object can stop this worker.</summary>
+    /// <summary>
+    /// Native memory is outside the GC heap limit: only the job object can stop this worker. It asks for 4 GB, so on a
+    /// machine with less free commit than that it would pass even without the cap; the mutation check was run where 26 GB
+    /// of commit were available.
+    /// </summary>
     [Fact]
     public async Task A_worker_cannot_commit_past_the_memory_cap()
     {

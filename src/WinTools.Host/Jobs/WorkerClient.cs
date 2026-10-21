@@ -132,7 +132,8 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IRead
         try { process = Process.Start(psi) ?? throw new InvalidOperationException("Process.Start returned null."); }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { return null; }
         // Drained into a fixed buffer so the pipe can never fill and no line of any length is held; codec text is handled in the worker.
-        _ = process.StandardError.BaseStream.CopyToAsync(Stream.Null);
+        _ = process.StandardError.BaseStream.CopyToAsync(Stream.Null)
+            .ContinueWith(static t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted); // a killed worker breaks the pipe: expected
         inJob = WorkerJobObject.TryAssign(process); // if the host dies, Windows kills the worker with it
         try { process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch (InvalidOperationException) { } catch (System.ComponentModel.Win32Exception) { }
         return process;

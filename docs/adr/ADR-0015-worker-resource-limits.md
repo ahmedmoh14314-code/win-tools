@@ -51,4 +51,15 @@ A hostile file could also make a decoder allocate natively, outside any .NET lim
   - the GC heap limit equal to the cap.
 
 ## Evaluator review
-Part of the TASK 5 final evaluator pass.
+- **Security review (2026-10-21):** an independent reviewer found M1, an uncapped worker memory, which this ADR fixes. The other findings and their outcomes are in `docs/security/2026-10-21-hardening.md`.
+- **Final evaluator (2026-10-21): MERGE**, with no blocker or major finding. It confirmed:
+  - the x64 layout of `JOBOBJECT_EXTENDED_LIMIT_INFORMATION`, the flags, and the native cap proven at run time;
+  - the GC limit equal to the cap;
+  - the lane rule, with no overflow and the reserve floored at zero;
+  - the TIFF exact-count rule: bounded, and no conformant file refused;
+  - the docs against the raw soak records.
+- **Its minor findings, applied before merge:**
+  - the stderr drain's exception is observed;
+  - the line limit is stated in characters;
+  - the memory-heavy tests say what they assume;
+  - a failed job-object assignment is recorded as a residual risk.
