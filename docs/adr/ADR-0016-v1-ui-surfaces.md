@@ -1,6 +1,6 @@
 # ADR-0016: V1 user interface surfaces: rendering, motion, sound, feedback, tray and settings
 
-- **Status:** Proposed (2026-10-21), V1 UI/UX phase
+- **Status:** Accepted (2026-10-21) after the evaluator review and its re-check, V1 UI/UX phase
 - **Date:** 2026-10-21
 - **Deciders:** product owner (V1 UI/UX brief, 2026-10-21)
 - **Related requirements:** UX-003, UX-006, UX-007, SAFE-003, SAFE-005, ARCH-004, PERF-001, PERF-002
