@@ -15,7 +15,14 @@ public static class PngChunks
     /// </summary>
     public static byte[] CopyAncillary(ReadOnlySpan<byte> source, ReadOnlySpan<byte> encoded)
     {
-        var copied = Chunks(source).Where(c => Carried.Contains(c.Type)).ToList();
+        // The output is always RGB(A): a gray (or broken) iCCP from a gray source would describe its pixels wrongly.
+        var copied = new List<(string Type, int Offset, int Length)>();
+        foreach (var c in Chunks(source))
+        {
+            if (!Carried.Contains(c.Type)) continue;
+            if (c.Type == "iCCP" && !(IccProfile.FromPngIccp(source.Slice(c.Offset + 8, c.Length - 12)) is { } p && IccProfile.IsUsableRgb(p))) continue;
+            copied.Add(c);
+        }
         if (copied.Count == 0) return encoded.ToArray();
         var ownTypes = copied.Select(c => c.Type).ToHashSet();
         var output = new MemoryStream(encoded.Length + copied.Sum(c => c.Length));

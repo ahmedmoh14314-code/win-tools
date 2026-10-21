@@ -30,7 +30,9 @@ internal sealed class RasterImage
     public RasterImage(int width, int height, byte[] bgra, double dpiX = 96, double dpiY = 96, byte[]? iccProfile = null)
     {
         if (width <= 0 || height <= 0 || bgra.Length != (long)width * height * 4) throw new ArgumentException("Pixel buffer does not match the size.");
-        (Width, Height, Bgra, DpiX, DpiY, IccProfile) = (width, height, bgra, Sane(dpiX), Sane(dpiY), iccProfile);
+        // Only a well-formed RGB profile can describe these (always RGB) pixels; anything else is dropped here, at the source.
+        var icc = iccProfile is not null && WinTools.Core.Files.IccProfile.IsUsableRgb(iccProfile) ? iccProfile : null;
+        (Width, Height, Bgra, DpiX, DpiY, IccProfile) = (width, height, bgra, Sane(dpiX), Sane(dpiY), icc);
     }
 
     /// <summary>Same metadata (resolution, ICC), new pixels.</summary>

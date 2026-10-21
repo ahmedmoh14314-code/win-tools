@@ -66,6 +66,13 @@ internal static class WicCodec
     public static unsafe byte[] Encode(RasterImage image, ImageFormat format, float? jpegQuality = null, bool fullChroma = false)
     {
         using var com = new ComScope();
+        var pins = new List<GCHandle>(); // buffers handed to WIC stay pinned until the encoder has committed
+        try { return EncodeCore(com, image, format, jpegQuality, fullChroma, pins); }
+        finally { foreach (var h in pins) h.Free(); }
+    }
+
+    private static unsafe byte[] EncodeCore(ComScope com, RasterImage image, ImageFormat format, float? jpegQuality, bool fullChroma, List<GCHandle> pins)
+    {
         try
         {
             var stream = new GrowableStream();
@@ -91,7 +98,7 @@ internal static class WicCodec
             var pf = wanted;
             frameEncode.SetPixelFormat(ref pf);
             if (pf != wanted) throw new ImagingException(ErrorCode.EncodeFailed, "The encoder refused the pixel format.");
-            if (image.IccProfile is { Length: > 0 } icc && format != ImageFormat.Bmp) WriteIccProfile(com, frameEncode, icc);
+            if (image.IccProfile is { Length: > 0 } icc && format != ImageFormat.Bmp) WriteIccProfile(com, frameEncode, icc, pins);
 
             const int band = 64;
             var w = image.Width;
@@ -166,10 +173,13 @@ internal static class WicCodec
         finally { foreach (var r in raw) if (r != 0) Marshal.Release(r); }
     }
 
-    private static unsafe void WriteIccProfile(ComScope com, IWICBitmapFrameEncode frameEncode, byte[] icc)
+    private static unsafe void WriteIccProfile(ComScope com, IWICBitmapFrameEncode frameEncode, byte[] icc, List<GCHandle> pins)
     {
         var ctx = com.Add(Factory(com).CreateColorContext());
-        fixed (byte* p = icc) ctx.InitializeFromMemory(p, (uint)icc.Length);
+        // Not documented whether WIC copies the buffer, so it stays pinned until Commit (released by Encode's caller frame).
+        var pin = GCHandle.Alloc(icc, GCHandleType.Pinned);
+        pins.Add(pin);
+        ctx.InitializeFromMemory((byte*)pin.AddrOfPinnedObject(), (uint)icc.Length);
         var raw = Marshal.GetComInterfaceForObject(ctx, typeof(IWICColorContext));
         try { frameEncode.SetColorContexts(1, &raw); }
         finally { Marshal.Release(raw); }

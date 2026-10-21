@@ -49,7 +49,9 @@ Pipeline (`ImagePipeline`):
   - If the result would not be smaller than the input, the job reports `NothingToDo` and writes nothing.
 
 **What carries over, and what does not (all operations):**
-- **ICC colour profiles are kept**, byte for byte, so colours render the same: WIC colour contexts for PNG, JPEG and TIFF; an ICCP chunk for WebP. BMP output has none.
+- **ICC colour profiles are kept** when they are well-formed **RGB** profiles: WIC colour contexts for PNG, JPEG and TIFF; the original bytes in an ICCP chunk for WebP. BMP output has none.
+  - CMYK or gray profiles (the pixels were converted to RGB without them) and malformed profiles are dropped, because they would mislabel the output.
+  - A PNG with only gAMA/cHRM gets the profile WIC derives from them, which renders the same in colour-managed viewers.
 - **Resolution (DPI) is kept.**
 - **EXIF, GPS, XMP and text are not copied** by convert, resize, rotate or lossy compress. This is disclosed: it removes location data, but also the date taken and camera details. EXIF orientation is applied to the pixels first.
 - **Lossless PNG compression copies the source's ancillary chunks verbatim** (gAMA, cHRM, sRGB, iCCP, pHYs, text, eXIf, tIME). Only the image data's compression changes.

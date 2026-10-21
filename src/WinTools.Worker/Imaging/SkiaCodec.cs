@@ -54,7 +54,7 @@ internal static class SkiaCodec
         for (var i = 12; i + 8 <= bytes.Length;)
         {
             var size = (long)(uint)(bytes[i + 4] | bytes[i + 5] << 8 | bytes[i + 6] << 16 | bytes[i + 7] << 24);
-            if (i + 8 + size > bytes.Length) return null;
+            if (i + 8 + size > bytes.Length || size > WinTools.Core.Files.IccProfile.MaxBytes) return null;
             if (bytes.Slice(i, 4).SequenceEqual(id)) return bytes.Slice(i + 8, (int)size).ToArray();
             i += 8 + (int)size + (int)(size & 1);
         }

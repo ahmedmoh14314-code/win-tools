@@ -121,3 +121,26 @@ public sealed class OperationCatalogTests
         Assert.DoesNotContain(ids, i => i.StartsWith("compress.", StringComparison.Ordinal));
     }
 }
+
+public sealed class IccProfileTests
+{
+    private static byte[] Header(string space, int declared = 132, string magic = "acsp")
+    {
+        var p = new byte[132];
+        (p[0], p[1], p[2], p[3]) = ((byte)(declared >> 24), (byte)(declared >> 16), (byte)(declared >> 8), (byte)declared);
+        System.Text.Encoding.ASCII.GetBytes(space).CopyTo(p, 16);
+        System.Text.Encoding.ASCII.GetBytes(magic).CopyTo(p, 36);
+        return p;
+    }
+
+    [Fact]
+    public void Only_well_formed_rgb_profiles_are_usable()
+    {
+        Assert.True(IccProfile.IsUsableRgb(Header("RGB ")));
+        Assert.False(IccProfile.IsUsableRgb(Header("CMYK")));
+        Assert.False(IccProfile.IsUsableRgb(Header("GRAY")));
+        Assert.False(IccProfile.IsUsableRgb(Header("RGB ", declared: 4000)));   // size mismatch
+        Assert.False(IccProfile.IsUsableRgb(Header("RGB ", magic: "xxxx")));    // not a profile
+        Assert.False(IccProfile.IsUsableRgb(new byte[40]));
+    }
+}
