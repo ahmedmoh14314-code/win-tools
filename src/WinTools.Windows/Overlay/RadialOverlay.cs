@@ -54,6 +54,7 @@ public sealed class RadialOverlay : IDisposable
     private uint _dpi = 96;
     private int _left, _top;
     private int _frames, _animationFrames;
+    private bool _movePending;
     private double _maxFrameMs;
 
     public RadialOverlay(IOverlayEvents events, bool reducedMotion = false)
@@ -93,6 +94,12 @@ public sealed class RadialOverlay : IDisposable
     /// <summary>Windows' "animation effects" setting off, or the owner's choice: changes are shown at once.</summary>
     public bool ReducedMotion { get => _animation.ReducedMotion; set => _animation.ReducedMotion = value; }
 
+    /// <summary>
+    /// Called when a frame could not be shown: with true when the ring had to hide (it had just moved, so its last good
+    /// frame is no longer where the window is), with false when the last good frame stays on screen.
+    /// </summary>
+    public Action<bool>? RenderFailed { get; set; }
+
     private TimeSpan Now => Stopwatch.GetElapsedTime(_epoch);
 
     /// <summary>
@@ -119,6 +126,7 @@ public sealed class RadialOverlay : IDisposable
     {
         Place(x, y);
         _view = null; // the next SetView always paints, and starts the new ring's appearance
+        _movePending = true;
         return new OverlayPlacement(_left + _size / 2, _top + _size / 2, _dpi);
     }
 
@@ -148,7 +156,7 @@ public sealed class RadialOverlay : IDisposable
         if (newRing) _animation.Start(view.Labels.Count, Now);
         _animation.Target(view.Hot, view.Armed, Now);
         if (!_window.IsVisible) return;
-        if (!Render()) { Hide(); return; }
+        if (!Render()) { Failed(); return; }
         if (!_animation.Settled) _window.StartTimer(AnimationTimer, FrameMs);
     }
 
@@ -177,9 +185,21 @@ public sealed class RadialOverlay : IDisposable
         }
         catch (InvalidOperationException) { return false; } // GDI or GDI+ out of resources
         if (!DiscIsOpaque() || !_window.Present(_surface, _left, _top)) return false;
+        _movePending = false;
         _frames++;
         _maxFrameMs = Math.Max(_maxFrameMs, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         return true;
+    }
+
+    /// <summary>
+    /// A frame failed. The window still shows the last good frame, which is whole and opaque, so it stays, unless the ring
+    /// has just moved: then that frame is no longer at the window's position and the ring hides.
+    /// </summary>
+    private void Failed()
+    {
+        var hide = _movePending;
+        if (hide) Hide();
+        RenderFailed?.Invoke(hide);
     }
 
     private bool DiscIsOpaque()
@@ -197,7 +217,7 @@ public sealed class RadialOverlay : IDisposable
         if (_window.IsVisible && _view is not null)
         {
             if (Render()) _animationFrames++;
-            else Hide();
+            else Failed();
         }
         if (_animation.Settled || !_window.IsVisible) _window.StopTimer(AnimationTimer);
         return 0;

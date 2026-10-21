@@ -52,6 +52,11 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         _window = window;
         _overlay = new RadialOverlay(this);
         _feedback.AttachOverlay(() => _overlay.IsVisible, _overlay.BringToFront);
+        _overlay.RenderFailed = hidden =>
+        {
+            _log.Event("overlay.renderFailed", new { hidden });
+            if (hidden) _feedback.OverlayHidden();
+        };
         _hooks = new LowLevelHooks(_window.Handle, settings.TriggerVirtualKey);
     }
 

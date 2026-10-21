@@ -46,6 +46,10 @@ internal static partial class Desktop
 
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool IsIconic(nint hwnd);
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool GetWindowRect(nint hwnd, out RECT rect);
+
+    /// <summary>Whether (x, y) lies inside the window's rectangle, with a margin.</summary>
+    public static bool Inside(nint hwnd, int x, int y, int margin) =>
+        GetWindowRect(hwnd, out var r) && x >= r.Left + margin && x < r.Right - margin && y >= r.Top + margin && y < r.Bottom - margin;
     [LibraryImport("user32.dll", EntryPoint = "GetWindowLongW")] private static partial int GetWindowLong(nint hwnd, int index);
     [LibraryImport("dwmapi.dll")] private static partial int DwmGetWindowAttribute(nint hwnd, int attribute, out int value, int size);
 

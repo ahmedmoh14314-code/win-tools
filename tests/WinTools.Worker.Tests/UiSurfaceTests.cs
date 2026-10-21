@@ -60,6 +60,16 @@ public sealed partial class UiSurfaceTests
                 var fit = Fonts.Fit(view.Labels[i], (int)(2 * boxes[i].HalfWidth), px, RadialRenderer.LabelWeight, twoLines: !top);
                 Assert.False(fit.Ellipsis, $"\"{view.Labels[i]}\" does not fit at {dpi} DPI (box {2 * boxes[i].HalfWidth:0} px)");
                 Assert.True(fit.SizePx >= Math.Round(11.0 * dpi / 96), $"\"{view.Labels[i]}\" shrank below 11 px at 96 DPI ({fit.SizePx} px at {dpi})");
+                if (top)
+                {
+                    // The categories' boxes may reach into the gap before the hub; the drawn text line must not.
+                    var s = dpi / 96.0;
+                    var line = RingLabelMetrics.LineHeight96 * s;
+                    var width = Fonts.Width(fit.Lines[0], fit.SizePx, RadialRenderer.LabelWeight);
+                    var b = boxes[i];
+                    var text = new LabelBox(b.X, b.Y + b.HalfHeight - (line + 2 * s) / 2, width / 2.0, (line + 2 * s) / 2);
+                    Assert.True(text.Reach().Near >= RingLabelMetrics.BandInner96 * s, $"\"{view.Labels[i]}\" reaches {text.Reach().Near:0.0} px from the centre at {dpi} DPI, inside the hub gap");
+                }
             }
         }
     }

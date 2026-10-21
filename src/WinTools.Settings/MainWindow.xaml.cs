@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private bool _loading;
     private bool _pending;
     private int _failedSaves;
+    private bool _closeWarned;
 
     private static readonly (string Value, string Label)[] AnimationChoices = [("System", "Follow Windows"), ("On", "On"), ("Off", "Off")];
 
@@ -45,10 +46,17 @@ public partial class MainWindow : Window
         foreach (var (_, label) in AnimationChoices) Animations.Items.Add(label);
         Load();
         Wire();
-        Closing += (_, _) =>
+        Closing += (_, e) =>
         {
             if (ResizeWidth.IsKeyboardFocusWithin || ResizeHeight.IsKeyboardFocusWithin) CommitSizes(); // a typed size not yet committed
             if (_pending) SaveNow(finalAttempt: true);
+            if (_pending && !_closeWarned)
+            {
+                // Not saved: stay open once and say so; closing again discards the change.
+                _closeWarned = true;
+                e.Cancel = true;
+                Status.Text = "Your last change could not be saved. Close again to discard it, or try again later.";
+            }
         };
     }
 
@@ -219,6 +227,7 @@ public partial class MainWindow : Window
             if (finalAttempt) Thread.Sleep(100);
         }
         if (!finalAttempt && ++_failedSaves < 5) { _saveTimer.Start(); return; } // try again shortly
+        _failedSaves = 0; // the next edit gets its own retries
         Status.Text = "Could not save the settings file. Check that its folder can be written to.";
     }
 }

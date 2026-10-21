@@ -80,7 +80,7 @@ Settings are edited in **a separate WPF process**, `WinTools.Settings.exe`. WPF 
 - **Saving:** the window saves through the same atomic `SettingsStore` (moved to `WinTools.Windows`), then raises a named auto-reset event, `Local\WinTools.SettingsChanged`.
 - **Applying:** the host waits on that event on the thread pool, with no polling. It reloads the file and applies the change at once: trigger key, menu custom size, sounds, motion, qualities and output folder.
   - Only a file that was actually read is applied. A failed read (locked, corrupt, missing) keeps the settings in use instead of falling back to defaults.
-  - The window retries a failed save, since the file can be briefly locked, and keeps the change pending until it is saved.
+  - The window retries a failed save, since the file can be briefly locked. If the change still cannot be saved when the window closes, it stays open once and says so; closing again discards the change.
   - If the event name cannot be used, the host runs on and applies changes at the next start.
 - **Theme:** V1 ships the dark theme only, and the window says so.
 - **Start with Windows:** writes or deletes only the `WinTools` value under `HKCU\…\Run`, holding the quoted path of this copy's host. That value is replaced only when the user turns the option on.
@@ -125,7 +125,7 @@ The palette is dark green-tinted neutrals with emerald as the only accent; restr
 - **Tests:**
   - `UiSurfaceTests`: opaque disc in every state, frame and DPI (mutation-checked: shrinking the base disc fails it); every known label fits without an ellipsis at 96/120/144/192 DPI; contrast; the toast's and panel's no-focus window styles; the settings signal round trip; the host never loads WPF.
   - `FeedbackTests`: navigation sound rules, sound files, toast text, info rows, label layout, animation and trigger-key change.
-- `JobFeedbackTests`: progress counts every file once, and the summary carries names and sizes, through the real worker.
+  - `JobFeedbackTests`: progress counts every file once, and the summary carries names and sizes, through the real worker.
 - **Explorer suite and measurements:** `docs/performance/2026-10-21-ui.md`.
 
 ## Evaluator review
@@ -153,6 +153,11 @@ The palette is dark green-tinted neutrals with emerald as the only accent; restr
   - the settings-signal test uses its own event name;
   - new tests cover the job feedback mapping and the progress counts.
 - **Nits, fixed:** an uncommitted size is saved on close; the saved message no longer claims a running host; a failed event name no longer stops the host; a partly failed Image info batch says what failed; sounds warm up when turned on; a middle click closes the panel.
+- **Re-check of the fixes (2026-10-21): FIXES OK**, no blocker or major. Its minor findings were applied before merge:
+  - a frame that fails keeps the last good frame unless the ring has just moved, and a self-hide is logged and reported;
+  - the categories' label text is now tested against the drawn band;
+  - a save that fails on close keeps the window open once;
+  - UI errors are logged by type only (messages can hold paths).
 - **Kept open:**
   - The tray icon is loaded at the system DPI and not refreshed when it changes.
   - Usage errors of the windowless host still go to standard error.

@@ -21,8 +21,9 @@ public readonly record struct RingLabelMetrics(double Radius, double HalfHeight,
         var s = dpi / 96.0;
         var halfHeight = withIcons ? (Icon96 + IconGap96 + LineHeight96 + 2) / 2 : LineHeight96; // icon + one line, or two lines
         var radius = withIcons ? 66 : count > 6 ? 71 : 70;
-        // On the categories' ring the box's corner nearest the hub is empty (the icon is centred above the text), so the
-        // box may reach 4 px into the gap before the hub; the text itself stays on the sector.
+        // On the categories' ring the box holds a narrow icon above a one-line label, so most of its corners are empty and
+        // the box may reach 4 px into the gap before the hub. The text actually drawn must still stay on the sector band:
+        // UiSurfaceTests measures every label's line and checks it against BandInner96.
         var inner = withIcons ? BandInner96 - 4 : BandInner96 + 2;
         return new(radius * s, halfHeight * s, 40 * s, inner * s, BandOuter96 * s, 3 * s, 16 * s);
     }

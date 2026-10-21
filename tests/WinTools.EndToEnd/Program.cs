@@ -179,8 +179,17 @@ using (var explorer = ExplorerWindow.Open(folder))
         {
             // Batch: grab a copy (the view may sort the plain "photo" out of the realised, visible range).
             var grabName = scenario == "batch" ? Path.GetFileName(batchSources[1]) : sourceName;
-            if (explorer.ItemCentre(grabName) is not { } item) { Record(new { cycle, abort = "item not found", items = explorer.DescribeItems() }); exitCode = 4; break; }
-            var (cx, cy) = item;
+            // An item position outside the window is stale (the window or its layout had not settled after opening or
+            // moving): read it again, a few times, and record that it happened.
+            var item = explorer.ItemCentre(grabName);
+            for (var reread = 1; reread <= 10 && item is { } stale && !Desktop.Inside(explorer.Hwnd, stale.X, stale.Y, Px(8)); reread++)
+            {
+                Record(new { cycle, reread, staleItem = $"{stale.X},{stale.Y}", window = Desktop.StateOf(explorer.Hwnd) });
+                Thread.Sleep(300);
+                item = explorer.ItemCentre(grabName);
+            }
+            if (item is not { } found || !Desktop.Inside(explorer.Hwnd, found.X, found.Y, Px(8))) { Record(new { cycle, abort = "item not found inside the window", items = explorer.DescribeItems() }); exitCode = 4; break; }
+            var (cx, cy) = found;
             // A window that is in front for a moment gets a few chances to go away; every
             // refusal is recorded, and nothing is injected unless this window is in front and uncovered.
             var foreground = false;

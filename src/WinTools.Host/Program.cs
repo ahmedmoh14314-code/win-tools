@@ -48,7 +48,7 @@ internal static class Program
         {
             InteractionCoordinator? coordinator = null;
             using var window = new MessageWindow((m, w, l) => coordinator?.OnMessage(m, w, l) ?? false);
-            window.OnError = ex => log.Event("ui.error", new { type = ex.GetType().Name, ex.Message });
+            window.OnError = ex => log.Event("ui.error", new { type = ex.GetType().Name }); // the type only: messages can hold full paths
             using var sounds = new SoundPlayer(settings.UiSounds);
             sounds.Warm();
             using var toast = new ToastWindow();
@@ -67,7 +67,7 @@ internal static class Program
                     new("Open logs folder", () => OpenFolder(Path.GetDirectoryName(log.Path)!)),
                     TrayCommand.Separator,
                     new("Exit WinTools", window.RequestClose),
-                ], ex => log.Event("ui.error", new { type = ex.GetType().Name, ex.Message }));
+                ], ex => log.Event("ui.error", new { type = ex.GetType().Name }));
                 // The settings window saves the file and raises the signal; the host reloads and applies it at once.
                 using var listener = SettingsSignal.TryListen(() => window.Post(() =>
                 {
