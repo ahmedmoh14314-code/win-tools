@@ -9,8 +9,8 @@ namespace WinTools.Core.Capabilities;
 /// </summary>
 public sealed class CapabilityResolver(IReadOnlyList<Operation> catalog)
 {
-    /// <summary>Upper bound on files per drop for this slice; larger selections get no commands.</summary>
-    public const int MaxFiles = 50;
+    /// <summary>Upper bound on files per drop; larger selections get no commands.</summary>
+    public const int MaxFiles = 1000;
 
     public static CapabilityResolver Default { get; } = new(OperationCatalog.All);
 

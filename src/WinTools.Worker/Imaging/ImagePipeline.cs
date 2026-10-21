@@ -24,7 +24,7 @@ internal static class ImagePipeline
     private const float KeepJpegQuality = 0.95f;
 
     /// <summary>Runs one operation on the content of a file whose real format is <paramref name="source"/>.</summary>
-    public static Encoded Run(byte[] input, ImageFormat source, Operation op)
+    public static Encoded Run(byte[] input, ImageFormat source, Operation op, int? jpegQuality = null, int? webpQuality = null)
     {
         // Everything is processed at 8 bits per channel. Converting to another format says so in its docs; operations that
         // promise to keep the file as it is (lossless compression, rotate, resize) refuse deeper images instead.
@@ -38,8 +38,15 @@ internal static class ImagePipeline
         switch (op.Kind)
         {
             case OperationKind.Convert:
-                bytes = Encode(image, output);
+                bytes = output switch
+                {
+                    ImageFormat.Jpeg when jpegQuality is { } q => WicCodec.Encode(image, output, Math.Clamp(q, 1, 100) / 100f),
+                    ImageFormat.WebP when webpQuality is { } q => SkiaCodec.EncodeWebP(image, Math.Clamp(q, 1, 100), lossless: false),
+                    _ => Encode(image, output),
+                };
                 break;
+            case OperationKind.StripMetadata:
+                return StripMetadata(input, source, image, orientation);
             case OperationKind.Resize:
                 var size = op.Resize!.TargetFor(image.Width, image.Height)
                     ?? throw new ImagingException(ErrorCode.NothingToDo, $"The image ({image.Width}x{image.Height}) already fits; nothing to resize.");
@@ -82,6 +89,38 @@ internal static class ImagePipeline
         ImageFormat.WebP => SkiaCodec.EncodeWebP(image, losslessWebP ? 100 : 95, losslessWebP),
         _ => Encode(image, format),
     };
+
+    /// <summary>
+    /// Removes EXIF, GPS, XMP, comments and text without re-encoding: byte-level for JPEG, PNG and WebP (keeping the
+    /// orientation as a minimal EXIF tag), a pixel-identical re-encode for TIFF (orientation applied). The result is
+    /// verified: same pixels as shown before, and no removable metadata left.
+    /// </summary>
+    private static Encoded StripMetadata(byte[] input, ImageFormat source, RasterImage shown, int orientation)
+    {
+        if (!Metadata.Inspect(input, source).AnyRemovable && !(source == ImageFormat.Jpeg && HasOtherAppSegments(input)))
+            throw new ImagingException(ErrorCode.NothingToDo, "This file has no metadata to remove.");
+        var stripped = Metadata.Strip(input, source, orientation) ?? Encode(shown, source);
+        var (decoded, storedOrientation) = Decode(stripped, source);
+        var after = Orientation.Apply(decoded, storedOrientation);
+        if (after.Width != shown.Width || after.Height != shown.Height || !EqualIgnoringHiddenColour(after.Bgra, shown.Bgra))
+            throw new ImagingException(ErrorCode.OutputValidationFailed, "Removing metadata changed the image.");
+        if (Metadata.Inspect(stripped, source).AnyRemovable)
+            throw new ImagingException(ErrorCode.OutputValidationFailed, "Metadata is still present after removal.");
+        return new Encoded(stripped, decoded.Width, decoded.Height, source);
+    }
+
+    /// <summary>JPEG APPn segments Inspect does not classify (vendor data) still count as something to remove.</summary>
+    private static bool HasOtherAppSegments(byte[] jpeg) => Metadata.Strip(jpeg, ImageFormat.Jpeg, 1)!.Length < jpeg.Length;
+
+    /// <summary>Facts for "Image info": nothing is written.</summary>
+    public static ImageInfo Describe(byte[] input, ImageFormat format)
+    {
+        var (image, orientation) = Decode(input, format);
+        var shown = Orientation.Apply(image, orientation);
+        var meta = Metadata.Inspect(input, format);
+        return new ImageInfo(ImageFormats.DisplayName(format), shown.Width, shown.Height, input.LongLength, Math.Round(image.DpiX, 1), Math.Round(image.DpiY, 1),
+            image.HasTransparency(), orientation, meta.Exif, meta.Gps, meta.Xmp, meta.Icc || image.IccProfile is not null, meta.Text, BitDepth.MoreThan8(input, format));
+    }
 
     /// <summary>JPEG and WebP: lossy at High 90 / Balanced 80 / Smallest 65. PNG: lossless only, verified pixel for pixel.</summary>
     private static byte[] Compress(RasterImage image, ImageFormat format, CompressLevel level, byte[] input)

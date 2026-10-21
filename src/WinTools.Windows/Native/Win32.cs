@@ -93,6 +93,7 @@ internal static partial class User32
     [LibraryImport(Lib)] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool KillTimer(nint hwnd, nuint id);
     [LibraryImport(Lib)] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool MessageBeep(uint type);
     [LibraryImport(Lib)] public static partial short GetAsyncKeyState(int vk);
+    [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf16)] public static partial int MessageBoxW(nint owner, string text, string caption, uint type);
     [LibraryImport(Lib)] public static partial int GetSystemMetrics(int index);
     public const int SM_SWAPBUTTON = 23;
 }

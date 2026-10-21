@@ -5,21 +5,22 @@ using WinTools.Core.Files;
 using WinTools.EndToEnd;
 
 // Explorer end-to-end harness for the product host (local and interactive only; it drives the real mouse and keyboard).
-// Usage: WinTools.EndToEnd <png|jpg|bmp|tif|escape|outside|unsupported|fast|worker-crash> [--target jpeg|png|webp|bmp|tiff] [--cycles N] [--fast-ms N] [--results file.jsonl]
+// Usage: WinTools.EndToEnd <png|jpg|bmp|tif|batch|escape|outside|unsupported|fast|worker-crash> [--batch N] [--target jpeg|png|webp|bmp|tiff] [--cycles N] [--fast-ms N] [--results file.jsonl]
 // Each scenario: fresh folder with copies of the committed samples, fresh host with its own log, one Explorer window on
 // that folder. Before every injection the window is re-verified; a release happens only over our overlay or over the
 // folder's own background, otherwise the drag is cancelled with Escape. After every cycle the folder must contain
 // exactly the expected files, the source must be byte-identical, and no temporary file may remain.
 
 var scenario = args.Length > 0 ? args[0] : "png";
-var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null;
+var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; var batchSize = 12;
 for (var i = 1; i < args.Length; i++)
 {
     switch (args[i])
     {
         case "--cycles": cycles = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
         case "--fast-ms": fastMs = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
-        case "--target": targetArg = args[++i]; break;   // jpeg|png|webp|bmp|tiff: which command to drop on
+        case "--target": targetArg = args[++i]; break;
+        case "--batch": batchSize = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break; // files for "batch"   // jpeg|png|webp|bmp|tiff: which command to drop on
         case "--results": resultsPath = Path.GetFullPath(args[++i]); break;
         default: Console.Error.WriteLine($"Unknown option {args[i]}"); return 64;
     }
@@ -35,13 +36,23 @@ var (sample, sourceName, defaultTarget) = scenario switch
 };
 var outputFormat = targetArg is null ? defaultTarget : Enum.Parse<ImageFormat>(targetArg, ignoreCase: true);
 var outputName = outputFormat == ImageFormat.Unknown ? null : Path.GetFileNameWithoutExtension(sourceName) + ImageFormats.Extension(outputFormat);
-var expectOutput = scenario is "png" or "jpg" or "bmp" or "tif";
+var expectOutput = scenario is "png" or "jpg" or "bmp" or "tif" or "batch";
 var folder = Path.Combine(Path.GetTempPath(), "wintools-e2e", $"{scenario}-{DateTime.Now:HHmmss}");
 Directory.CreateDirectory(folder);
 var source = Path.Combine(folder, sourceName);
 if (sample.Length > 0) File.Copy(Path.Combine(AppContext.BaseDirectory, "samples", sample), source);
 else File.WriteAllText(source, "plain text, not an image");
 var sourceHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source)));
+// Batch: the source plus copies with Unicode names, all selected with Ctrl+A and dragged together.
+var batchSources = new List<string> { source };
+if (scenario == "batch")
+    for (var b = 2; b <= batchSize; b++)
+    {
+        var copy = Path.Combine(folder, $"photo {b:00} صورة.png");
+        File.Copy(source, copy);
+        batchSources.Add(copy);
+    }
+var batchHashes = batchSources.ToDictionary(f => f, f => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(f))));
 // The ring shows conversions only until the hierarchical menu lands; aim with the same list the host shows.
 var commands = WinTools.Core.Capabilities.CapabilityResolver.Default.Resolve([source]).Where(o => o.Kind == WinTools.Core.Capabilities.OperationKind.Convert).ToArray();
 var hostLog = Path.Combine(folder, "..", $"host-{scenario}-{DateTime.Now:HHmmss}.jsonl");
@@ -79,7 +90,9 @@ using (var explorer = ExplorerWindow.Open(folder))
     int Px(int v) => (int)Math.Round(v * scale);
     for (var cycle = 1; cycle <= cycles; cycle++)
     {
-        if (explorer.ItemCentre(sourceName) is not { } item) { Record(new { cycle, abort = "item not found" }); exitCode = 4; break; }
+        // Batch: grab a copy (the view may sort the plain "photo" out of the realised, visible range).
+        var grabName = scenario == "batch" ? Path.GetFileName(batchSources[1]) : sourceName;
+        if (explorer.ItemCentre(grabName) is not { } item) { Record(new { cycle, abort = "item not found", items = explorer.DescribeItems() }); exitCode = 4; break; }
         var (cx, cy) = item;
         if (!explorer.EnsureForeground(cx, cy))
         {
@@ -88,6 +101,16 @@ using (var explorer = ExplorerWindow.Open(folder))
             exitCode = 4; break;
         }
 
+        if (scenario == "batch")
+        {
+            // Select everything in the harness's own folder (guarded), then drag one of the selected items.
+            Desktop.MoveTo(cx, cy); Thread.Sleep(40);
+            Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp();
+            Thread.Sleep((int)Desktop.GetDoubleClickTime() + 200);
+            if (!explorer.EnsureForeground(cx, cy)) { Record(new { cycle, abort = "foreground lost before Ctrl+A" }); exitCode = 4; break; }
+            Desktop.KeyDown(Desktop.VkControl); Desktop.Tap('A'); Desktop.KeyUp(Desktop.VkControl);
+            Thread.Sleep(250);
+        }
         Desktop.MoveTo(cx, cy); Thread.Sleep(60);
         Desktop.LeftDown(); Thread.Sleep(80);
         Desktop.GlideTo(cx + Px(40), cy + Px(30));
@@ -136,6 +159,25 @@ using (var explorer = ExplorerWindow.Open(folder))
                 if (releasedOver != wanted) { Desktop.Tap(Desktop.VkEscape); Thread.Sleep(150); releasedOver = $"refused({releasedOver ?? "unsafe"})"; }
             }
             Desktop.LeftUp();
+        }
+
+        if (scenario == "batch")
+        {
+            var wanted = batchSources.Select(f => Path.Combine(folder, Path.GetFileNameWithoutExtension(f) + ImageFormats.Extension(outputFormat))).ToArray();
+            var waited = Stopwatch.GetTimestamp();
+            while (Stopwatch.GetElapsedTime(waited) < TimeSpan.FromSeconds(60) && !wanted.All(File.Exists)) Thread.Sleep(200);
+            Thread.Sleep(500);
+            var allValid = wanted.All(w => File.Exists(w) && File.ReadAllBytes(w) is var wb && FileSignature.Detect(wb) == outputFormat && ContainerCheck.IsComplete(wb, outputFormat, out _));
+            var intact = batchSources.All(f => File.Exists(f) && Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(f))) == batchHashes[f]);
+            var present = Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
+            var expectedSet = batchSources.Concat(wanted).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
+            var (benters, baccepted) = HostEventsSinceLastCycle();
+            var bok = allValid && intact && present.SequenceEqual(expectedSet) && baccepted == 1;
+            if (bok) passed++; else exitCode = 1;
+            Record(new { scenario, cycle, files = batchSources.Count, outputs = wanted.Count(File.Exists), allValid, sourcesIntact = intact, cleanFolder = present.SequenceEqual(expectedSet), hostEnters = benters, hostAccepted = baccepted, ok = bok });
+            foreach (var w in wanted) if (File.Exists(w)) File.Delete(w);
+            Thread.Sleep((int)Desktop.GetDoubleClickTime() + 300);
+            continue;
         }
 
         // Outcome: wait for the output where one is expected; otherwise give a wrong job time to show up.

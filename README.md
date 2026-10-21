@@ -4,7 +4,7 @@ A lightweight, local-first Windows desktop utility: drag a file, press a trigger
 a radial menu appears around the cursor, drop the file on an action, and the
 operation runs safely (e.g. `photo.png` → Convert → WebP → `photo.webp`).
 
-**Status: functional V1 in progress. Conversion between PNG, JPEG, WebP, BMP and TIFF works end to end from Windows Explorer. Resize, compress and rotate are implemented in the worker and reach the radial menu with the hierarchical menu. SVG and HEIC input are deferred (ADR-0012). No installer, tray or settings UI yet; see `docs/progress.md`.**
+**Status: functional V1 in progress. Conversion between PNG, JPEG, WebP, BMP and TIFF works end to end from Windows Explorer. Resize, compress, rotate, remove metadata, image info and batch processing (up to 1000 files per drop) are implemented in the worker and reach the radial menu with the hierarchical menu. Settings live in `%APPDATA%\WinTools\settings.json` (ADR-0013). SVG and HEIC input are deferred (ADR-0012). No installer, tray or settings UI yet; see `docs/progress.md`.**
 
 ## Start here (every session)
 

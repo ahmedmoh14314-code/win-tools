@@ -3,7 +3,7 @@ using WinTools.Core.Files;
 
 namespace WinTools.Core.Capabilities;
 
-public enum OperationKind { Convert, Resize, Compress, Rotate }
+public enum OperationKind { Convert, Resize, Compress, Rotate, StripMetadata, Info }
 
 public enum CompressLevel { High, Balanced, Small, Lossless }
 
@@ -55,9 +55,14 @@ public sealed record Operation(string Id, string Label, OperationKind Kind, Imag
             OperationKind.Convert => source != Target && ImageFormats.CanEncode(Target),
             OperationKind.Resize or OperationKind.Rotate => ImageFormats.CanEncode(source),
             OperationKind.Compress => Compress == CompressLevel.Lossless ? source == ImageFormat.Png : source is ImageFormat.Jpeg or ImageFormat.WebP,
+            OperationKind.StripMetadata => source != ImageFormat.Bmp, // BMP carries none
+            OperationKind.Info => true,
             _ => false,
         };
     }
+
+    /// <summary>True for operations that report facts and write no file.</summary>
+    public bool WritesFile => Kind != OperationKind.Info;
 
     /// <summary>The format written for a file whose content is <paramref name="source"/>.</summary>
     public ImageFormat OutputFormat(ImageFormat source) => Kind == OperationKind.Convert ? Target : source;
@@ -74,6 +79,7 @@ public sealed record Operation(string Id, string Label, OperationKind Kind, Imag
         },
         OperationKind.Compress => "compressed",
         OperationKind.Rotate => RotateDegrees switch { 90 => "rotated right", 270 => "rotated left", _ => "rotated 180" },
+        OperationKind.StripMetadata => "no metadata",
         _ => null,
     };
 }
@@ -99,12 +105,14 @@ public static class OperationCatalog
         ops.Add(new Operation("rotate.left", "Left", OperationKind.Rotate, RotateDegrees: 270));
         ops.Add(new Operation("rotate.right", "Right", OperationKind.Rotate, RotateDegrees: 90));
         ops.Add(new Operation("rotate.180", "180°", OperationKind.Rotate, RotateDegrees: 180));
+        ops.Add(new Operation("metadata.strip", "Remove metadata", OperationKind.StripMetadata));
+        ops.Add(new Operation("metadata.info", "Image info", OperationKind.Info));
         return [.. ops];
     }
 
-    private static Operation BoxResize(int w, int h, bool keepAspect) =>
-        new($"resize.box-{w}x{h}" + (keepAspect ? "" : "-stretch"), $"{w}×{h}", OperationKind.Resize,
-            Resize: new ResizeSpec(ResizeMode.Box, Width: w, Height: h, KeepAspect: keepAspect));
+    private static Operation BoxResize(int w, int h, bool keepAspect, bool noUpscale = true) =>
+        new($"resize.box-{w}x{h}" + (keepAspect ? "" : "-stretch") + (noUpscale ? "" : "-upscale"), $"{w}×{h}", OperationKind.Resize,
+            Resize: new ResizeSpec(ResizeMode.Box, Width: w, Height: h, KeepAspect: keepAspect, NoUpscale: noUpscale));
 
     public static string ConvertId(ImageFormat target) => "convert.to-" + target.ToString().ToLowerInvariant();
 
@@ -114,25 +122,28 @@ public static class OperationCatalog
 
     /// <summary>
     /// A catalog operation, or a parameterised resize ("resize.width-800", "resize.height-600", "resize.box-800x600",
-    /// "resize.box-800x600-stretch") such as the settings' exact sizes produce. Sizes must be 1..65535.
+    /// "resize.box-800x600-stretch", any of them with "-upscale" to allow enlarging) such as the settings' exact sizes
+    /// produce. Sizes must be 1..65535.
     /// </summary>
     public static Operation? Find(string? id)
     {
         if (string.IsNullOrEmpty(id)) return null;
         var known = All.FirstOrDefault(o => o.Id == id);
         if (known is not null) return known;
-        if (id.StartsWith("resize.width-", StringComparison.Ordinal) && Size(id["resize.width-".Length..]) is { } w)
-            return new Operation(id, $"{w} wide", OperationKind.Resize, Resize: new ResizeSpec(ResizeMode.Width, Width: w));
-        if (id.StartsWith("resize.height-", StringComparison.Ordinal) && Size(id["resize.height-".Length..]) is { } h)
-            return new Operation(id, $"{h} high", OperationKind.Resize, Resize: new ResizeSpec(ResizeMode.Height, Height: h));
-        if (id.StartsWith("resize.box-", StringComparison.Ordinal))
+        var upscale = id.EndsWith("-upscale", StringComparison.Ordinal);
+        var core = upscale ? id[..^"-upscale".Length] : id;
+        if (core.StartsWith("resize.width-", StringComparison.Ordinal) && Size(core["resize.width-".Length..]) is { } w)
+            return new Operation(id, $"{w} wide", OperationKind.Resize, Resize: new ResizeSpec(ResizeMode.Width, Width: w, NoUpscale: !upscale));
+        if (core.StartsWith("resize.height-", StringComparison.Ordinal) && Size(core["resize.height-".Length..]) is { } h)
+            return new Operation(id, $"{h} high", OperationKind.Resize, Resize: new ResizeSpec(ResizeMode.Height, Height: h, NoUpscale: !upscale));
+        if (core.StartsWith("resize.box-", StringComparison.Ordinal))
         {
-            var spec = id["resize.box-".Length..];
+            var spec = core["resize.box-".Length..];
             var stretch = spec.EndsWith("-stretch", StringComparison.Ordinal);
             if (stretch) spec = spec[..^"-stretch".Length];
             var parts = spec.Split('x');
             if (parts.Length == 2 && Size(parts[0]) is { } bw && Size(parts[1]) is { } bh)
-                return BoxResize(bw, bh, keepAspect: !stretch);
+                return BoxResize(bw, bh, keepAspect: !stretch, noUpscale: !upscale);
         }
         return null;
     }

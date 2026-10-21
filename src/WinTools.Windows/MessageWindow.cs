@@ -56,6 +56,12 @@ public sealed class MessageWindow : IDisposable
     /// <summary>Audible failure cue (no notification UI in this slice).</summary>
     public static void FailureBeep() => User32.MessageBeep(User32.MB_ICONHAND);
 
+    /// <summary>
+    /// Shows a plain informational message box (topmost, owned by no window) and returns when it is closed. Call it off
+    /// the UI thread: it runs its own modal loop. Used for "Image info" until the UI phase designs a proper surface.
+    /// </summary>
+    public static void ShowInfo(string title, string text) => _ = User32.MessageBoxW(0, text, title, 0x40 | 0x40000 /* MB_ICONINFORMATION | MB_TOPMOST */);
+
     /// <summary>Audible "nothing to do" cue (the image already fits, or compression would not shrink it).</summary>
     public static void InfoBeep() => User32.MessageBeep(0x40 /* MB_ICONASTERISK */);
 

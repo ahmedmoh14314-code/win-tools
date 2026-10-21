@@ -48,6 +48,17 @@ Pipeline (`ImagePipeline`):
   - Not offered for BMP or TIFF, where it means nothing; converting is the useful action there.
   - If the result would not be smaller than the input, the job reports `NothingToDo` and writes nothing.
 
+**Metadata operations:**
+- **Remove metadata** (`metadata.strip`, output `photo (no metadata).jpg`) never re-encodes pixels where the format allows:
+  - JPEG: segments are dropped (EXIF, XMP, other APPn, comments). JFIF, Adobe and ICC are kept.
+  - PNG: tEXt, zTXt, iTXt, eXIf and tIME are dropped. Colour chunks and pHYs are kept.
+  - WebP: the EXIF and XMP chunks are dropped and the VP8X flags updated. ICCP is kept.
+  - TIFF: re-encoded pixel-identically through the pipeline, with ICC and DPI kept and the orientation applied.
+  - The EXIF orientation is kept as a minimal EXIF block holding only that tag, so the image does not suddenly display rotated.
+  - The result is verified: the same pixels as displayed before, and no removable metadata left. A file without metadata gives `NothingToDo`; BMP is not offered.
+  - This is not a forensic anonymiser: pixel content, file-system timestamps and the file name are untouched.
+- **Image info** (`metadata.info`) writes nothing. It reports format, displayed size, file size, DPI, transparency, more-than-8-bit depth, orientation, ICC, EXIF, GPS, XMP and text. The host shows it in a plain message box until the UI phase designs a surface.
+
 **What carries over, and what does not (all operations):**
 - **ICC colour profiles are kept** when they are well-formed **RGB** profiles: WIC colour contexts for PNG, JPEG and TIFF; the original bytes in an ICCP chunk for WebP. BMP output has none.
   - CMYK or gray profiles (the pixels were converted to RGB without them) and malformed profiles are dropped, because they would mislabel the output.

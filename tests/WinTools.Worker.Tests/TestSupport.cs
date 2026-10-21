@@ -179,3 +179,4 @@ public static class ExifWriter
         return [.. jpeg[..2], .. app1, .. jpeg[2..]];
     }
 }
+
