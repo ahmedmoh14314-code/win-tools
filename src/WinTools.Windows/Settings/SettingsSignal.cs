@@ -9,17 +9,26 @@ public static class SettingsSignal
 {
     public const string Name = @"Local\WinTools.SettingsChanged";
 
-    /// <summary>Tells a running host to reload. Does nothing visible when no host is running.</summary>
-    public static void Raise()
+    /// <summary>Tells a running host to reload. Does nothing visible when no host is running. Returns false when the name is unusable.</summary>
+    public static bool Raise(string name = Name)
     {
-        using var e = new EventWaitHandle(false, EventResetMode.AutoReset, Name);
-        e.Set();
+        try
+        {
+            using var e = new EventWaitHandle(false, EventResetMode.AutoReset, name);
+            return e.Set();
+        }
+        catch (Exception ex) when (ex is WaitHandleCannotBeOpenedException or UnauthorizedAccessException or IOException) { return false; }
     }
 
-    /// <summary>Calls <paramref name="onChanged"/> on a pool thread each time the signal is raised, until disposed.</summary>
-    public static IDisposable Listen(Action onChanged)
+    /// <summary>
+    /// Calls <paramref name="onChanged"/> on a pool thread each time the signal is raised, until disposed; null when the
+    /// name is taken by another kind of object or access is denied (the caller runs on without live reload).
+    /// </summary>
+    public static IDisposable? TryListen(Action onChanged, string name = Name)
     {
-        var e = new EventWaitHandle(false, EventResetMode.AutoReset, Name);
+        EventWaitHandle e;
+        try { e = new EventWaitHandle(false, EventResetMode.AutoReset, name); }
+        catch (Exception ex) when (ex is WaitHandleCannotBeOpenedException or UnauthorizedAccessException or IOException) { return null; }
         var registration = ThreadPool.RegisterWaitForSingleObject(e, (_, _) => onChanged(), null, Timeout.Infinite, executeOnlyOnce: false);
         return new Listener(e, registration);
     }

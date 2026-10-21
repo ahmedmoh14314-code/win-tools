@@ -19,9 +19,36 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
     public static readonly TimeSpan ProgressDelay = TimeSpan.FromMilliseconds(450);
 
     private (int X, int Y) _anchor;       // where the last drop happened: its monitor shows the toast
+    private Func<bool> _overlayVisible = static () => false;
+    private Action _raiseOverlay = static () => { };
+    private (InfoSection[] Sections, int More)? _deferredInfo; // an info panel that finished while a ring was open
     private long _startedAt;
     private int _batch;                   // counts batches, so a late progress update of an old batch is ignored
     private int _total, _done;
+
+    /// <summary>
+    /// Lets the presenter keep a live ring on top: a toast that appears during a drag is put below it again, and the
+    /// info panel (which is not click-through and not a drop target) waits until the ring is gone.
+    /// </summary>
+    public void AttachOverlay(Func<bool> isVisible, Action bringToFront)
+    {
+        _overlayVisible = isVisible;
+        _raiseOverlay = bringToFront;
+    }
+
+    /// <summary>The radial menu has closed (UI thread): show an info panel that was held back.</summary>
+    public void OverlayHidden()
+    {
+        if (_deferredInfo is not { } d) return;
+        _deferredInfo = null;
+        info.Show(d.Sections, d.More, _anchor.X, _anchor.Y);
+    }
+
+    private void ShowToast(ToastContent content)
+    {
+        toast.Show(content, _anchor.X, _anchor.Y);
+        if (_overlayVisible()) _raiseOverlay();
+    }
 
     /// <summary>Where the user dropped (UI thread): toasts and the info panel appear on that monitor.</summary>
     public void DroppedAt(int x, int y) => _anchor = (x, y);
@@ -30,6 +57,7 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
     public void OverlayShowing()
     {
         info.Hide();
+        _deferredInfo = null;
         if (toast.Content is { Progress: null }) toast.Hide();
     }
 
@@ -45,7 +73,7 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         _ = Task.Delay(ProgressDelay).ContinueWith(_ => ui.Post(() =>
         {
             if (batch != _batch || _done >= _total) return; // finished in the meantime
-            toast.Show(new ToastContent(FeedbackKind.Success, title, ProgressText(), Fraction()), _anchor.X, _anchor.Y);
+            ShowToast(new ToastContent(FeedbackKind.Success, title, ProgressText(), Fraction()));
             log.Event("toast", new { kind = "progress", files = _total });
         }), TaskScheduler.Default);
     });
@@ -63,14 +91,20 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         if (operation.Kind == OperationKind.Info && facts.Length > 0)
         {
             toast.Hide();
-            var sections = facts.Take(3).Select(i => new InfoSection(i.SourceName, InfoRows.For(i.Result.Info!))).ToArray();
-            info.Show(sections, facts.Length - sections.Length, _anchor.X, _anchor.Y);
-            log.Event("info.show", new { files = facts.Length, shown = sections.Length });
-            if (facts.Length < items.Count) sounds.Play(UiSound.Failure);
+            var sections = facts.Take(InfoPanelRenderer.MaxSections).Select(i => new InfoSection(i.SourceName, InfoRows.For(i.Result.Info!))).ToArray();
+            if (_overlayVisible()) _deferredInfo = (sections, facts.Length - sections.Length);
+            else info.Show(sections, facts.Length - sections.Length, _anchor.X, _anchor.Y);
+            log.Event("info.show", new { files = facts.Length, shown = sections.Length, deferred = _deferredInfo is not null });
+            var unread = items.Where(i => i.Result.Info is null).ToArray();
+            if (unread.Length > 0)
+            {
+                ShowToast(ToastContent.From(FeedbackText.For(operation, unread))); // say which files could not be read, and why
+                sounds.Play(UiSound.Failure);
+            }
             return;
         }
         var message = FeedbackText.For(operation, items);
-        toast.Show(ToastContent.From(message), _anchor.X, _anchor.Y);
+        ShowToast(ToastContent.From(message));
         sounds.Play(message.Kind switch
         {
             FeedbackKind.Success => UiSound.Success,
@@ -83,8 +117,8 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
     public void Crashed(Operation operation, int files) => ui.Post(() =>
     {
         _done = _total;
-        toast.Show(new ToastContent(FeedbackKind.Failure, $"Could not {FeedbackText.Verb(operation)} {(files == 1 ? "the image" : $"{files} images")}",
-            "Something went wrong. The originals are unchanged."), _anchor.X, _anchor.Y);
+        ShowToast(new ToastContent(FeedbackKind.Failure, $"Could not {FeedbackText.Verb(operation)} {(files == 1 ? "the image" : $"{files} images")}",
+            "Something went wrong. The originals are unchanged."));
         sounds.Play(UiSound.Failure);
         log.Event("toast", new { kind = "Failure", files });
     });

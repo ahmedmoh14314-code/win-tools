@@ -111,7 +111,7 @@ internal static partial class Ui
     public const byte AC_SRC_OVER = 0, AC_SRC_ALPHA = 1;
     public const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOZORDER = 0x4;
     public const int SW_SHOWNOACTIVATE = 4;
-    public const uint WM_LBUTTONUP = 0x0202, WM_RBUTTONUP = 0x0205, WM_SETCURSOR = 0x0020, WM_NULL = 0, WM_COMMAND = 0x0111, WM_CONTEXTMENU = 0x007B;
+    public const uint WM_LBUTTONUP = 0x0202, WM_RBUTTONUP = 0x0205, WM_MBUTTONUP = 0x0208, WM_SETCURSOR = 0x0020, WM_NULL = 0, WM_COMMAND = 0x0111, WM_CONTEXTMENU = 0x007B;
     public const uint WM_LBUTTONDBLCLK = 0x0203, WM_DISPLAYCHANGE = 0x007E;
     public const uint NIN_SELECT = 0x0400, NIN_KEYSELECT = 0x0401;
     public const uint NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2, NIM_SETVERSION = 4;

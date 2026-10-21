@@ -49,11 +49,12 @@ internal sealed class LayeredWindow : IDisposable
     public bool IsVisible => Handle != 0 && User32.IsWindowVisible(Handle);
 
     /// <summary>Sets the window's content and position from <paramref name="surface"/>; does not show or hide it.</summary>
-    public void Present(Surface surface, int left, int top, byte opacity = 255)
+    /// <summary>Returns false when the window refused the frame (UpdateLayeredWindow failed).</summary>
+    public bool Present(Surface surface, int left, int top, byte opacity = 255)
     {
         Left = left;
         Top = top;
-        surface.Present(Handle, left, top, opacity);
+        return surface.Present(Handle, left, top, opacity);
     }
 
     /// <summary>Shows the window on top of the other topmost windows without activating it.</summary>

@@ -48,6 +48,7 @@ internal static class Program
         {
             InteractionCoordinator? coordinator = null;
             using var window = new MessageWindow((m, w, l) => coordinator?.OnMessage(m, w, l) ?? false);
+            window.OnError = ex => log.Event("ui.error", new { type = ex.GetType().Name, ex.Message });
             using var sounds = new SoundPlayer(settings.UiSounds);
             sounds.Warm();
             using var toast = new ToastWindow();
@@ -66,17 +67,26 @@ internal static class Program
                     new("Open logs folder", () => OpenFolder(Path.GetDirectoryName(log.Path)!)),
                     TrayCommand.Separator,
                     new("Exit WinTools", window.RequestClose),
-                ]);
+                ], ex => log.Event("ui.error", new { type = ex.GetType().Name, ex.Message }));
                 // The settings window saves the file and raises the signal; the host reloads and applies it at once.
-                using var listener = SettingsSignal.Listen(() => window.Post(() =>
+                using var listener = SettingsSignal.TryListen(() => window.Post(() =>
                 {
                     var changed = store.Load();
+                    // Only a file that was read is applied. A failed read (locked, missing, corrupt) falls back to defaults
+                    // in Load, which must not silently reset the running host's trigger key or output folder.
+                    if (!store.LastLoad.StartsWith("loaded", StringComparison.Ordinal) && !store.LastLoad.StartsWith("newer schema", StringComparison.Ordinal))
+                    {
+                        log.Event("settings.reload", new { store.LastLoad, applied = false });
+                        return;
+                    }
                     Volatile.Write(ref current, changed);
                     sounds.Enabled = changed.UiSounds;
+                    sounds.Warm();
                     coordinator.ApplySettings(changed);
                     tray.SetTooltip(Tooltip(changed));
-                    log.Event("settings.reload", new { store.LastLoad, changed.TriggerKey, output = changed.OutputPolicy.ToString(), changed.JpegQuality, changed.WebPQuality, changed.UiSounds, changed.Animations });
+                    log.Event("settings.reload", new { store.LastLoad, applied = true, changed.TriggerKey, output = changed.OutputPolicy.ToString(), changed.JpegQuality, changed.WebPQuality, changed.UiSounds, changed.Animations });
                 }));
+                if (listener is null) log.Event("settings.listen", new { ok = false }); // runs on; changes then apply at the next start
                 log.Event("host.start", new { pid = Environment.ProcessId, runtime = Environment.Version.ToString(), log = log.Path, tray = tray.Visible });
                 MessageWindow.RunLoop();
                 log.Event("host.stop");
@@ -116,8 +126,12 @@ internal static class Program
     /// <summary>Opens a folder of our own (the logs) in Explorer, at the user's request from the tray menu.</summary>
     private static void OpenFolder(string folder)
     {
-        Directory.CreateDirectory(folder);
-        var explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
-        using var _ = Process.Start(new ProcessStartInfo(explorer) { UseShellExecute = false, ArgumentList = { folder } });
+        try
+        {
+            Directory.CreateDirectory(folder);
+            var explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+            using var _ = Process.Start(new ProcessStartInfo(explorer) { UseShellExecute = false, ArgumentList = { folder } });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception) { }
     }
 }

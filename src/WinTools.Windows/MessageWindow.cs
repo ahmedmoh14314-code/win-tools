@@ -44,9 +44,16 @@ public sealed class MessageWindow : IDisposable
         User32.PostMessageW(Handle, InvokeMessage, 0, 0);
     }
 
+    /// <summary>Receives any exception a posted action throws (it runs inside the window procedure, where it would end the process).</summary>
+    public Action<Exception>? OnError { get; set; }
+
     private nint RunPosted()
     {
-        while (_posted.TryDequeue(out var action)) action();
+        while (_posted.TryDequeue(out var action))
+        {
+            try { action(); }
+            catch (Exception ex) { OnError?.Invoke(ex); }
+        }
         return 0;
     }
 

@@ -12,7 +12,7 @@ public sealed record TrayCommand(string? Text, Action? Run, bool IsDefault = fal
 /// <summary>
 /// The notification-area icon (Shell_NotifyIcon, version 4) and its menu. It lives on a hidden tool window that is
 /// never shown, so it also receives the "TaskbarCreated" broadcast and puts the icon back after Explorer restarts.
-/// A left click or the context-menu key opens the menu; a double click runs the default command. Opening the menu
+/// A left click runs the default command (Settings); a right click or the keyboard opens the menu. Opening the menu
 /// makes this process the foreground one for the menu's lifetime (TrackPopupMenu requires it); that is the user's own
 /// click on the icon. Use on the UI thread.
 /// </summary>
@@ -24,6 +24,7 @@ public sealed class TrayIcon : IDisposable
     private static TrayIcon? _instance;
 
     private readonly IReadOnlyList<TrayCommand> _commands;
+    private readonly Action<Exception>? _onError;
     private readonly uint _taskbarCreated;
     private readonly nint _hwnd;
     private nint _icon;
@@ -31,8 +32,11 @@ public sealed class TrayIcon : IDisposable
     private string _tooltip;
     private bool _added;
 
-    public TrayIcon(string tooltip, IReadOnlyList<TrayCommand> commands)
+    /// <param name="onError">Called with any exception a command throws: commands run inside a window procedure, where an
+    /// escaping exception would end the process.</param>
+    public TrayIcon(string tooltip, IReadOnlyList<TrayCommand> commands, Action<Exception>? onError = null)
     {
+        _onError = onError;
         _tooltip = tooltip;
         _commands = commands;
         _taskbarCreated = Ui.RegisterWindowMessageW("TaskbarCreated");
@@ -108,8 +112,8 @@ public sealed class TrayIcon : IDisposable
             var y = (short)((wParam >> 16) & 0xFFFF);
             switch (ev)
             {
-                case Ui.WM_CONTEXTMENU or Ui.NIN_SELECT or Ui.NIN_KEYSELECT: self.ShowMenu(x, y); break;
-                case Ui.WM_LBUTTONDBLCLK: self._commands.FirstOrDefault(c => c.IsDefault)?.Run?.Invoke(); break;
+                case Ui.WM_CONTEXTMENU or Ui.NIN_KEYSELECT: self.ShowMenu(x, y); break;
+                case Ui.NIN_SELECT: self.Run(self._commands.FirstOrDefault(c => c.IsDefault)); break;
             }
             return 0;
         }
@@ -130,12 +134,18 @@ public sealed class TrayIcon : IDisposable
             _ = Ui.SetForegroundWindow(_hwnd); // otherwise the menu does not close when the user clicks elsewhere
             var chosen = Ui.TrackPopupMenuEx(menu, Ui.TPM_RETURNCMD | Ui.TPM_RIGHTBUTTON | Ui.TPM_NONOTIFY | Ui.TPM_BOTTOMALIGN, x, y, _hwnd, 0);
             _ = User32.PostMessageW(_hwnd, Ui.WM_NULL, 0, 0);
-            if (chosen > 0 && chosen <= _commands.Count) _commands[chosen - 1].Run?.Invoke();
+            if (chosen > 0 && chosen <= _commands.Count) Run(_commands[chosen - 1]);
         }
         finally
         {
             Ui.DestroyMenu(menu);
         }
+    }
+
+    private void Run(TrayCommand? command)
+    {
+        try { command?.Run?.Invoke(); }
+        catch (Exception ex) { _onError?.Invoke(ex); }
     }
 
     public void Dispose()

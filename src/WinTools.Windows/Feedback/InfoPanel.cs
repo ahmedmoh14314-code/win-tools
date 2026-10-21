@@ -34,9 +34,15 @@ public sealed class InfoPanel : IDisposable
         var info = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
         User32.GetMonitorInfoW(monitor, ref info);
         var dpi = Shcore.GetDpiForMonitor(monitor, 0, out var dpiX, out _) == 0 ? dpiX : 96;
+        var work = info.rcWork;
+        // As many files as fit the work area's height; the rest are counted in "+N more".
+        while (sections.Count > 1 && InfoPanelRenderer.WindowSize(sections, moreFiles, dpi).H > work.Bottom - work.Top)
+        {
+            sections = sections.Take(sections.Count - 1).ToArray();
+            moreFiles++;
+        }
         var (w, h) = InfoPanelRenderer.WindowSize(sections, moreFiles, dpi);
         var gap = InfoPanelRenderer.Px(28, dpi);
-        var work = info.rcWork;
         var x = screenX + gap + w <= work.Right ? screenX + gap : screenX - gap - w; // beside the drop, never under the pointer
         x = Math.Clamp(x, work.Left, Math.Max(work.Left, work.Right - w));
         var y = Math.Clamp(screenY - h / 2, work.Top, Math.Max(work.Top, work.Bottom - h));
@@ -56,7 +62,7 @@ public sealed class InfoPanel : IDisposable
     {
         switch (msg)
         {
-            case Ui.WM_LBUTTONUP or Ui.WM_RBUTTONUP: Hide(); return 0;
+            case Ui.WM_LBUTTONUP or Ui.WM_RBUTTONUP or Ui.WM_MBUTTONUP: Hide(); return 0;
             case Msg.CLOSE: Hide(); return 0; // never destroyed by WM_CLOSE: the window is reused
             case Msg.TIMER when wParam == DismissTimer: Hide(); return 0;
             default: return null;

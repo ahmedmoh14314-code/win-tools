@@ -59,7 +59,7 @@ public sealed partial class UiSurfaceTests
                 if (!top && i == 0) continue; // Back: icon and a short fixed word
                 var fit = Fonts.Fit(view.Labels[i], (int)(2 * boxes[i].HalfWidth), px, RadialRenderer.LabelWeight, twoLines: !top);
                 Assert.False(fit.Ellipsis, $"\"{view.Labels[i]}\" does not fit at {dpi} DPI (box {2 * boxes[i].HalfWidth:0} px)");
-                Assert.True(fit.SizePx >= px * 0.85 - 1, $"\"{view.Labels[i]}\" shrank too far ({fit.SizePx} px)");
+                Assert.True(fit.SizePx >= Math.Round(11.0 * dpi / 96), $"\"{view.Labels[i]}\" shrank below 11 px at 96 DPI ({fit.SizePx} px at {dpi})");
             }
         }
     }
@@ -192,10 +192,11 @@ public sealed partial class UiSurfaceTests
         using var folder = new TempFolder();
         var store = new SettingsStore(Path.Combine(folder.Path, "settings.json"));
         using var got = new ManualResetEventSlim();
-        using (SettingsSignal.Listen(got.Set))
+        var name = $@"Local\WinTools.Tests.{Guid.NewGuid():N}"; // never the real host's event
+        using (SettingsSignal.TryListen(got.Set, name))
         {
             Assert.True(store.Save(new AppSettings { UiSounds = false, TriggerKey = "F9" }));
-            SettingsSignal.Raise();
+            Assert.True(SettingsSignal.Raise(name));
             Assert.True(got.Wait(TimeSpan.FromSeconds(5)));
         }
         var loaded = store.Load();

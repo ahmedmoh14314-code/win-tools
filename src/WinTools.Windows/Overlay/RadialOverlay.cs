@@ -107,8 +107,7 @@ public sealed class RadialOverlay : IDisposable
         _frames = _animationFrames = 0;
         _maxFrameMs = 0;
         _animation.Start(0, Now);
-        Render();
-        _window.Show();
+        if (Render()) _window.Show(); // a frame that failed is never shown (its holes would let the drag through)
         return new OverlayPlacement(_left + _size / 2, _top + _size / 2, _dpi);
     }
 
@@ -125,6 +124,12 @@ public sealed class RadialOverlay : IDisposable
 
     /// <summary>Session paint statistics since the last <see cref="ShowAt"/>.</summary>
     public OverlayFrames Frames => new(_frames, _animationFrames, Math.Round(_maxFrameMs, 3));
+
+    /// <summary>Puts the visible ring back above other topmost windows (a toast that appeared during the drag).</summary>
+    public void BringToFront()
+    {
+        if (_window.IsVisible) _window.Show();
+    }
 
     public void Hide()
     {
@@ -143,7 +148,7 @@ public sealed class RadialOverlay : IDisposable
         if (newRing) _animation.Start(view.Labels.Count, Now);
         _animation.Target(view.Hot, view.Armed, Now);
         if (!_window.IsVisible) return;
-        Render();
+        if (!Render()) { Hide(); return; }
         if (!_animation.Settled) _window.StartTimer(AnimationTimer, FrameMs);
     }
 
@@ -158,21 +163,42 @@ public sealed class RadialOverlay : IDisposable
         (_left, _top) = RingGeometry.Place(cursor.X, cursor.Y, _size, info.rcWork.Left, info.rcWork.Top, info.rcWork.Right, info.rcWork.Bottom);
     }
 
-    private void Render()
+    /// <summary>
+    /// Draws and presents one frame. Returns false, presenting nothing, when drawing failed or the frame is not opaque
+    /// where the disc must be (checked at the centre and just inside the rim), or when the window refused it.
+    /// </summary>
+    private bool Render()
     {
         var started = Stopwatch.GetTimestamp();
-        using (var p = _surface.Begin(_size, _size, _dpi))
-            _renderer.Draw(p, _size, _view ?? RadialRenderer.Waiting, _animation);
-        _window.Present(_surface, _left, _top);
+        try
+        {
+            using (var p = _surface.Begin(_size, _size, _dpi))
+                _renderer.Draw(p, _size, _view ?? RadialRenderer.Waiting, _animation);
+        }
+        catch (InvalidOperationException) { return false; } // GDI or GDI+ out of resources
+        if (!DiscIsOpaque() || !_window.Present(_surface, _left, _top)) return false;
         _frames++;
         _maxFrameMs = Math.Max(_maxFrameMs, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        return true;
+    }
+
+    private bool DiscIsOpaque()
+    {
+        var c = _size / 2;
+        var r = c - Math.Max(2, _size / 100);
+        return _surface.AlphaAt(c, c) == 255 && _surface.AlphaAt(c - r, c) == 255 && _surface.AlphaAt(c + r - 1, c) == 255
+            && _surface.AlphaAt(c, c - r) == 255 && _surface.AlphaAt(c, c + r - 1) == 255;
     }
 
     private nint? OnMessage(uint msg, nuint wParam, nint lParam)
     {
         if (msg != Msg.TIMER || wParam != AnimationTimer) return null;
         _animation.Advance(Now);
-        if (_window.IsVisible && _view is not null) { Render(); _animationFrames++; }
+        if (_window.IsVisible && _view is not null)
+        {
+            if (Render()) _animationFrames++;
+            else Hide();
+        }
         if (_animation.Settled || !_window.IsVisible) _window.StopTimer(AnimationTimer);
         return 0;
     }

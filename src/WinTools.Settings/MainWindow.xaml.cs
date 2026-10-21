@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private AppSettings _settings = new();
     private bool _loading;
     private bool _pending;
+    private int _failedSaves;
 
     private static readonly (string Value, string Label)[] AnimationChoices = [("System", "Follow Windows"), ("On", "On"), ("Off", "Off")];
 
@@ -44,7 +45,11 @@ public partial class MainWindow : Window
         foreach (var (_, label) in AnimationChoices) Animations.Items.Add(label);
         Load();
         Wire();
-        Closing += (_, _) => { if (_pending) SaveNow(); };
+        Closing += (_, _) =>
+        {
+            if (ResizeWidth.IsKeyboardFocusWithin || ResizeHeight.IsKeyboardFocusWithin) CommitSizes(); // a typed size not yet committed
+            if (_pending) SaveNow(finalAttempt: true);
+        };
     }
 
     private void Load()
@@ -193,16 +198,27 @@ public partial class MainWindow : Window
         _saveTimer.Start();
     }
 
-    private void SaveNow()
+    /// <summary>
+    /// Saves the pending change. The file can be briefly locked (the host reading it, an indexer or antivirus), so a failed
+    /// save is retried a few times before it is reported; the change stays pending until it is saved.
+    /// </summary>
+    private void SaveNow(bool finalAttempt = false)
     {
         _saveTimer.Stop();
         if (!_pending) return;
-        _pending = false;
-        if (_store.Save(_settings))
+        for (var attempt = 0; attempt < (finalAttempt ? 5 : 1); attempt++)
         {
-            SettingsSignal.Raise();
-            Status.Text = "Saved. WinTools uses the new settings now.";
+            if (_store.Save(_settings))
+            {
+                _pending = false;
+                _failedSaves = 0;
+                SettingsSignal.Raise();
+                Status.Text = "Saved. A running WinTools applies it at once.";
+                return;
+            }
+            if (finalAttempt) Thread.Sleep(100);
         }
-        else Status.Text = "Could not save the settings file. Check that its folder can be written to.";
+        if (!finalAttempt && ++_failedSaves < 5) { _saveTimer.Start(); return; } // try again shortly
+        Status.Text = "Could not save the settings file. Check that its folder can be written to.";
     }
 }

@@ -28,6 +28,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     private readonly SoundPlayer _sounds;
     private readonly NavigationSounds _navigationSounds;
     private CapabilityResolver _resolver;
+    private CapabilityResolver _sessionResolver; // fixed for one overlay session, so a settings reload cannot change an armed menu
     private AppSettings _settings;
     private readonly InteractionSession _session = new();
     private readonly MessageWindow _window;
@@ -47,8 +48,10 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         _settings = settings;
         _navigationSounds = new NavigationSounds(settings.UiSounds);
         _resolver = new CapabilityResolver(RadialMenu.Catalog(settings.CustomResizeId()));
+        _sessionResolver = _resolver;
         _window = window;
         _overlay = new RadialOverlay(this);
+        _feedback.AttachOverlay(() => _overlay.IsVisible, _overlay.BringToFront);
         _hooks = new LowLevelHooks(_window.Handle, settings.TriggerVirtualKey);
     }
 
@@ -121,6 +124,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         {
             case SessionAction.ShowOverlay:
                 _navigator = null;
+                _sessionResolver = _resolver;
                 _navigationSounds.Reset();
                 _feedback.OverlayShowing();
                 _overlay.ReducedMotion = _settings.ReducedMotion(SystemPreferences.ReducedMotion()); // Windows' "Animation effects" unless overridden
@@ -129,11 +133,13 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
                 _dpi = placed.Dpi;
                 _centre = (placed.CentreX, placed.CentreY);
                 _log.Event("overlay.show", new { hookToShownMs = Math.Round(Stopwatch.GetElapsedTime(_triggerTimestamp).TotalMilliseconds, 3), anchor = $"{_anchor.X},{_anchor.Y}", centre = $"{placed.CentreX},{placed.CentreY}", dpi = placed.Dpi });
+                if (!_overlay.IsVisible) _log.Event("overlay.renderFailed"); // not shown: a ring with transparent holes would let the drag through
                 break;
             case SessionAction.HideOverlay:
                 _window.StopTimer(SessionTimer);
                 _window.StopTimer(ArmTimer);
                 _overlay.Hide();
+                _feedback.OverlayHidden();
                 _log.Event("overlay.hide", new { reason, sounds = SoundCounts(), frames = _overlay.Frames });
                 break;
             case SessionAction.StartReleaseGrace:
@@ -155,7 +161,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         var first = _navigator is null || (_navigator.Groups.Count == 0 && paths.Count > 0);
         if (first)
         {
-            _navigator = new MenuNavigator(RadialMenu.Build(_resolver.Resolve(paths)), _dpi);
+            _navigator = new MenuNavigator(RadialMenu.Build(_sessionResolver.Resolve(paths)), _dpi);
             // The first ring was centred on the pointer at the trigger (unless clamped at an edge): that is the start.
             _navigator.Shown(_anchor.X - _centre.X, _anchor.Y - _centre.Y, TimeSpan.Zero, _dpi);
         }
@@ -230,6 +236,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         var frames = _overlay.Frames;
         _overlay.Hide();
         _feedback.DroppedAt(_centre.X + dx, _centre.Y + dy);
+        _feedback.OverlayHidden();
         if (execute is null || chosen is null)
         {
             var reason = !copyAllowed ? "copyNotAllowed" : hot is not null ? "notArmed" : "noCommand";
@@ -238,8 +245,9 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             return false;
         }
         // Re-resolve from the drop's own data object; run only if it still offers the command that was armed.
-        if (!_resolver.Resolve(paths).Any(o => o.Id == chosen.Id))
+        if (!_sessionResolver.Resolve(paths).Any(o => o.Id == chosen.Id))
         {
+            _sounds.Play(UiSound.Nothing);
             _log.Event("drop", new { accepted = false, reason = "commandsChanged", files = paths.Count });
             return false;
         }

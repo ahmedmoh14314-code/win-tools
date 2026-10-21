@@ -13,6 +13,12 @@ using WinTools.Windows.Rendering;
 if (args.Length == 2 && args[0] == "--icon") { ProductIcon.Write(Path.GetFullPath(args[1])); return 0; }
 if (args.Length >= 1 && args[0] == "--bench") { Bench.Run(args.Length > 1 ? uint.Parse(args[1]) : 120); return 0; }
 if (args.Length >= 1 && args[0] == "--live") { Live.Run(); return 0; }
+if (args.Length >= 2 && args[0] == "--measure")
+{
+    foreach (var px in new[] { 11, 12, 13 })
+        Console.WriteLine($"{px}px: " + string.Join("  ", args[1..].Select(t => $"{t}={Fonts.Width(t, px, RadialRenderer.LabelWeight)}")));
+    return 0;
+}
 if (args.Length == 3 && args[0] == "--settings-shot") return SettingsShot.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
 if (args.Length < 1) { Console.Error.WriteLine("Usage: WinTools.Preview <output folder> [dpi ...] | --icon <file.ico>"); return 64; }
 var outDir = Path.GetFullPath(args[0]);

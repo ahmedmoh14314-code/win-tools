@@ -41,7 +41,7 @@ Contrast, as WCAG ratios; `UiSurfaceTests.Text_and_state_colours_have_enough_con
 
 ## Type, size and spacing
 - **Font:** Segoe UI with ClearType.
-- **Ring labels:** 12.5 px at 96 DPI, semibold. A label that does not fit goes onto two lines (split at a space or after "×"), then 92 % and 85 % of the size. A test checks that no known label needs an ellipsis at 96, 120, 144 or 192 DPI.
+- **Ring labels:** 13 px at 96 DPI, semibold. A label that does not fit goes onto two lines (split at a space or after "×"), then to 12 and 11 px. A test checks, for every known label at 96, 120, 144 and 192 DPI, that none needs an ellipsis and none goes below 11 px (scaled). The hub's category name is 11 px.
 - **Toast:** 13.5 px semibold title, 12 px detail.
 - **Info panel:** 12 px.
 - **Radii:** cards 10–12 px, controls 6 px.
@@ -74,7 +74,8 @@ Contrast, as WCAG ratios; `UiSurfaceTests.Text_and_state_colours_have_enough_con
 | Toast in / out | 140 / 180 ms | ease-out cubic | 10 px slide up with a fade; a fade out |
 
 - **Animations setting:** "Follow Windows" (the default, which reads *Animation effects*), On or Off. Reduced motion shows every change at once.
-- **Frames:** about 0.6 ms each at 120 DPI. They are driven by a timer only while something moves.
+- **Frames:** about 0.6 ms each at 120 DPI. They are driven by a timer only while something moves. A toast at rest uses no timer: a one-shot timer starts its fade out.
+- **Frame check:** a frame is shown only if it was drawn and the disc is opaque at its centre and just inside the rim. A ring with transparent holes, which would let the drag through, is never shown.
 
 ## Sound
 All sounds are synthesised in `SoundBank.cs`: sums of decaying sine partials, a 1 ms fade at both ends, 16-bit mono at 44.1 kHz, peak at most 0.2 of full scale. There are no recorded, sampled or third-party sounds.
@@ -107,14 +108,14 @@ Rules (`NavigationSounds`, tested):
 - **Duration:** 3.5 s for success or nothing to do, 7 s for a failure or partial failure. One toast at a time.
 - **Text:** the new file's name, what was done, and the size before and after. A failure gives its reason in plain words, never an error code, worker text or path. The detailed result stays in the local log.
 
-**Image info:** a card beside the drop point. It never takes focus, and a click anywhere on it closes it.
+**Image info:** a card beside the drop point. It never takes focus, and a click anywhere on it closes it. It shows as many files as fit the height of the screen's work area (up to three) and counts the rest. If it is ready while a radial menu is open, it waits until the menu closes, since it is not a drop target. A toast that appears during a drag is put back below the ring.
 
 ![](images/info-three.png)
 
 ## Tray
 - **Icon:** the WinTools icon with the tooltip "WinTools: drag images, press Space" (it names the configured key).
 - **Menu:** Settings…, Open logs folder, Exit WinTools.
-- **Double click:** opens Settings.
+- **Left click:** opens Settings. **Right click** (or the keyboard): the menu.
 - **Explorer restart:** the icon comes back.
 
 ## Settings window

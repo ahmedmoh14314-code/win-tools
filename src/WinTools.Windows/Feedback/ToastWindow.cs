@@ -69,7 +69,9 @@ public sealed class ToastWindow : IDisposable
             : Now + (content.Kind is FeedbackKind.Failure or FeedbackKind.Partial ? FailureDuration : SuccessDuration).TotalMilliseconds;
         Frame();
         _window.Show();
-        _window.StartTimer(AnimationTimer, 10);
+        _window.StopTimer(DismissTimer);
+        if (!ReducedMotion && !wasVisible) _window.StartTimer(AnimationTimer, 10); // the fade in only
+        if (_hideAt != double.MaxValue) _window.StartTimer(DismissTimer, (uint)Math.Max(1, _hideAt - Now)); // one shot
     }
 
     /// <summary>Updates a running job's progress without restarting the toast.</summary>
@@ -83,6 +85,7 @@ public sealed class ToastWindow : IDisposable
     public void Hide()
     {
         _window.StopTimer(AnimationTimer);
+        _window.StopTimer(DismissTimer);
         _window.Hide();
         _content = null;
         _fadingOut = false;
@@ -107,15 +110,26 @@ public sealed class ToastWindow : IDisposable
         _window.Present(_surface, _x, _y + (int)Math.Round(slide), (byte)Math.Round(opacity * 255));
     }
 
+    /// <summary>
+    /// Timers run only while something changes: the animation timer during the fade in and the fade out, and a one-shot
+    /// timer for the moment the toast starts to leave. A shown toast that is not moving costs nothing.
+    /// </summary>
     private nint? OnMessage(uint msg, nuint wParam, nint lParam)
     {
-        if (msg != Msg.TIMER || wParam != AnimationTimer) return null;
+        if (msg != Msg.TIMER) return null;
+        if (wParam == DismissTimer)
+        {
+            _window.StopTimer(DismissTimer);
+            _fadingOut = true;
+            if (ReducedMotion) Hide();
+            else _window.StartTimer(AnimationTimer, 10);
+            return 0;
+        }
+        if (wParam != AnimationTimer) return null;
         var now = Now;
-        if (!_fadingOut && now >= _hideAt) _fadingOut = true;
-        if (_fadingOut && (ReducedMotion || now - _hideAt >= FadeOutMs)) { Hide(); return 0; }
-        var animating = _fadingOut || now - _shownAt < FadeInMs;
-        if (animating) Frame();
-        else if (_hideAt == double.MaxValue) _window.StopTimer(AnimationTimer); // a progress toast waits for Update/Show
+        if (_fadingOut && now - _hideAt >= FadeOutMs) { Hide(); return 0; }
+        Frame();
+        if (!_fadingOut && now - _shownAt >= FadeInMs) _window.StopTimer(AnimationTimer); // fully in: rest until dismissed or updated
         return 0;
     }
 
