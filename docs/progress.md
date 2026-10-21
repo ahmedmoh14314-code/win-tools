@@ -3,7 +3,7 @@
 Keep this a snapshot, not a diary. Update at the end of every session (workflow step 13).
 
 ## Current phase
-**Functional V1 (2026-10-21).** The functional roadmap runs as one pull request per task; the final UI/UX design has not started.
+**Functional V1 done (2026-10-21).** The functional roadmap ran as one pull request per task. The final UI/UX design has not started.
 
 | Task | State |
 |---|---|
@@ -13,10 +13,10 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 | 3. Metadata, image info, batch, settings, output folder | Done (PR #4 merged) |
 | 4. Hierarchical radial menu | Done (PR #5, merged with this file) |
 | 5. V1 hardening | Done (PR #6, merged with this file) |
-| 6. Final acceptance gate | Next |
+| 6. Final acceptance gate | Done (PR #7, merged with this file) |
 
 ## Last known-good commit
-`main` at the merge of PR #6 (CI `build-and-test` green). `main` is protected: pull request and a green `build-and-test` required.
+`main` at the merge of PR #7 (CI `build-and-test` green). `main` is protected: pull request and a green `build-and-test` required.
 
 ## Work completed
 - Formats: PNG, JPEG, WebP, BMP, TIFF in every direction (ADR-0006). SVG and HEIC deferred (ADR-0012).
@@ -27,6 +27,7 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
   - the security review's findings fixed or recorded;
   - a 69-file real-world corpus;
   - leak and stall soak runs (`docs/security/2026-10-21-hardening.md`).
+- Acceptance (TASK 6): main verified from a clean state, the Explorer suite re-run on the final build (71/71), every requirement reviewed (`docs/acceptance/2026-10-21-functional-v1.md`).
 - Measurements: `docs/performance/2026-10-21-first-slice.md`, `docs/performance/2026-10-21-batch.md`, `docs/performance/2026-10-21-worker-memory.md`, `docs/performance/2026-10-21-soak.md`. Threat model: `docs/security/threat-model.md`. Dependency matrix: `docs/architecture/dependency-matrix.md` (SkiaSharp for WebP, worker only).
 
 ## Decisions made
@@ -38,9 +39,11 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 - Multi-monitor and mixed DPI; the Desktop as drag source; Windows 10. These need the manual protocol or Windows Sandbox.
 - A user-visible failure state (notifications or a tray icon). Today a failure gives only the error sound and a log entry.
 - Overlay accessibility: its own provider, which must not block the overlay thread.
+- The overlay latency measured at the acceptance gate was higher than at TASK 4 (warm p95 20.1 against 13.6 ms, first activation max 60.5 against 34.0 ms), within budget, with no change to the overlay code; the cause was not investigated. Re-measure on an idle machine.
+- Owner decisions: the supported Windows baseline (ADR-0002) and packaging (ADR-0008); the requirement status changes made at the acceptance gate (SCOPE-001 rejected; UX-007, DIST-001 and DIST-003 deferred), pending confirmation.
 
 ## Current blockers
 None.
 
 ## Next recommended task
-TASK 6, the final functional V1 acceptance gate: verify main from a clean state, re-run the Explorer suite, go through every requirement, then the final report. The final UI/UX design has not started and is not part of V1.
+The UI/UX phase, once the owner starts it: the visual design of the overlay, a user-visible failure state, progress and cancel, a tray icon and settings interface. It has not started. The open items per requirement are in `docs/acceptance/2026-10-21-functional-v1.md`.

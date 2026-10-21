@@ -19,12 +19,13 @@
         "Runs as a normal user-mode Windows process on the supported Windows versions decided in ADR-0002.",
         "No browser runtime or web-view shell is required for the core interaction."
       ],
-      "status": "unverified",
+      "status": "in-progress",
       "source": "brief.md §Product concept, §Technology selection",
       "relatedAdrs": [
         "ADR-0001",
         "ADR-0002"
-      ]
+      ],
+      "evidence": "A native user-mode process: a Win32 overlay with GDI and OLE drag and drop, and .NET 10 worker processes; no browser runtime or web view (none in the code or the dependency matrix). Every run in this repository was on Windows 11 Pro 26200. The supported baseline (ADR-0002) is still an open owner decision, and Windows 10 is untested (docs/acceptance/2026-10-21-functional-v1.md)."
     },
     {
       "id": "PLAT-002",
@@ -34,8 +35,9 @@
         "All operations complete with the network adapter disabled.",
         "No outbound network connection is opened by the application during normal use (verified with a network monitor)."
       ],
-      "status": "unverified",
-      "source": "brief.md §Scope discipline"
+      "status": "in-progress",
+      "source": "brief.md §Scope discipline",
+      "evidence": "No network API in the product code (static check: the only System.Net reference is a generated implicit using). At run time, 10 netstat samples during 1000 conversions found 0 TCP/UDP endpoints owned by any of the 10 WinTools processes seen. Not done: a run with the network adapter disabled, which would change system settings (docs/acceptance/2026-10-21-functional-v1.md)."
     },
     {
       "id": "PLAT-003",
@@ -45,8 +47,9 @@
         "Installs and runs for a standard (non-admin) user account.",
         "No manifest requests elevation; no runtime code path triggers UAC."
       ],
-      "status": "unverified",
-      "source": "brief.md §Security model"
+      "status": "in-progress",
+      "source": "brief.md §Security model",
+      "evidence": "Both manifests request asInvoker with uiAccess=false. No code path uses ShellExecute, a verb or elevation. The runs of the acceptance gate (the Explorer suite and the 1000-conversion network check) were started from a shell whose token is not elevated: WindowsPrincipal.IsInRole(Administrator) returned False there, and the WinTools processes inherit that token. Not done: an installer (none exists, DIST-001) and a run under an account outside the Administrators group (docs/acceptance/2026-10-21-functional-v1.md)."
     },
     {
       "id": "UX-001",
@@ -79,7 +82,7 @@
       "relatedAdrs": [
         "ADR-0003"
       ],
-      "notes": "ADR-0003 now holds measured results for Space, Ctrl+Space, X1, middle button (rejected: shell cancels the drag), Esc and Shift-held. Default not chosen yet; human feel pass and elevated-source check pending."
+      "notes": "ADR-0003 holds measured results for Space, Ctrl+Space, X1, middle button (rejected: shell cancels the drag), Esc and Shift-held. The default is Space (ADR-0003 accepted with amendments), configurable to F8-F12. The human feel pass and the elevated-source check (UIPI) are pending."
     },
     {
       "id": "UX-003",
@@ -193,7 +196,7 @@
       "relatedAdrs": [
         "ADR-0007"
       ],
-      "evidence": "Projects: Core (no Win32 or engine), Windows (integration), Host (composition), Worker (engine). Enforced by WorkerProcessTests.Host_assembly_does_not_reference_the_worker_assembly (also checks that Core references no product assembly). The architecture document is not written yet."
+      "evidence": "Projects: Core (no Win32 or engine), Windows (integration), Host (composition), Worker (engine). Enforced by WorkerProcessTests.Host_assembly_does_not_reference_the_worker_assembly (also checks that Core references no product assembly). docs/architecture/product-architecture-proposal.md describes the boundaries, but as a proposal; it has not been brought up to date with what was built."
     },
     {
       "id": "ARCH-002",
@@ -264,8 +267,8 @@
       ],
       "status": "in-progress",
       "source": "brief.md §Performance philosophy",
-      "notes": "Proposed targets written 2026-10-19; none measured yet.",
-      "evidence": "docs/performance/2026-10-21-first-slice.md covers idle CPU and memory, startup proxy, radial latency and job latency. Leak and UI stall: docs/performance/2026-10-21-soak.md. 10,000 overlay cycles and 3000 conversions, no growth (quarter medians; the detector catches an injected leak). The overlay shows and paints in p95 9.6 ms (max 13.3 ms) while every worker is busy, against a budget of 0 frames over 16 ms. Worker memory per operation: docs/performance/2026-10-21-worker-memory.md. Still missing: the installer/portable size (no package exists yet)."
+      "notes": "Proposed targets written 2026-10-19. Every budget except the installer/portable size has a benchmark file.",
+      "evidence": "docs/performance/2026-10-21-first-slice.md covers idle CPU and memory, startup proxy, radial latency and job latency. Leak and UI stall: docs/performance/2026-10-21-soak.md. 10,000 overlay cycles and 3000 conversions, no growth (quarter medians; the detector catches an injected leak). The overlay shows and paints in p95 9.6 ms (max 13.3 ms) while every worker is busy, against a budget of 0 frames over 16 ms. Worker memory per operation: docs/performance/2026-10-21-worker-memory.md. Missing: the installer/portable size. No shippable artifact exists until packaging is decided (ADR-0008, DIST-001). As an indication only, a framework-dependent Release publish of the host is 14.1 MB, of which the WebP engine is 13.4 MB (docs/acceptance/2026-10-21-functional-v1.md)."
     },
     {
       "id": "SEC-001",
@@ -300,11 +303,12 @@
         "docs/architecture/dependency-matrix.md exists with one row per dependency and the fields listed in docs/engineering/rules/dependencies.md.",
         "License review recorded for any engine (FFmpeg, ImageMagick, PDF, archive, LibreOffice, Office SDKs) before it is referenced."
       ],
-      "status": "unverified",
+      "status": "verified",
       "source": "brief.md §Dependency policy",
       "relatedAdrs": [
         "ADR-0009"
-      ]
+      ],
+      "evidence": "docs/architecture/dependency-matrix.md has one row per package: purpose, licence and redistribution, binary size, maintenance and security history. The alternatives and the reason for the choice of the only engine, SkiaSharp, are in ADR-0006, which the matrix row relies on. SkiaSharp has its own licence review (no GPL/AGPL obligation found). Packages are pinned centrally, and `dotnet list package --vulnerable --include-transitive` reports none (2026-10-21)."
     },
     {
       "id": "SCOPE-001",
@@ -314,8 +318,9 @@
         "No other formats or operations are implemented before UX-001, UX-005 and UX-006 are verified.",
         "A go/no-go review on the interaction is recorded before scope grows."
       ],
-      "status": "unverified",
-      "source": "brief.md §Prototype scope"
+      "status": "rejected",
+      "source": "brief.md §Prototype scope",
+      "rationale": "Superseded by the product owner's decision to grow the scope before the interaction criteria were all met: the functional V1 roadmap (2026-10-20, TASKs 0-6) added BMP and TIFF, rotate, metadata, info and batch. The criterion \"no other formats before UX-001, UX-005 and UX-006 are verified\" was therefore not kept; it was not met by evidence. The interaction is verified with Explorer as the drag source, on one monitor at 120 DPI (ADR-0014; docs/performance/2026-10-21-hierarchical-menu.md); UX-001 and UX-005 remain in progress. Pending the owner's confirmation of this status change."
     },
     {
       "id": "SCOPE-002",
@@ -352,11 +357,12 @@
         "ADR-0008 records the chosen packaging for the experimental stage with SmartScreen and signing implications.",
         "A friend can install and run the prototype from a shared artifact without Administrator rights."
       ],
-      "status": "unverified",
+      "status": "deferred",
       "source": "brief.md §Installation and distribution",
       "relatedAdrs": [
         "ADR-0008"
-      ]
+      ],
+      "rationale": "Packaging and sharing an artifact belong to the stage after functional V1. The owner has asked for no publishing yet, and ADR-0008 is still Proposed. Measured meanwhile: a framework-dependent Release publish is 14.1 MB, of which 13.4 MB is the WebP engine. Pending the owner's confirmation of this status change."
     },
     {
       "id": "DIST-002",
@@ -375,12 +381,13 @@
         "An alternative path (e.g. select files in Explorer, press a shortcut, choose the action with the keyboard) reaches the same commands.",
         "The overlay exposes its sectors to UI Automation."
       ],
-      "status": "unverified",
+      "status": "deferred",
       "source": "Phase 1B evaluator finding M5 (accessibility gap)",
       "relatedAdrs": [
         "ADR-0003",
         "ADR-0004"
-      ]
+      ],
+      "rationale": "The keyboard alternative and the overlay's UI Automation provider are interface work. The owner's functional V1 roadmap excludes the UI/UX design phase (2026-10-20), so this requirement moves to that phase. Nothing in the architecture blocks it: commands come from the capability resolver, not from the overlay. Pending the owner's confirmation of this status change."
     },
     {
       "id": "UX-008",
@@ -447,8 +454,9 @@
       "acceptanceCriteria": [
         "After uninstall: no HKCU Run entry, no %LOCALAPPDATA% folder (or the user is asked about settings), no running process, no registered window classes left by a stale process."
       ],
-      "status": "unverified",
-      "source": "Phase 1B evaluator finding M5"
+      "status": "deferred",
+      "source": "Phase 1B evaluator finding M5",
+      "rationale": "Uninstall behaviour depends on the packaging decision (DIST-001, ADR-0008), which comes after functional V1. Today nothing is installed: the host writes only %APPDATA%\\WinTools\\settings.json (on save) and %LOCALAPPDATA%\\WinTools\\logs, and registers no Run entry. Pending the owner's confirmation of this status change."
     },
     {
       "id": "OPS-001",
