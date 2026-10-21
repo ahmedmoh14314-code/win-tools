@@ -4,20 +4,28 @@ using WinTools.Windows.Native;
 
 namespace WinTools.Windows.Overlay;
 
-/// <summary>Callbacks from the overlay to its owner, on the overlay thread.</summary>
+/// <summary>
+/// Callbacks from the overlay to its owner, on the overlay thread. Positions are offsets in physical pixels from the
+/// ring centre (down is positive). The owner decides what is under the pointer and answers with
+/// <see cref="RadialOverlay.SetView"/>; the return value says whether a command is under the pointer (drop effect COPY).
+/// </summary>
 public interface IOverlayEvents
 {
-    /// <summary>A drag entered the overlay; the owner answers with <see cref="RadialOverlay.SetCommands"/>.</summary>
-    void DragEntered(IReadOnlyList<string> paths);
+    bool DragEntered(IReadOnlyList<string> paths, int dx, int dy);
+    bool DragMoved(int dx, int dy);
     void DragLeft();
-    /// <summary>A drop landed on <paramref name="sector"/> (-1: dead zone or outside the ring). Return true when a command will run.</summary>
-    bool Dropped(IReadOnlyList<string> paths, int sector, int screenX, int screenY);
+    /// <summary>A drop landed on the overlay. <paramref name="copyAllowed"/> is false when the source does not allow COPY. Return true when a command will run.</summary>
+    bool Dropped(IReadOnlyList<string> paths, int dx, int dy, bool copyAllowed);
 }
 
+/// <summary>Where the ring was shown: its centre in screen pixels and the monitor's DPI.</summary>
+public readonly record struct OverlayPlacement(int CentreX, int CentreY, uint Dpi);
+
 /// <summary>
-/// The native radial overlay (ADR-0001): a pre-created topmost, non-activating tool-window popup clipped to a circle
-/// with SetWindowRgn, painted with GDI and registered as an OLE drop target. It knows labels and geometry only; which
-/// commands exist is decided by the owner. Create, use and dispose on one STA thread that called OleInitialize.
+/// The native radial overlay (ADR-0001): a pre-created topmost, non-activating tool-window popup clipped with
+/// SetWindowRgn to a circle, painted with GDI and registered as an OLE drop target. It shows one ring at a time and is
+/// moved by its owner when the menu changes level. It paints a <see cref="MenuView"/> and knows nothing about
+/// operations. Create, use and dispose on one STA thread that called OleInitialize.
 /// </summary>
 public sealed class RadialOverlay : IDisposable
 {
@@ -28,8 +36,8 @@ public sealed class RadialOverlay : IDisposable
     private readonly FileDropTarget _dropTarget;
     private nint _hwnd;
     private bool _dropRegistered;
-    private IReadOnlyList<string> _labels = [];
-    private int _size, _hot = -1;
+    private MenuView? _view;
+    private int _size;
     private uint _dpi = 96;
     private int _left, _top;
 
@@ -58,10 +66,10 @@ public sealed class RadialOverlay : IDisposable
     public bool IsVisible => _hwnd != 0 && User32.IsWindowVisible(_hwnd);
 
     /// <summary>
-    /// Shows the ring centred on (x, y) — the pointer position when the trigger was pressed — clamped to that monitor's
-    /// work area, without activating it. Returns the ring centre actually used.
+    /// Shows the ring centred on (x, y) — the pointer, when the trigger was pressed or when the menu changed level —
+    /// clamped to that monitor's work area, without activating it. Also used to move an already visible ring.
     /// </summary>
-    public (int X, int Y) ShowAt(int x, int y)
+    public OverlayPlacement ShowAt(int x, int y)
     {
         var cursor = new POINT { X = x, Y = y };
         var monitor = User32.MonitorFromPoint(cursor, User32.MONITOR_DEFAULTTONEAREST);
@@ -70,58 +78,76 @@ public sealed class RadialOverlay : IDisposable
         _dpi = Shcore.GetDpiForMonitor(monitor, 0 /* MDT_EFFECTIVE_DPI */, out var dpiX, out _) == 0 ? dpiX : 96;
         _size = RingGeometry.Scale(RingGeometry.OuterRadius96 * 2, _dpi);
         (_left, _top) = RingGeometry.Place(cursor.X, cursor.Y, _size, info.rcWork.Left, info.rcWork.Top, info.rcWork.Right, info.rcWork.Bottom);
-        _labels = [];
-        _hot = -1;
-        User32.SetWindowRgn(_hwnd, Gdi32.CreateEllipticRgn(0, 0, _size + 1, _size + 1), false); // the system owns the region
+        _view = null;
+        ApplyRegion();
         User32.SetWindowPos(_hwnd, User32.HWND_TOPMOST, _left, _top, _size, _size, User32.SWP_NOACTIVATE | User32.SWP_SHOWWINDOW);
         User32.InvalidateRect(_hwnd, 0, false);
         User32.UpdateWindow(_hwnd); // paint now, so the target is complete before the first DragEnter
-        return (_left + _size / 2, _top + _size / 2);
+        return new OverlayPlacement(_left + _size / 2, _top + _size / 2, _dpi);
+    }
+
+    /// <summary>
+    /// Moves the visible ring to be centred on (x, y), clamped like <see cref="ShowAt"/>, without painting: the owner
+    /// paints the next level with <see cref="SetView"/> right after, so no intermediate frame is drawn.
+    /// </summary>
+    public OverlayPlacement MoveTo(int x, int y)
+    {
+        var cursor = new POINT { X = x, Y = y };
+        var monitor = User32.MonitorFromPoint(cursor, User32.MONITOR_DEFAULTTONEAREST);
+        var info = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
+        User32.GetMonitorInfoW(monitor, ref info);
+        _dpi = Shcore.GetDpiForMonitor(monitor, 0 /* MDT_EFFECTIVE_DPI */, out var dpiX, out _) == 0 ? dpiX : 96;
+        var size = RingGeometry.Scale(RingGeometry.OuterRadius96 * 2, _dpi);
+        var resized = size != _size;
+        _size = size;
+        (_left, _top) = RingGeometry.Place(cursor.X, cursor.Y, _size, info.rcWork.Left, info.rcWork.Top, info.rcWork.Right, info.rcWork.Bottom);
+        if (resized) ApplyRegion();
+        User32.SetWindowPos(_hwnd, User32.HWND_TOPMOST, _left, _top, _size, _size, User32.SWP_NOACTIVATE);
+        _view = null; // the next SetView always paints
+        return new OverlayPlacement(_left + _size / 2, _top + _size / 2, _dpi);
     }
 
     public void Hide()
     {
         if (IsVisible) User32.ShowWindow(_hwnd, User32.SW_HIDE);
-        _labels = [];
-        _hot = -1;
+        _view = null;
     }
 
-    public void SetCommands(IReadOnlyList<string> labels)
+    /// <summary>Paints <paramref name="view"/> if it differs from what is shown.</summary>
+    public void SetView(MenuView view)
     {
-        _labels = labels;
+        if (view == _view) return;
+        _view = view;
         Repaint();
     }
 
-    internal bool IsCommandAt(int screenX, int screenY) => SectorAt(screenX, screenY) >= 0;
+    private (int Dx, int Dy) Offset(int screenX, int screenY) => (screenX - _left - _size / 2, screenY - _top - _size / 2);
 
-    internal int SectorAt(int screenX, int screenY)
+    internal bool OnDragEnter(IReadOnlyList<string> paths, int x, int y)
     {
-        var c = _size / 2;
-        return RingGeometry.HitSector(screenX - _left - c, screenY - _top - c, RingGeometry.Scale(RingGeometry.InnerRadius96, _dpi), c, _labels.Count);
+        var (dx, dy) = Offset(x, y);
+        return _events.DragEntered(paths, dx, dy);
     }
 
-    internal void OnDragEnter(IReadOnlyList<string> paths, int x, int y)
+    internal bool OnDragOver(int x, int y)
     {
-        _events.DragEntered(paths);
-        SetHot(SectorAt(x, y));
+        var (dx, dy) = Offset(x, y);
+        return _events.DragMoved(dx, dy);
     }
 
-    internal void OnDragOver(int x, int y) => SetHot(SectorAt(x, y));
+    internal void OnDragLeave() => _events.DragLeft();
 
-    internal void OnDragLeave()
+    internal bool OnDrop(IReadOnlyList<string> paths, int x, int y, bool copyAllowed)
     {
-        SetHot(-1);
-        _events.DragLeft();
+        var (dx, dy) = Offset(x, y);
+        return _events.Dropped(paths, dx, dy, copyAllowed);
     }
 
-    internal bool OnDrop(IReadOnlyList<string> paths, int x, int y, bool copyAllowed) =>
-        _events.Dropped(paths, copyAllowed ? SectorAt(x, y) : -1, x, y);
-
-    private void SetHot(int sector)
+    private void ApplyRegion()
     {
-        if (sector == _hot) return;
-        _hot = sector;
-        Repaint();
+        var region = Gdi32.CreateEllipticRgn(0, 0, _size + 1, _size + 1);
+        if (region == 0) return; // keep the previous region; drops outside a command are refused anyway
+        if (User32.SetWindowRgn(_hwnd, region, IsVisible) == 0) Gdi32.DeleteObject(region); // on success the system owns it
     }
 
     private void Repaint()
@@ -142,6 +168,22 @@ public sealed class RadialOverlay : IDisposable
         return User32.DefWindowProcW(hwnd, msg, wParam, lParam);
     }
 
+    /// <summary>GDI Pie draws counter-clockwise between two radials, so a clockwise sector from a0 to a1 is drawn from a1 to a0.</summary>
+    private static void Sector(nint dc, int c, int r, double a0, double a1)
+    {
+        if (a1 - a0 >= 2 * Math.PI - 1e-9) { Gdi32.Ellipse(dc, c - r, c - r, c + r, c + r); return; } // equal radials: Pie draws nothing useful
+        var (x0, y0) = RingGeometry.PointAt(a0, r);
+        var (x1, y1) = RingGeometry.PointAt(a1, r);
+        Gdi32.Pie(dc, c - r, c - r, c + r, c + r, c + (int)Math.Round(x1), c + (int)Math.Round(y1), c + (int)Math.Round(x0), c + (int)Math.Round(y0));
+    }
+
+    private static void Label(nint dc, string text, int c, double angle, double radius, int halfWidth, int halfHeight)
+    {
+        var (lx, ly) = RingGeometry.PointAt(angle, radius);
+        var r = new RECT { Left = c + (int)lx - halfWidth, Top = c + (int)ly - halfHeight, Right = c + (int)lx + halfWidth, Bottom = c + (int)ly + halfHeight };
+        User32.DrawTextW(dc, text, -1, ref r, User32.DT_CENTER | User32.DT_VCENTER | User32.DT_SINGLELINE | User32.DT_NOPREFIX);
+    }
+
     private void Paint(nint hwnd)
     {
         var hdc = User32.BeginPaint(hwnd, out var ps);
@@ -149,50 +191,58 @@ public sealed class RadialOverlay : IDisposable
         {
             var size = Math.Max(_size, 1);
             var c = size / 2;
-            var inner = RingGeometry.Scale(RingGeometry.InnerRadius96, _dpi);
+            var dead = RingGeometry.Scale(RingGeometry.InnerRadius96, _dpi);
+            var view = _view ?? new MenuView([], 0, -1, false, "");
             var mem = Gdi32.CreateCompatibleDC(hdc);
             var bmp = Gdi32.CreateCompatibleBitmap(hdc, size, size);
             var oldBmp = Gdi32.SelectObject(mem, bmp);
             var background = Gdi32.CreateSolidBrush(Gdi32.Rgb(32, 34, 40));
             var normal = Gdi32.CreateSolidBrush(Gdi32.Rgb(52, 56, 66));
-            var hot = Gdi32.CreateSolidBrush(Gdi32.Rgb(70, 140, 220));
+            var back = Gdi32.CreateSolidBrush(Gdi32.Rgb(40, 42, 50));
+            var pending = Gdi32.CreateSolidBrush(Gdi32.Rgb(58, 94, 140));  // under the pointer, not (yet) a drop that runs
+            var armed = Gdi32.CreateSolidBrush(Gdi32.Rgb(70, 140, 220));
             var centre = Gdi32.CreateSolidBrush(Gdi32.Rgb(24, 25, 30));
             var pen = Gdi32.CreatePen(Gdi32.PS_SOLID, Math.Max(1, RingGeometry.Scale(2, _dpi)), Gdi32.Rgb(90, 94, 110));
-            var font = Gdi32.CreateFontW(-RingGeometry.Scale(14, _dpi), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5 /* CLEARTYPE_QUALITY */, 0, "Segoe UI");
+            var font = Gdi32.CreateFontW(-RingGeometry.Scale(13, _dpi), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5 /* CLEARTYPE_QUALITY */, 0, "Segoe UI");
+            var small = Gdi32.CreateFontW(-RingGeometry.Scale(10, _dpi), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
             var oldPen = Gdi32.SelectObject(mem, pen);
             var oldFont = Gdi32.SelectObject(mem, font);
             var oldBrush = Gdi32.SelectObject(mem, normal);
             try
             {
                 User32.FillRect(mem, new RECT { Right = size, Bottom = size }, background);
-                var n = _labels.Count;
+                _ = Gdi32.SetBkMode(mem, Gdi32.TRANSPARENT);
+                var n = view.Labels.Count;
+                var isLevel = view.Hub.Length > 0; // a category's ring: sector 0 is Back
                 for (var i = 0; i < n; i++)
                 {
-                    // Sector i spans clockwise from angle a0 to a1 (0 = 12 o'clock); Pie draws counter-clockwise from (x1,y1) to (x2,y2).
-                    var a0 = 2 * Math.PI * i / n - Math.PI / 2;
-                    var a1 = 2 * Math.PI * (i + 1) / n - Math.PI / 2;
-                    Gdi32.SelectObject(mem, i == _hot ? hot : normal);
-                    Gdi32.Pie(mem, 0, 0, size, size, c + (int)(c * Math.Cos(a1)), c + (int)(c * Math.Sin(a1)), c + (int)(c * Math.Cos(a0)), c + (int)(c * Math.Sin(a0)));
+                    Gdi32.SelectObject(mem, i == view.Hot ? (view.Armed ? armed : pending) : isLevel && i == 0 ? back : normal);
+                    var (from, to) = RingGeometry.SectorBounds(i, n, view.Start, view.FirstSweep);
+                    Sector(mem, c, c, from, to);
                 }
-                Gdi32.SelectObject(mem, centre);
-                Gdi32.Ellipse(mem, c - inner, c - inner, c + inner, c + inner);
-
-                _ = Gdi32.SetBkMode(mem, Gdi32.TRANSPARENT);
-                _ = Gdi32.SetTextColor(mem, n == 0 ? Gdi32.Rgb(150, 152, 160) : Gdi32.Rgb(240, 240, 245));
-                var half = RingGeometry.Scale(48, _dpi);
-                var lineHalf = RingGeometry.Scale(12, _dpi);
                 if (n == 0)
                 {
-                    var r = new RECT { Left = c - half, Top = c - inner - 3 * lineHalf, Right = c + half, Bottom = c - inner - lineHalf };
-                    User32.DrawTextW(mem, "No actions", -1, ref r, User32.DT_CENTER | User32.DT_VCENTER | User32.DT_SINGLELINE | User32.DT_NOPREFIX);
+                    Gdi32.SelectObject(mem, normal);
+                    Gdi32.Ellipse(mem, 0, 0, size, size);
                 }
+                Gdi32.SelectObject(mem, centre);
+                Gdi32.Ellipse(mem, c - dead, c - dead, c + dead, c + dead);
+
+                var lineHalf = RingGeometry.Scale(12, _dpi);
+                _ = Gdi32.SetTextColor(mem, n == 0 ? Gdi32.Rgb(150, 152, 160) : Gdi32.Rgb(240, 240, 245));
+                if (n == 0) Label(mem, "No actions", c, 0, (dead + c) / 2.0, RingGeometry.Scale(48, _dpi), lineHalf);
+                // Narrow sectors get narrower label boxes so neighbours never overlap.
+                var half = RingGeometry.Scale(n > 6 ? 30 : 40, _dpi);
                 for (var i = 0; i < n; i++)
                 {
-                    var am = n == 1 ? -Math.PI / 2 : 2 * Math.PI * (i + 0.5) / n - Math.PI / 2;
-                    var radius = (inner + c) / 2.0;
-                    var (lx, ly) = (c + (int)(radius * Math.Cos(am)), c + (int)(radius * Math.Sin(am)));
-                    var r = new RECT { Left = lx - half, Top = ly - lineHalf, Right = lx + half, Bottom = ly + lineHalf };
-                    User32.DrawTextW(mem, _labels[i], -1, ref r, User32.DT_CENTER | User32.DT_VCENTER | User32.DT_SINGLELINE | User32.DT_NOPREFIX);
+                    _ = Gdi32.SetTextColor(mem, isLevel && i == 0 ? Gdi32.Rgb(170, 172, 180) : Gdi32.Rgb(240, 240, 245));
+                    Label(mem, view.Labels[i], c, RingGeometry.SectorCentre(i, n, view.Start, view.FirstSweep), (dead + c) / 2.0 + RingGeometry.Scale(4, _dpi), half, lineHalf);
+                }
+                if (isLevel)
+                {
+                    Gdi32.SelectObject(mem, small);
+                    _ = Gdi32.SetTextColor(mem, Gdi32.Rgb(170, 172, 180));
+                    Label(mem, view.Hub, c, 0, 0, dead, lineHalf);
                 }
                 Gdi32.BitBlt(hdc, 0, 0, size, size, mem, 0, 0, Gdi32.SRCCOPY);
             }
@@ -202,7 +252,7 @@ public sealed class RadialOverlay : IDisposable
                 Gdi32.SelectObject(mem, oldPen);
                 Gdi32.SelectObject(mem, oldBrush);
                 Gdi32.SelectObject(mem, oldBmp);
-                foreach (var o in new[] { font, pen, background, normal, hot, centre, bmp }) Gdi32.DeleteObject(o);
+                foreach (var o in new[] { font, small, pen, background, normal, back, pending, armed, centre, bmp }) Gdi32.DeleteObject(o);
                 Gdi32.DeleteDC(mem);
             }
         }

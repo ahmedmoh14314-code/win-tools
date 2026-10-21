@@ -1,3 +1,4 @@
+using WinTools.Core.Interaction;
 using WinTools.Host;
 using WinTools.Host.Jobs;
 using WinTools.Windows;
@@ -36,11 +37,11 @@ internal static class Program
         {
             var jobs = new JobRunner(new WorkerClient(workerPath, JobTimeout), log, settings, MessageWindow.FailureBeep, MessageWindow.InfoBeep,
                 facts => MessageWindow.ShowInfo("Image info", InfoText.Format(facts)));
-            using var coordinator = new InteractionCoordinator(log, jobs, settings.TriggerVirtualKey);
+            using var coordinator = new InteractionCoordinator(log, jobs, settings.TriggerVirtualKey, RadialMenu.Catalog(settings.CustomResizeId()));
             coordinator.Start();
             Console.CancelKeyPress += (_, e) => { e.Cancel = true; coordinator.RequestClose(); };
             log.Event("host.start", new { pid = Environment.ProcessId, runtime = Environment.Version.ToString(), log = log.Path });
-            Console.WriteLine("WinTools is running. Drag a PNG or JPEG, press Space, drop it on a command. Ctrl+C exits.");
+            Console.WriteLine("WinTools is running. Drag images, press the trigger key, point at a category, then drop on a command. Ctrl+C exits.");
             Console.WriteLine($"Log: {log.Path}");
             MessageWindow.RunLoop();
             log.Event("host.stop");

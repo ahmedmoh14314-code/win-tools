@@ -64,7 +64,7 @@
         "ADR-0004"
       ],
       "notes": "Spike 001 (2026-10-20, docs/research/2026-10-19-interaction-spike.md): Explorer-sourced drag → Space/Ctrl+Space/X1 → overlay → DragEnter → Drop with correct paths (1 and 3 files, Unicode): 44/44 drop cycles; Esc cancels cleanly. 'Explorer unaffected' supported by folder assertions for shell-source runs, by listings only for Explorer runs, with one unexplained window-switch incident open (evaluator finding 2). Not yet: release outside the ring with Explorer underneath (AC3), Desktop as source, product job start (no product code yet).",
-      "evidence": "Explorer source verified end to end: Explorer end-to-end harness (tests/WinTools.EndToEnd, Release, 2026-10-21, judged against the host log): png 100/100 (before the evaluator fixes) and 30/30 plus 10/10 (after); jpg 20/20; escape 10/10; release outside the ring 10/10; unsupported file 10/10 plus 3/3; fast release at 0/10/25/50 ms 100/100 plus 10/10 at 0 ms, every DragEnter ending in an accepted drop; worker crash 3/3 (Debug). The Desktop source is not tested yet."
+      "evidence": "Explorer source verified end to end: Explorer end-to-end harness (tests/WinTools.EndToEnd, Release, 2026-10-21, judged against the host log): png 100/100 (before the evaluator fixes) and 30/30 plus 10/10 (after); jpg 20/20; escape 10/10; release outside the ring 10/10; unsupported file 10/10 plus 3/3; fast release at 0/10/25/50 ms 100/100 plus 10/10 at 0 ms, every DragEnter ending in an accepted drop; worker crash 3/3 (Debug). The Desktop source is not tested yet. Explorer runs of the current design (docs/performance/2026-10-21-hierarchical-menu.md, 2026-10-21): 71/71 cycles in 22 scenarios: commands run on drop; a release on a category, an unsupported file, Escape and leaving the ring run nothing. The Desktop as drag source is not yet run."
     },
     {
       "id": "UX-002",
@@ -105,11 +105,12 @@
         "The radial UI contains no per-format branching.",
         "Adding a new format or operation requires no change to the radial menu architecture (demonstrated by adding one in a test)."
       ],
-      "status": "unverified",
+      "status": "verified",
       "source": "brief.md §Context-aware radial menu",
       "relatedAdrs": [
-        "ADR-0007"
-      ]
+        "ADR-0014"
+      ],
+      "evidence": "CapabilityResolver answers the question (CapabilityResolverTests, CapabilityMatrixTests). RadialMenu.Build groups the resolver's answer by operation kind; the overlay paints a MenuView of labels only (no per-format branching). RadialMenuTests.A_new_operation_appears_without_any_menu_change adds an operation in a test and it appears with no menu change. Explorer runs of the current design (docs/performance/2026-10-21-hierarchical-menu.md, 2026-10-21): 71/71 cycles in 22 scenarios, every command reached through the menu the resolver built for the dragged files (single files of all five formats, mixed batches of 12)."
     },
     {
       "id": "UX-005",
@@ -125,7 +126,7 @@
         "ADR-0004"
       ],
       "notes": "Spike 001: placement computed from physical cursor + work area, clamped correctly at all 4 corners and 4 edges at 125 % on one monitor, drop received at each. Finding: at corners the cursor starts outside the ring (design change needed). 100/150/200 % and mixed-DPI two-monitor runs not possible on this machine.",
-      "evidence": "Placement is clamped to the cursor monitor work area and scaled by monitor DPI (RingGeometryTests). Measured at 120 DPI on one monitor only; the multi-monitor and mixed-DPI manual protocol is not run."
+      "evidence": "Placement is clamped to the cursor monitor work area and scaled by monitor DPI (RingGeometryTests). Measured at 120 DPI on one monitor only; the multi-monitor and mixed-DPI manual protocol is not run. Explorer: a trigger in the bottom-right corner of the work area, 3/3: the ring was clamped, nothing opened until the pointer had reached its centre, then exactly the wanted command ran (edge run, 2026-10-21)."
     },
     {
       "id": "UX-006",
@@ -458,12 +459,12 @@
         "The result is verified independently of the removal: the same displayed pixels, and a walk of the whole output finds only allowed elements; a file with nothing to remove reports NothingToDo.",
         "Reachable from the radial menu in Explorer."
       ],
-      "status": "in-progress",
+      "status": "verified",
       "source": "V1 roadmap TASK 3",
       "relatedAdrs": [
         "ADR-0006"
       ],
-      "evidence": "MetadataTests and MetadataAllowListTests (Core: C2PA/private/legacy PNG chunks, data after IEND/EOI/RIFF, comments between JPEG scans, vendor APP14, JFIF thumbnails, padded orientation EXIF, truncated input refused); MetadataOperationTests, MetadataHardeningTests, TiffMetadataTests (Worker). Not yet in the menu (hierarchical menu, TASK 4)."
+      "evidence": "MetadataTests and MetadataAllowListTests (Core: C2PA/private/legacy PNG chunks, data after IEND/EOI/RIFF, comments between JPEG scans, vendor APP14, JFIF thumbnails, padded orientation EXIF, truncated input refused); MetadataOperationTests, MetadataHardeningTests, TiffMetadataTests (Worker). Reachable through Tools in the two-level menu (ADR-0014). Explorer: Tools → Remove metadata on a JPEG with a comment segment, 3/3, the output valid and without the comment (jpg-strip run, 2026-10-21)."
     },
     {
       "id": "OPS-002",
@@ -473,12 +474,12 @@
         "No file is written.",
         "Reachable from the radial menu in Explorer."
       ],
-      "status": "in-progress",
+      "status": "verified",
       "source": "V1 roadmap TASK 3",
       "relatedAdrs": [
         "ADR-0006"
       ],
-      "evidence": "MetadataOperationTests.Image_info_reports_facts_and_writes_nothing. Shown in a plain message box; not yet in the menu (TASK 4)."
+      "evidence": "MetadataOperationTests.Image_info_reports_facts_and_writes_nothing. Shown in a plain message box; reachable through Tools in the two-level menu (ADR-0014). Explorer: Tools → Image info 3/3, the box shown and no file written (png-info run, 2026-10-21)."
     },
     {
       "id": "OPS-003",

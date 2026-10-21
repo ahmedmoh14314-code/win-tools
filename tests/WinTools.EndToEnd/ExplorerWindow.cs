@@ -15,6 +15,9 @@ internal sealed class ExplorerWindow : IDisposable
 
     public nint Hwnd { get; }
 
+    /// <summary>Diagnostics of the last attempt to raise the window.</summary>
+    public string LastRaise { get; private set; } = "";
+
     private ExplorerWindow(string folder, nint hwnd)
     {
         _folder = folder;
@@ -49,7 +52,9 @@ internal sealed class ExplorerWindow : IDisposable
     /// </summary>
     public bool EnsureForeground(int x, int y)
     {
-        Desktop.SetWindowPos(Hwnd, Desktop.HwndTopmost, 0, 0, 0, 0, Desktop.SwpNoMove | Desktop.SwpNoSize | Desktop.SwpNoActivate);
+        var before = Desktop.ClassOf(Desktop.GetForegroundWindow());
+        var raised = Desktop.SetWindowPos(Hwnd, Desktop.HwndTopmost, 0, 0, 0, 0, Desktop.SwpNoMove | Desktop.SwpNoSize | Desktop.SwpNoActivate);
+        LastRaise = $"foregroundBefore={before} setWindowPos={raised} error={(raised ? 0 : Marshal.GetLastPInvokeError())} {Desktop.StateOf(Hwnd)}";
         Thread.Sleep(100);
         if (Desktop.RootAt(x, y) != Hwnd || !StillShowsFolder()) return false;
         if (Desktop.GetForegroundWindow() != Hwnd)
