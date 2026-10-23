@@ -37,23 +37,12 @@ public sealed class TriggerDetectorTests
         Assert.Equal(InputSignal.Trigger, d.OnKey(Space, true));
     }
 
-    [Theory]
-    [InlineData(Ctrl)]
-    [InlineData(Shift)]
-    [InlineData(0xA4)] // left Alt
-    public void Space_with_a_drag_modifier_is_not_a_trigger(int modifier)
-    {
-        var d = Dragging();
-        d.OnKey(modifier, true);
-        Assert.Equal(InputSignal.None, d.OnKey(Space, true));
-    }
-
     [Fact]
     public void Resync_clears_a_modifier_whose_key_up_was_missed()
     {
         var d = Dragging();
-        d.OnKey(Ctrl, true);                       // key-up never seen (secure desktop)
-        Assert.Equal(InputSignal.None, d.OnKey(Space, true));
+        d.OnKey(0xA4, true);                       // Alt key-up never seen (secure desktop)
+        Assert.Equal(InputSignal.TriggerRefused, d.OnKey(Space, true));
         d.OnKey(Space, false);
         d.Resync(leftDown: true, ctrl: false, shift: false, alt: false);
         Assert.Equal(InputSignal.Trigger, d.OnKey(Space, true));

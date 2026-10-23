@@ -114,6 +114,15 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         log.Event("toast", new { kind = message.Kind.ToString(), files = items.Count, ms = Math.Round(Stopwatch.GetElapsedTime(_startedAt).TotalMilliseconds, 1) });
     });
 
+    /// <summary>The trigger was pressed during a drag with Alt held (UI thread): tell the user what to do instead.</summary>
+    public void TriggerRefused(string triggerKey, int x, int y)
+    {
+        toast.Show(new ToastContent(FeedbackKind.Nothing, $"Release Alt, then press {triggerKey}",
+            $"Alt + {triggerKey} is a Windows shortcut, so WinTools does not open with Alt held."), x, y);
+        sounds.Play(UiSound.Nothing);
+        log.Event("toast", new { kind = "triggerRefused" });
+    }
+
     public void Crashed(Operation operation, int files) => ui.Post(() =>
     {
         _done = _total;

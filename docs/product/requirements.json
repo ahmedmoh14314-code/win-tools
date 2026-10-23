@@ -82,7 +82,7 @@
       "relatedAdrs": [
         "ADR-0003"
       ],
-      "notes": "ADR-0003 holds measured results for Space, Ctrl+Space, X1, middle button (rejected: shell cancels the drag), Esc and Shift-held. The default is Space (ADR-0003 accepted with amendments), configurable to F8-F12. The human feel pass and the elevated-source check (UIPI) are pending."
+      "notes": "ADR-0003 holds measured results for Space, Ctrl+Space, X1, middle button (rejected: shell cancels the drag), Esc and Shift-held. The default is Space (ADR-0003 accepted with amendments), configurable to F8-F12. The human feel pass and the elevated-source check (UIPI) are pending. 2026-10-23 (ADR-0003 amendment, owner field report): Ctrl and Shift held with the trigger no longer block it (WinTools only ever answers COPY); Alt+Space during a drag is refused with a toast. Evidence: ModifierTriggerTests (failing on 8836149, passing after) and Explorer runs with Ctrl-click, Ctrl+A and Shift-click selections held through the drag."
     },
     {
       "id": "UX-003",

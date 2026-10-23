@@ -120,6 +120,11 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             case InputSignal.Escape:
                 Apply(_session.OnEscape(), "escape");
                 break;
+            case InputSignal.TriggerRefused:
+                // Alt was held: Alt+Space is the window-menu shortcut. Say so instead of silently doing nothing.
+                if (_session.State == SessionState.Idle) _feedback.TriggerRefused(_settings.TriggerKey, x, y);
+                _log.Event("trigger.refused", new { modifier = "Alt", leftDown, dragging, overlay = _session.State.ToString() });
+                break;
         }
     }
 

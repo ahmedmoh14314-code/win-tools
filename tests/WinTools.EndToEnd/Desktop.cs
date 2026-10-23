@@ -5,7 +5,7 @@ namespace WinTools.EndToEnd;
 /// <summary>SendInput and window queries for the harness. Absolute moves use virtual-desktop coordinates.</summary>
 internal static partial class Desktop
 {
-    public const int VkSpace = 0x20, VkEscape = 0x1B, VkControl = 0x11;
+    public const int VkSpace = 0x20, VkEscape = 0x1B, VkControl = 0x11, VkShift = 0x10, VkAlt = 0x12, VkEnd = 0x23;
 
     [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] private struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public nuint extra; }
