@@ -128,6 +128,13 @@ internal static partial class Kernel32
 {
     [LibraryImport("kernel32.dll")] public static partial nint GetModuleHandleW(nint name);
     [LibraryImport("kernel32.dll")] public static partial uint GetCurrentThreadId();
+
+    // CF_HDROP memory (DROPFILES): its real size, and a lock for reading it in place.
+    public const uint CP_ACP = 0;
+    [LibraryImport("kernel32.dll", SetLastError = true)] public static partial nuint GlobalSize(nint hMem);
+    [LibraryImport("kernel32.dll", SetLastError = true)] public static partial nint GlobalLock(nint hMem);
+    [LibraryImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool GlobalUnlock(nint hMem);
+    [LibraryImport("kernel32.dll")] public static unsafe partial int MultiByteToWideChar(uint codePage, uint flags, byte* multiByte, int multiByteLength, char* wide, int wideLength);
 }
 
 internal static partial class Shcore

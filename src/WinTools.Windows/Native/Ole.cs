@@ -28,9 +28,3 @@ internal static class Ole32
     [DllImport("ole32.dll")] public static extern int RevokeDragDrop(nint hwnd);
     [DllImport("ole32.dll")] public static extern void ReleaseStgMedium(ref STGMEDIUM medium);
 }
-
-internal static class Shell32
-{
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-    public static extern uint DragQueryFileW(nint hDrop, uint index, [Out] char[]? buffer, uint size);
-}
