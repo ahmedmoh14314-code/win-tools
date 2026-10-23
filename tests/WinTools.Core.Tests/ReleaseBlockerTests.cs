@@ -87,6 +87,26 @@ public sealed class ModifierTriggerTests
         Assert.Equal(InputSignal.Trigger, d.OnKey(Space, true));
     }
 
+    [Theory]
+    [InlineData(0xA1)] // right Shift
+    [InlineData(0xA3)] // right Ctrl
+    public void Right_hand_ctrl_or_shift_does_not_block_the_trigger(int modifier)
+    {
+        var d = Dragging();
+        d.OnKey(modifier, true);
+        Assert.Equal(InputSignal.Trigger, d.OnKey(Space, true));
+    }
+
+    [Fact]
+    public void Right_alt_is_refused_like_left_alt_and_auto_repeat_stays_quiet()
+    {
+        var d = Dragging();
+        d.OnKey(0xA5, true);                                     // right Alt (AltGr also sends it)
+        Assert.Equal(InputSignal.TriggerRefused, d.OnKey(Space, true));
+        Assert.Equal(InputSignal.None, d.OnKey(Space, true));    // auto-repeat: one refusal per press
+        Assert.Equal(InputSignal.None, d.OnKey(Space, true));
+    }
+
     [Fact]
     public void A_refusal_survives_the_hook_packing()
     {

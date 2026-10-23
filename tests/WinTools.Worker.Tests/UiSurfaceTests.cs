@@ -158,6 +158,36 @@ public sealed partial class UiSurfaceTests
     }
 
     [Fact]
+    public void The_alt_refusal_never_replaces_a_running_batch_progress_toast()
+    {
+        var logPath = Path.Combine(Path.GetTempPath(), $"wintools-refusal-{Guid.NewGuid():N}.jsonl");
+        try
+        {
+            RunSta(() =>
+            {
+                using var ui = new WinTools.Windows.MessageWindow((_, _, _) => false);
+                using var toast = new ToastWindow();
+                using var info = new InfoPanel();
+                using var sounds = new SoundPlayer(enabled: false);
+                using var log = WinTools.Host.HostLog.Open(logPath);
+                var presenter = new WinTools.Host.FeedbackPresenter(ui, toast, info, sounds, log);
+
+                var progress = new ToastContent(FeedbackKind.Success, "Converting 40 images", "3 of 40", 0.075);
+                toast.Show(progress, 100, 100);
+                presenter.TriggerRefused("Space", 100, 100);
+                Assert.Same(progress, toast.Content); // still the batch's toast, so its progress updates keep landing
+
+                toast.Hide();
+                presenter.TriggerRefused("F9", 100, 100);
+                Assert.Equal("Release Alt, then press F9", toast.Content?.Title);
+                Assert.DoesNotContain("F9", toast.Content?.Detail, StringComparison.Ordinal); // no claim about a specific Windows shortcut
+                toast.Hide();
+            });
+        }
+        finally { File.Delete(logPath); }
+    }
+
+    [Fact]
     public void The_info_panel_never_takes_focus_and_closes_on_wm_close()
     {
         RunSta(() =>

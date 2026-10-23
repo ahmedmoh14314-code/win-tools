@@ -122,8 +122,10 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
                 break;
             case InputSignal.TriggerRefused:
                 // Alt was held: Alt+Space is the window-menu shortcut. Say so instead of silently doing nothing.
-                if (_session.State == SessionState.Idle) _feedback.TriggerRefused(_settings.TriggerKey, x, y);
-                _log.Event("trigger.refused", new { modifier = "Alt", leftDown, dragging, overlay = _session.State.ToString() });
+                var refusedAge = Stopwatch.GetElapsedTime(hookTimestamp);
+                var tell = _session.State == SessionState.Idle && refusedAge <= InteractionSession.MaxTriggerAge;
+                if (tell) _feedback.TriggerRefused(_settings.TriggerKey, x, y);
+                _log.Event("trigger.refused", new { modifier = "Alt", leftDown, dragging, overlay = _session.State.ToString(), told = tell, hookToUiMs = Math.Round(refusedAge.TotalMilliseconds, 3) });
                 break;
         }
     }

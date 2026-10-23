@@ -505,7 +505,7 @@ using (var explorer = ExplorerWindow.Open(folder))
             var soundsHeld = SoundsHeld(ev);
             bool? refusedLogged = scenario == "alt" ? ev.Any(e => Ev(e) == "trigger.refused") : null;
             bool? overlayShown = scenario == "alt" ? ev.Any(e => Ev(e) == "overlay.show") : null;
-            if (scenario == "alt") (toastShown, focusKept) = (Desktop.VisibleWindowsOf(host.Id, "WinTools.Toast").Count > 0 || ev.Any(e => Ev(e) == "toast"), Desktop.GetForegroundWindow() == explorer.Hwnd);
+            if (scenario == "alt") (toastShown, focusKept) = (Desktop.VisibleWindowsOf(host.Id, "WinTools.Toast").Count > 0 || ev.Any(e => Ev(e) == "toast" && e.TryGetProperty("data", out var d) && d.TryGetProperty("kind", out var k) && k.GetString() == "triggerRefused" && d.TryGetProperty("shown", out var s) && s.GetBoolean()), Desktop.GetForegroundWindow() == explorer.Hwnd);
             // Every result the user can see came without taking the foreground from Explorer.
             var feedbackOk = output is null || (toastShown == true && focusKept == true);
             var ok = sourceIntact && cleanFolder && soundsHeld && feedbackOk && scenario switch
