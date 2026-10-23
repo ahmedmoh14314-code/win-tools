@@ -155,6 +155,10 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
                 _log.Event("overlay.hide", new { reason, sounds = SoundCounts(), frames = _overlay.Frames });
                 break;
             case SessionAction.StartReleaseGrace:
+                // Released outside the ring: the drop target forgets that drag's files, so a drag entering during the
+                // grace never falls back to them. The menu stays: a late DragEnter of the same drag (a fast release) is
+                // judged against the level on screen, and any drop is re-resolved from its own files.
+                _overlay.ForgetDrag();
                 _window.StartTimer(SessionTimer, InteractionSession.ReleaseGrace);
                 _log.Event("release", new { wait = "grace", dragInside = false });
                 break;
@@ -168,10 +172,12 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     bool IOverlayEvents.DragEntered(IReadOnlyList<string> paths, bool pending, int dx, int dy)
     {
         var action = _session.OnDragEntered();
-        if (pending && _navigator is null)
+        if (pending && (_navigator is null || _navigator.Groups.Count == 0))
         {
             // The files are not readable yet and the drop target is retrying: the ring stays in its waiting state (not
             // "No actions"), and nothing can be dropped on a command until FilesResolved builds the menu.
+            _navigator = null;
+            _overlay.ShowWaiting();
             Apply(action, "dragEnterAfterRelease");
             _log.Event("drag.enter", new { files = 0, pending = true, hookToEnterMs = Math.Round(Stopwatch.GetElapsedTime(_triggerTimestamp).TotalMilliseconds, 3) });
             return false;

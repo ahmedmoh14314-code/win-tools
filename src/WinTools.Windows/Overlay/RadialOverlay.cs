@@ -146,6 +146,18 @@ public sealed class RadialOverlay : IDisposable, IDropSink
         if (_window.IsVisible) _window.Show();
     }
 
+    /// <summary>
+    /// The drag has ended outside the ring (its button was released there): a later DragEnter may be another drag, so
+    /// the drop target forgets the files it read. What the ring shows is up to the owner.
+    /// </summary>
+    public void ForgetDrag() => _dropTarget.Reset();
+
+    /// <summary>The files are being read again: the waiting ring, not an empty "No actions" one.</summary>
+    public void ShowWaiting()
+    {
+        if (_window.IsVisible) SetView(RadialRenderer.Waiting);
+    }
+
     public void Hide()
     {
         _window.StopTimer(AnimationTimer);

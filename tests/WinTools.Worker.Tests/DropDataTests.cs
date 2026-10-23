@@ -95,6 +95,45 @@ public sealed partial class DropDataTests
         Assert.InRange(data.Reads, 1, 1 + (int)(TimeSpan.FromMilliseconds(1000) / FileDropTarget.RetryInterval));
     }
 
+    [Fact]
+    public void One_slow_failing_read_ends_the_retries_so_the_ui_thread_is_not_held_again()
+    {
+        var (target, sink, time) = Create();
+        var data = new FakeData(_ => Reply.Throws(unchecked((int)0x8001010A)), () => time.Advance(TimeSpan.FromMilliseconds(250)));
+        Enter(target, data);
+        for (var i = 0; i < 50; i++) { time.Advance(FileDropTarget.RetryInterval); Over(target); }
+        Assert.Equal(1, data.Reads);
+        Assert.False(sink.Pending);                // said at once: nothing is available
+        Assert.Equal(DropDataStage.GaveUp, sink.Reports.Single().Stage);
+    }
+
+    [Fact]
+    public void Reads_stop_when_their_total_time_reaches_the_budget()
+    {
+        var (target, _, time) = Create();
+        var data = new FakeData(_ => Reply.Throws(unchecked((int)0x8001010A)), () => time.Advance(TimeSpan.FromMilliseconds(150)));
+        Enter(target, data);
+        for (var i = 0; i < 50; i++) { time.Advance(FileDropTarget.RetryInterval); Over(target); }
+        Assert.Equal(4, data.Reads);               // 150 ms each: the fourth reaches 500 ms
+    }
+
+    [Fact]
+    public void Crossing_the_ring_edge_again_and_again_does_not_reset_the_read_limit()
+    {
+        var (target, sink, time) = Create();
+        var data = new FakeData(_ => Reply.NotOffered(unchecked((int)0x80040064)));
+        for (var i = 0; i < 200; i++)
+        {
+            Enter(target, data);
+            Over(target);
+            target.DragLeave();
+            time.Advance(TimeSpan.FromMilliseconds(30));
+        }
+        Assert.InRange(data.Reads, 1, FileDropTarget.MaxReads);
+        Assert.Equal(DropDataStage.GaveUp, sink.Reports[^1].Stage);
+        Assert.True(sink.Reports.Count <= FileDropTarget.MaxReads);
+    }
+
     public static TheoryData<string, byte[]> MalformedBlocks => new()
     {
         { "shorter than the header", new byte[12] },
@@ -238,6 +277,16 @@ public sealed partial class DropDataTests
     }
 
     [Fact]
+    public void A_list_missing_its_final_empty_path_still_parses_when_every_path_is_terminated()
+    {
+        var list = Encoding.Unicode.GetBytes("C:\\a.png\0C:\\b.jpg\0");
+        var block = Header(pFiles: 20, wide: true, size: 20 + list.Length);
+        list.CopyTo(block, 20);
+        Assert.Equal(DropReadStatus.Files, DropFiles.Parse(block, out var parsed));
+        Assert.Equal([@"C:\a.png", @"C:\b.jpg"], parsed);
+    }
+
+    [Fact]
     public void Parse_reports_an_empty_list_as_empty()
     {
         Assert.Equal(DropReadStatus.Empty, DropFiles.Parse(Block([]), out var parsed));
@@ -311,7 +360,7 @@ public sealed partial class DropDataTests
 
     /// <summary>A data object whose n-th CF_HDROP read (from 1) answers <paramref name="script"/>(n). Memory is a real
     /// moveable HGLOBAL, freed by the target through ReleaseStgMedium as with any source.</summary>
-    private sealed class FakeData(Func<int, Reply> script) : IDataObject
+    private sealed class FakeData(Func<int, Reply> script, Action? onRead = null) : IDataObject
     {
         public ReadCounter Counter { get; } = new();
         public int Reads => Counter.Reads;
@@ -327,6 +376,7 @@ public sealed partial class DropDataTests
         public void GetData(ref FORMATETC format, out STGMEDIUM medium)
         {
             var reply = _current ?? throw new InvalidOperationException("GetData without QueryGetData");
+            onRead?.Invoke();
             if (reply.ThrowHr != 0) Marshal.ThrowExceptionForHR(reply.ThrowHr); // what an RCW throws for a failed call
             medium = new STGMEDIUM { tymed = TYMED.TYMED_HGLOBAL, unionmember = Global(reply.Bytes!) };
         }
