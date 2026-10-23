@@ -165,18 +165,19 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         }
     }
 
-    bool IOverlayEvents.DragEntered(IReadOnlyList<string> paths, int dx, int dy)
+    bool IOverlayEvents.DragEntered(IReadOnlyList<string> paths, bool pending, int dx, int dy)
     {
         var action = _session.OnDragEntered();
-        // One menu per overlay session, so a drag that leaves and comes back finds the menu where it left it. A first
-        // DragEnter that brought no readable files does not fix an empty menu for the rest of the session.
-        var first = _navigator is null || (_navigator.Groups.Count == 0 && paths.Count > 0);
-        if (first)
+        if (pending && _navigator is null)
         {
-            _navigator = new MenuNavigator(RadialMenu.Build(_sessionResolver.Resolve(paths)), _dpi);
-            // The first ring was centred on the pointer at the trigger (unless clamped at an edge): that is the start.
-            _navigator.Shown(_anchor.X - _centre.X, _anchor.Y - _centre.Y, TimeSpan.Zero, _dpi);
+            // The files are not readable yet and the drop target is retrying: the ring stays in its waiting state (not
+            // "No actions"), and nothing can be dropped on a command until FilesResolved builds the menu.
+            Apply(action, "dragEnterAfterRelease");
+            _log.Event("drag.enter", new { files = 0, pending = true, hookToEnterMs = Math.Round(Stopwatch.GetElapsedTime(_triggerTimestamp).TotalMilliseconds, 3) });
+            return false;
         }
+        // The first ring was centred on the pointer at the trigger (unless clamped at an edge): that is the start.
+        var first = BuildMenu(paths, _anchor.X - _centre.X, _anchor.Y - _centre.Y, TimeSpan.Zero);
         var hot = Track(dx, dy);
         Apply(action, "dragEnterAfterRelease");
         if (first)
@@ -185,6 +186,39 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             _log.Event("drag.reenter");
         return hot;
     }
+
+    bool IOverlayEvents.FilesResolved(IReadOnlyList<string> paths, int dx, int dy)
+    {
+        if (!_overlay.IsVisible || _session.State == SessionState.Idle) return false; // the ring has already gone
+        // Built late: the ring starts from where the pointer is now (a pointer already out in a sector must come back to
+        // the centre first) and the arm delay counts from now, so the commands are seen before a drop can run one.
+        var built = BuildMenu(paths, dx, dy, Stopwatch.GetElapsedTime(_shownTimestamp));
+        var hot = Track(dx, dy);
+        _log.Event("drag.files", new { files = paths.Count, built, groups = _navigator?.Groups.Select(g => $"{g.Label}:{g.Commands.Count}"), hookToFilesMs = Math.Round(Stopwatch.GetElapsedTime(_triggerTimestamp).TotalMilliseconds, 3) });
+        return hot;
+    }
+
+    /// <summary>
+    /// One menu per overlay session, so a drag that leaves and comes back finds the menu where it left it. A menu built
+    /// from no readable files does not stay empty once files arrive. Returns whether a menu was built.
+    /// </summary>
+    private bool BuildMenu(IReadOnlyList<string> paths, int startDx, int startDy, TimeSpan shownAt)
+    {
+        if (_navigator is not null && (_navigator.Groups.Count > 0 || paths.Count == 0)) return false;
+        _navigator = new MenuNavigator(RadialMenu.Build(_sessionResolver.Resolve(paths)), _dpi);
+        _navigator.Shown(startDx, startDy, shownAt, _dpi);
+        return true;
+    }
+
+    void IOverlayEvents.DropData(DropDataEvent report) => _log.Event(report.Stage switch
+    {
+        DropDataStage.Unavailable => "drag.data.unavailable",
+        DropDataStage.Retry => "drag.data.retry",
+        DropDataStage.Recovered => "drag.data.recovered",
+        DropDataStage.GaveUp => "drag.data.gaveUp",
+        DropDataStage.SessionFallback => "drag.data.sessionFallback",
+        _ => "drag.data.dropUnavailable",
+    }, new { status = report.Status.ToString(), hr = $"0x{report.HResult:X8}", read = report.Read, files = report.Files });
 
     bool IOverlayEvents.DragMoved(int dx, int dy) => _navigator is not null && Track(dx, dy);
 

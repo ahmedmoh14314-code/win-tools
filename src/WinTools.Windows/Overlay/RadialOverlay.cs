@@ -13,8 +13,14 @@ namespace WinTools.Windows.Overlay;
 /// </summary>
 public interface IOverlayEvents
 {
-    bool DragEntered(IReadOnlyList<string> paths, int dx, int dy);
+    /// <summary>A drag entered. <paramref name="pending"/>: its files could not be read yet and the drop target is
+    /// retrying; keep the waiting ring (not "No actions") until <see cref="FilesResolved"/>.</summary>
+    bool DragEntered(IReadOnlyList<string> paths, bool pending, int dx, int dy);
     bool DragMoved(int dx, int dy);
+    /// <summary>A pending read ended during the drag: the files were recovered, or none could be read (empty).</summary>
+    bool FilesResolved(IReadOnlyList<string> paths, int dx, int dy);
+    /// <summary>Diagnostics about the drag's data, for the log (no paths).</summary>
+    void DropData(DropDataEvent report);
     void DragLeft();
     /// <summary>A drop landed on the overlay. <paramref name="copyAllowed"/> is false when the source does not allow COPY. Return true when a command will run.</summary>
     bool Dropped(IReadOnlyList<string> paths, int dx, int dy, bool copyAllowed);
@@ -35,7 +41,7 @@ public readonly record struct OverlayFrames(int Frames, int AnimationFrames, dou
 /// a drop: what a drop does depends on the navigator, not on the frame. Create, use and dispose on one STA thread that
 /// called OleInitialize.
 /// </summary>
-public sealed class RadialOverlay : IDisposable
+public sealed class RadialOverlay : IDisposable, IDropSink
 {
     public const string ClassName = "WinTools.RadialOverlay";
     private const nuint AnimationTimer = 1;
@@ -110,6 +116,7 @@ public sealed class RadialOverlay : IDisposable
     public OverlayPlacement ShowAt(int x, int y)
     {
         Place(x, y);
+        _dropTarget.Reset(); // a new overlay session: no files or data object carried over from the last one
         _view = RadialRenderer.Waiting; // until the first DragEnter says what the files allow
         _frames = _animationFrames = 0;
         _maxFrameMs = 0;
@@ -143,6 +150,7 @@ public sealed class RadialOverlay : IDisposable
     {
         _window.StopTimer(AnimationTimer);
         _window.Hide();
+        _dropTarget.Reset(); // the session is over: let go of its files and of any data object still held
         _view = null;
     }
 
@@ -225,25 +233,33 @@ public sealed class RadialOverlay : IDisposable
 
     private (int Dx, int Dy) Offset(int screenX, int screenY) => (screenX - _left - _size / 2, screenY - _top - _size / 2);
 
-    internal bool OnDragEnter(IReadOnlyList<string> paths, int x, int y)
+    bool IDropSink.OnDragEnter(IReadOnlyList<string> paths, bool pending, int x, int y)
     {
         var (dx, dy) = Offset(x, y);
-        return _events.DragEntered(paths, dx, dy);
+        return _events.DragEntered(paths, pending, dx, dy);
     }
 
-    internal bool OnDragOver(int x, int y)
+    bool IDropSink.OnDragOver(int x, int y)
     {
         var (dx, dy) = Offset(x, y);
         return _events.DragMoved(dx, dy);
     }
 
-    internal void OnDragLeave() => _events.DragLeft();
+    bool IDropSink.OnFilesResolved(IReadOnlyList<string> paths, int x, int y)
+    {
+        var (dx, dy) = Offset(x, y);
+        return _events.FilesResolved(paths, dx, dy);
+    }
 
-    internal bool OnDrop(IReadOnlyList<string> paths, int x, int y, bool copyAllowed)
+    void IDropSink.OnDragLeave() => _events.DragLeft();
+
+    bool IDropSink.OnDrop(IReadOnlyList<string> paths, int x, int y, bool copyAllowed)
     {
         var (dx, dy) = Offset(x, y);
         return _events.Dropped(paths, dx, dy, copyAllowed);
     }
+
+    void IDropSink.OnDropData(DropDataEvent report) => _events.DropData(report);
 
     public void Dispose()
     {

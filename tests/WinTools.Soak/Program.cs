@@ -188,8 +188,10 @@ static int Verdict(string mode, int cycles, IReadOnlyList<Native.Snapshot> sampl
 
 internal sealed class NoEvents : IOverlayEvents
 {
-    public bool DragEntered(IReadOnlyList<string> paths, int dx, int dy) => false;
+    public bool DragEntered(IReadOnlyList<string> paths, bool pending, int dx, int dy) => false;
     public bool DragMoved(int dx, int dy) => false;
+    public bool FilesResolved(IReadOnlyList<string> paths, int dx, int dy) => false;
+    public void DropData(DropDataEvent report) { }
     public void DragLeft() { }
     public bool Dropped(IReadOnlyList<string> paths, int dx, int dy, bool copyAllowed) => false;
 }
