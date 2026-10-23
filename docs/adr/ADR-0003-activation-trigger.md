@@ -1,6 +1,6 @@
 # ADR-0003: Activation and input strategy during a drag
 
-- **Status:** Accepted with amendments (2026-10-20, confirmed 2026-10-21): Space + low-level hooks on a dedicated thread, minimal allocation-free callback, asynchronous PostMessage hand-off. Raw Input is an investigated fallback and is not implemented in V1. No Raw Input latency figure is claimed (withdrawn, evaluator M2). Open: UIPI behaviour, the RegisterHotKey-during-drag alternative.
+- **Status:** Accepted with amendments (2026-10-20, confirmed 2026-10-21): Space + low-level hooks on a dedicated thread, minimal allocation-free callback, asynchronous PostMessage hand-off. Raw Input is an investigated fallback and is not implemented in V1. No Raw Input latency figure is claimed (withdrawn, evaluator M2). Open: UIPI behaviour, the RegisterHotKey-during-drag alternative. **Amended 2026-10-23: modifier policy** (see "Amendment: modifiers held with the trigger").
 - **Date:** 2026-10-19
 - **Related requirements:** UX-001, UX-002, UX-003, UX-006
 
@@ -25,10 +25,26 @@ Measured in Spike 001 (2026-10-20, Windows 11, Explorer and shell-default drag s
 | X1 (side button) | yes | 5/5 Explorer, 20/20 self | ≈9 ms | Not available on every mouse. |
 | Middle button | **no**: shell drop source cancels the drag on a second button press | 0/5 Explorer, 0/20 self | ≈9 ms (overlay shows, drag already dead) | **Rejected** as a trigger for Explorer/shell drags. |
 | Ctrl / Shift / Alt alone | not tested as triggers: they are Explorer's Copy/Move/Link modifiers | – | – | Excluded by the brief. |
-| Space while Shift is held | detector ignores (modifiers must match) | – | – | Product decision: strict match (current) vs "trigger key with any modifiers". |
+| Space while Shift is held | detector ignored it until 2026-10-23 (strict match); now a trigger | – | – | Superseded by the 2026-10-23 amendment below: Ctrl and Shift no longer block the trigger, Alt is refused with feedback. |
 | Hover/dwell, right button | not tested | – | – | Right button is expected to cancel like the middle button (same source logic); dwell adds latency by construction. |
 
-Not measured: false-positive rate in daily use, conflicts with other apps' Space handling during drag, keyboard layouts (Space is layout-independent; X buttons are hardware-dependent), behaviour from elevated sources (UIPI; manual protocol M12 pending).
+Not measured: false-positive rate in daily use (wider since the 2026-10-23 amendment: Ctrl and Shift no longer block), F10 and Shift+F10 as triggers during an Explorer drag (manual protocol), conflicts with other apps' Space handling during drag, keyboard layouts (Space is layout-independent; X buttons are hardware-dependent), behaviour from elevated sources (UIPI; manual protocol M12 pending).
+
+## Amendment: modifiers held with the trigger (2026-10-23)
+**Field report (owner, 0.1.0 Beta):** files selected with Ctrl-click (or Shift-click) and dragged with the key still held never opened the ring: the detector demanded no Ctrl/Shift/Alt, so Space was silently ignored. Users routinely keep the selection modifier down into the drag, so the strict match was a defect, not a safety feature.
+
+**Decision:**
+- **Ctrl and Shift do not block the trigger.** WinTools' drop target only ever answers `DROPEFFECT_COPY` and never moves or links the source, so the Copy/Move meaning those keys have for Explorer cannot make WinTools destroy or relocate anything. Releasing outside the ring is still Explorer's drop, with Explorer's own meaning for the held key (unchanged behaviour).
+- **Alt is refused, visibly.** Alt+Space is Windows' window-menu shortcut. During a genuine drag (button down and past the drag threshold) the press becomes `InputSignal.TriggerRefused`: no ring, nothing runs, the host shows "Release Alt, then press Space" and logs `trigger.refused`. Outside a drag Alt+Space is ordinary typing and is not reported. Releasing Alt and pressing again during the same drag opens the ring.
+
+**Evidence:**
+- Unit: `ModifierTriggerTests` in `tests/WinTools.Core.Tests/ReleaseBlockerTests.cs`. Its 6 behavioural cases were written first and failed on main 8836149 (6/6); the cases added with the fix (refusal only during a genuine drag, re-press after releasing Alt, right-hand modifiers, auto-repeat during a refusal, hook packing) use `TriggerRefused` and could not compile on 8836149. The old `Space_with_a_drag_modifier_is_not_a_trigger` test encoded the defect and was removed; `Resync_clears_a_modifier_whose_key_up_was_missed` now uses Alt.
+- Real Explorer (harness `--select` / `--hold`, `alt` scenario; 2026-10-23): Ctrl-click 3 files with Ctrl held 3/3; Ctrl+A 12 files with Ctrl held 2/2; Shift-click range 10 files with Shift held 2/2; Ctrl-click then released 2/2; Alt held: refused with toast, nothing run, Explorer kept focus 3/3. The 0.1.0 Beta host on the same Ctrl-click and Shift-range scenarios: 0 passed, no ring shown (defect reproduced).
+- **Wider false-trigger surface (accepted):** nothing checks that the drag is an OLE drag; any left-drag past the threshold qualifies, as before. A drag with Ctrl or Shift held in another app (e.g. Shift to constrain a selection in an image editor, then Space) now opens the ring where it used to be ignored. Plain Space already had this exposure; the false-positive rate stays unmeasured (see "Not measured").
+- **AltGr** sends Ctrl plus right Alt, so AltGr+Space during a drag is refused with the same toast. Over-cautious but harmless.
+- **F-key triggers:** the refusal applies to every allowed key (Space, F8–F12); the toast text does not claim a specific Windows shortcut. Shift+F10 (context-menu shortcut) during a drag with an F10 trigger now opens the ring; whether the drag source also acts on it is unverified (manual protocol item, below).
+- A refusal that reaches the UI thread later than `InteractionSession.MaxTriggerAge` is logged but not shown, like a late trigger. A running batch's progress toast is never replaced by the refusal toast; the sound still plays.
+- **Explorer behaviour, not ours:** with Shift held, the press that starts the drag is a Shift-click, so Explorer re-ranges the selection from its anchor to the pressed item before the drag starts. Pressing on the end of a mouse-made range keeps the whole range (10/10 files). After a keyboard-made range (Home, Shift+End) Explorer's mouse anchor differs and the drag carried 1 file; WinTools receives what Explorer puts in the data object and cannot recover a selection Explorer itself dropped.
 
 ## Consequences
 - Known Windows limitations: no notification when Windows removes a hook; the default `LowLevelHooksTimeout` is undocumented (1000 ms cap); hooks and Raw Input do not see input while an elevated window is foreground (UIPI) — documented, not worked around (no UIAccess); the trigger press that reveals a removed hook is lost.

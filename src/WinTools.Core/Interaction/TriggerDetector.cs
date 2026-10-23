@@ -2,12 +2,23 @@ namespace WinTools.Core.Interaction;
 
 public enum MouseButton { Left, Right, Middle, X1, X2 }
 
-/// <summary>What the hook thread forwards to the UI thread.</summary>
-public enum InputSignal { None, Trigger, LeftButtonReleased, Escape }
+/// <summary>
+/// What the hook thread forwards to the UI thread. <see cref="TriggerRefused"/>: the trigger key was pressed during a
+/// genuine drag while Alt was held; nothing opens, and the user is told why instead of being silently ignored.
+/// </summary>
+public enum InputSignal { None, Trigger, LeftButtonReleased, Escape, TriggerRefused }
 
 /// <summary>
 /// Allocation-free decision logic that runs inside the low-level hook callbacks: it tracks the left button and the
-/// drag threshold and recognises the trigger key (Space, without Ctrl/Shift/Alt, key auto-repeat ignored).
+/// drag threshold and recognises the trigger key (key auto-repeat ignored). Modifier policy (ADR-0003, amended
+/// 2026-10-23 after an owner field report):
+/// <list type="bullet">
+/// <item>Ctrl and Shift do not block the trigger. Users select with Ctrl-click or Shift-click and keep the key held
+/// into the drag; WinTools' drop target only ever answers COPY, so a modifier meant for Explorer cannot make WinTools
+/// move or link anything.</item>
+/// <item>Alt does: Alt+Space is Windows' window-menu shortcut. During a genuine drag the press is reported as
+/// <see cref="InputSignal.TriggerRefused"/> so the user gets feedback; outside a drag it is ordinary typing.</item>
+/// </list>
 /// Not thread-safe: the hook thread owns it, except <see cref="TriggerVirtualKey"/>, which the settings may change from
 /// another thread (a single atomic field).
 /// </summary>
@@ -78,6 +89,8 @@ public sealed class TriggerDetector(int triggerVirtualKey = TriggerDetector.VkSp
         if (!isDown) { _triggerHeld = false; return InputSignal.None; }
         if (_triggerHeld) return InputSignal.None; // auto-repeat
         _triggerHeld = true;
-        return _leftDown && !_ctrl && !_shift && !_alt ? InputSignal.Trigger : InputSignal.None;
+        if (!_leftDown) return InputSignal.None;
+        if (_alt) return _dragging ? InputSignal.TriggerRefused : InputSignal.None;
+        return InputSignal.Trigger;
     }
 }

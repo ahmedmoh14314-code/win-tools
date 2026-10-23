@@ -114,6 +114,23 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         log.Event("toast", new { kind = message.Kind.ToString(), files = items.Count, ms = Math.Round(Stopwatch.GetElapsedTime(_startedAt).TotalMilliseconds, 1) });
     });
 
+    /// <summary>
+    /// The trigger was pressed during a drag with Alt held (UI thread): tell the user what to do instead. A batch's
+    /// progress toast is never replaced (its updates would stop); the sound still says that nothing opened.
+    /// </summary>
+    public void TriggerRefused(string triggerKey, int x, int y)
+    {
+        sounds.Play(UiSound.Nothing);
+        if (toast.Content is { Progress: not null })
+        {
+            log.Event("toast", new { kind = "triggerRefused", shown = false, reason = "progressShowing" });
+            return;
+        }
+        toast.Show(new ToastContent(FeedbackKind.Nothing, $"Release Alt, then press {triggerKey}",
+            "Windows uses Alt with keys for its own shortcuts, so WinTools does not open while Alt is held."), x, y);
+        log.Event("toast", new { kind = "triggerRefused", shown = true });
+    }
+
     public void Crashed(Operation operation, int files) => ui.Post(() =>
     {
         _done = _total;

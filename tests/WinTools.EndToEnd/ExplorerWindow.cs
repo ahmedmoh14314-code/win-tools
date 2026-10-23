@@ -89,6 +89,19 @@ internal sealed class ExplorerWindow : IDisposable
         return null;
     }
 
+    /// <summary>Centre of the first or last item in the view's own order, whatever the view mode.</summary>
+    public (int X, int Y)? EndItemCentre(bool last)
+    {
+        try
+        {
+            var items = _root.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem));
+            if (items.Count == 0) return null;
+            var r = items[last ? items.Count - 1 : 0].Current.BoundingRectangle;
+            return ((int)(r.X + r.Width / 2), (int)(r.Y + r.Height / 2));
+        }
+        catch (ElementNotAvailableException) { return null; }
+    }
+
     /// <summary>Diagnostics: the control types and names of the first few items in the view.</summary>
     public string DescribeItems()
     {
