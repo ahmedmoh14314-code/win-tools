@@ -10,8 +10,7 @@ public sealed class CompressionMeasurement(ITestOutputHelper output) : IDisposab
     private readonly TempFolder _dir = new();
     private static int _seq;
 
-    [Fact]
-    [Trait("Category", "Measurement")]
+    [MeasurementFact]
     public void Measure_compress_on_the_corpus()
     {
         output.WriteLine($"{"file",-26} {"level",-9} {"source",10} {"output",10} {"saved",7} {"ssim",7}  result");
@@ -34,8 +33,7 @@ public sealed class CompressionMeasurement(ITestOutputHelper output) : IDisposab
         }
     }
 
-    [Fact]
-    [Trait("Category", "Measurement")]
+    [MeasurementFact]
     public void Measure_quality_curves()
     {
         foreach (var s in CompressionCorpus.All().Where(x => x.Format is WinTools.Core.Files.ImageFormat.Jpeg or WinTools.Core.Files.ImageFormat.WebP))
@@ -52,8 +50,7 @@ public sealed class CompressionMeasurement(ITestOutputHelper output) : IDisposab
         }
     }
 
-    [Fact]
-    [Trait("Category", "Measurement")]
+    [MeasurementFact]
     public void Measure_camera_444()
     {
         var s = CompressionCorpus.All().Single(x => x.Name == "camera.jpg");
@@ -66,8 +63,7 @@ public sealed class CompressionMeasurement(ITestOutputHelper output) : IDisposab
     }
 
     /// <summary>Every fidelity axis (ADR-0017) across the quality ladder: what each gate would allow, file by file.</summary>
-    [Fact]
-    [Trait("Category", "Measurement")]
+    [MeasurementFact]
     public void Measure_fidelity_axes()
     {
         output.WriteLine($"{"file",-26} {"enc",-9} {"saved",7} {"ssim",7} {"worst",7} {"chroma",7} {"dE",6} {"dE99",6} {"edge",7} {"ms",5}");
@@ -97,8 +93,7 @@ public sealed class CompressionMeasurement(ITestOutputHelper output) : IDisposab
     }
 
     /// <summary>A lossless photograph (WebP or PNG-like source): what lossy WebP keeps of its full sensor noise.</summary>
-    [Fact]
-    [Trait("Category", "Measurement")]
+    [MeasurementFact]
     public void Measure_lossless_webp_photo()
     {
         foreach (var (w, h) in new[] { (400, 300), (1600, 1200) })
@@ -115,8 +110,7 @@ public sealed class CompressionMeasurement(ITestOutputHelper output) : IDisposab
     }
 
     /// <summary>Time per Compress on the corpus (decode to written copy, in process) and the fidelity cost on a large image.</summary>
-    [Fact]
-    [Trait("Category", "Measurement")]
+    [MeasurementFact]
     public void Measure_compress_time()
     {
         foreach (var s in CompressionCorpus.All().Where(x => x.Format != WinTools.Core.Files.ImageFormat.Png))
@@ -140,8 +134,7 @@ public sealed class CompressionMeasurement(ITestOutputHelper output) : IDisposab
     }
 
     /// <summary>Compress at the worker's size limit (48 MP), against the host's 60 s job timeout.</summary>
-    [Fact]
-    [Trait("Category", "Measurement")]
+    [MeasurementFact]
     public void Measure_compress_time_large()
     {
         var image = CompressionCorpus.Photo(seed: 32, width: 8000, height: 6000);

@@ -50,7 +50,7 @@ These numbers come from the product's `Fidelity` (`CompressionMeasurement.Measur
 | camera.jpg 4:2:0 q50 | 0.9660 | 0.914 | 0.979 | 1.94 | **10.95** | 0.916 | local colour error at Smallest |
 | moderate.jpg q55 | 0.9857 | 0.953 | 0.992 | 1.28 | **7.40** | 0.963 | a 9.9 % saving refused at Balanced |
 
-The full table (13 qualities × 2 chroma modes × 7 files) is reproduced by `Measure_fidelity_axes`.
+The full table (13 qualities × 2 chroma modes × 7 files) is reproduced by `Measure_fidelity_axes`. Measurements run only when asked: set `WINTOOLS_MEASURE=1` and run `dotnet test tests/WinTools.Worker.Tests -c Release --filter "FullyQualifiedName~CompressionMeasurement" --logger "console;verbosity=detailed"`.
 
 ## Time per Compress, 2 MP corpus files
 | File | High | Balanced | Smallest |
