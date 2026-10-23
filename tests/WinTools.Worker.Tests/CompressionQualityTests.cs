@@ -81,7 +81,10 @@ public sealed class CompressionQualityTests : IDisposable
     [InlineData("camera.jpg", "small", 0.85)]
     [InlineData("photo-lossy.webp", "high", 0.15)]
     [InlineData("photo-lossy.webp", "balanced", 0.55)]
-    [InlineData("screenshot.jpg", "balanced", 0.30)]
+    // Screenshots: text edges limit JPEG (the worst-region gate). Measured: Balanced 10.8 % (q93), Smallest 27.1 % (q88);
+    // Balanced at 30 % (q82) left the worst 1 % of windows at SSIM 0.80, visibly ringing glyphs (ADR-0017).
+    [InlineData("screenshot.jpg", "balanced", 0.08)]
+    [InlineData("screenshot.jpg", "small", 0.25)]
     public void Typical_photographs_and_screenshots_get_a_meaningful_reduction(string file, string level, double atLeast)
     {
         var o = Compress(file, level);

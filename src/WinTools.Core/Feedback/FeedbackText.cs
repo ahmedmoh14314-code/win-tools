@@ -29,7 +29,7 @@ public static class FeedbackText
         {
             var item = items[0];
             if (item.Result.Success)
-                return new(FeedbackKind.Success, $"{OutputName(item)} created", Join(Done(operation), Sizes(item)));
+                return new(FeedbackKind.Success, $"{OutputName(item)} created", Join(Done(operation), Sizes(operation, item)));
             if (item.Result.Error == ErrorCode.NothingToDo)
                 return new(FeedbackKind.Nothing, "Nothing to change", NothingReason(operation));
             return new(FeedbackKind.Failure, $"Could not {Verb(operation)} {item.SourceName}", Reason(item.Result.Error));
@@ -37,7 +37,7 @@ public static class FeedbackText
 
         var n = items.Count;
         if (failed.Length == 0 && unchanged.Length == 0)
-            return new(FeedbackKind.Success, $"{Images(n)} completed", Join(Done(operation), TotalSizes(ok)));
+            return new(FeedbackKind.Success, $"{Images(n)} completed", Join(Done(operation), TotalSizes(operation, ok)));
         if (ok.Length == 0 && failed.Length == 0)
             return new(FeedbackKind.Nothing, "Nothing to change", $"{NothingReason(operation)} ({Images(n)})");
         if (ok.Length == 0 && unchanged.Length == 0)
@@ -74,7 +74,7 @@ public static class FeedbackText
     private static string NothingReason(Operation op) => op.Kind switch
     {
         OperationKind.Resize => "Already that size or smaller",
-        OperationKind.Compress => "Compressing would not make it smaller",
+        OperationKind.Compress => "Already optimized: a smaller copy would not save enough or would look different",
         OperationKind.StripMetadata => "No metadata to remove",
         _ => "Nothing needed doing",
     };
@@ -109,21 +109,23 @@ public static class FeedbackText
 
     private static string Images(int n) => n == 1 ? "1 image" : $"{n} images";
 
-    private static string? Sizes(JobItem item) =>
-        item is { SourceBytes: { } a, OutputBytes: { } b } ? $"{Size(a)} → {Size(b)}{Change(a, b)}" : null;
+    private static string? Sizes(Operation op, JobItem item) =>
+        item is { SourceBytes: { } a, OutputBytes: { } b } ? $"{Size(a)} → {Size(b)}{Change(op, a, b)}" : null;
 
-    private static string? TotalSizes(JobItem[] ok)
+    private static string? TotalSizes(Operation op, JobItem[] ok)
     {
         if (ok.Length == 0 || ok.Any(i => i.SourceBytes is null || i.OutputBytes is null)) return null;
         var a = ok.Sum(i => i.SourceBytes!.Value);
         var b = ok.Sum(i => i.OutputBytes!.Value);
-        return $"{Size(a)} → {Size(b)}{Change(a, b)}";
+        return $"{Size(a)} → {Size(b)}{Change(op, a, b)}";
     }
 
-    private static string Change(long before, long after)
+    /// <summary>The size change: "saved 75%" for Compress (what the user asked for), "(+12%)" or "(−40%)" otherwise.</summary>
+    private static string Change(Operation op, long before, long after)
     {
         if (before <= 0) return "";
         var pct = (int)Math.Round((after - before) * 100.0 / before);
+        if (op.Kind == OperationKind.Compress && pct < 0) return string.Create(CultureInfo.InvariantCulture, $", saved {-pct}%");
         return pct == 0 ? "" : string.Create(CultureInfo.InvariantCulture, $" ({(pct > 0 ? "+" : "−")}{Math.Abs(pct)}%)");
     }
 
