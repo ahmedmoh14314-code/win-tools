@@ -25,7 +25,7 @@ var outDir = Path.GetFullPath(args[0]);
 Directory.CreateDirectory(outDir);
 var dpis = args.Length > 1 ? args[1..].Select(uint.Parse).ToArray() : [96u, 144u];
 
-var catalog = RadialMenu.Catalog(new AppSettings().CustomResizeId());
+var catalog = ImageCapabilities.Operations(new AppSettings().CustomResizeId());
 var menu = RadialMenu.Build(new CapabilityResolver(catalog.Select(ImageCapabilities.Describe).ToArray()).Resolve([@"C:\images\photo.jpg"]));
 var renderer = new RadialRenderer();
 using var surface = new Surface();
@@ -144,7 +144,7 @@ internal static class Bench
 {
     public static void Run(uint dpi)
     {
-        var catalog = RadialMenu.Catalog(new AppSettings().CustomResizeId());
+        var catalog = ImageCapabilities.Operations(new AppSettings().CustomResizeId());
         var menu = RadialMenu.Build(new CapabilityResolver(catalog.Select(ImageCapabilities.Describe).ToArray()).Resolve([@"C:\images\photo.jpg"]));
         var nav = new MenuNavigator(menu, dpi);
         var renderer = new RadialRenderer();

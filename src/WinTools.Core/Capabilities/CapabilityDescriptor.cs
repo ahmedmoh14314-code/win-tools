@@ -9,15 +9,19 @@ public enum CapabilityShape { PerFile, Selection }
 public enum CapabilityOutput { File, Files, Folder, Facts, Clipboard }
 
 /// <summary>
-/// Which selections a command accepts: every file's kind must pass <paramref name="Accepts"/>, and the count must be
-/// within bounds. A selection of several kinds is allowed as long as each kind passes.
+/// Which selections a command accepts: every file's kind must be one of <paramref name="Kinds"/> (kind ids), and the
+/// count must be within bounds. A selection of several kinds is allowed as long as each is listed. Declarative, so a
+/// module's supported inputs can be listed and logged.
 /// </summary>
-public sealed record InputRule(Func<FileKind, bool> Accepts, int MinCount = 1, int MaxCount = CapabilityResolver.MaxFiles);
+public sealed record InputRule(IReadOnlySet<string> Kinds, int MinCount = 1, int MaxCount = CapabilityResolver.MaxFiles)
+{
+    public bool Accepts(FileKind kind) => Kinds.Contains(kind.Id);
+}
 
 /// <summary>
 /// One command the radial menu can offer, as the resolver and the menu see it, whatever module provides it (ADR-0007,
 /// V2 plan §5). The module keeps its own description of the work in <see cref="Payload"/> (the image module: its
-/// <see cref="Operation"/>); nothing outside the module looks inside it.
+/// <see cref="Operation"/>), unwrapped only through the module (<see cref="ImageCapabilities.TryOperationOf"/>).
 /// </summary>
 /// <param name="Id">Stable id, also the worker's operation id ("convert.to-png").</param>
 /// <param name="Category">The menu category's id ("convert", "compress", ...).</param>

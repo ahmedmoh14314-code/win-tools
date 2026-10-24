@@ -1,7 +1,7 @@
 namespace WinTools.Core.Files;
 
 /// <summary>The broad family a kind of file belongs to; a module usually serves one family.</summary>
-public enum FileFamily { Image, Other }
+public enum FileFamily { Image }
 
 /// <summary>
 /// One kind of file the product recognises: a stable id (used in capability rules, settings and logs), its family, a
@@ -24,10 +24,15 @@ public static class FileKinds
     private static readonly Dictionary<string, FileKind> ByExtension =
         All.SelectMany(k => k.Extensions.Select(e => (e, k))).ToDictionary(p => p.e, p => p.k, StringComparer.OrdinalIgnoreCase);
 
+    private static readonly Dictionary<string, FileKind>.AlternateLookup<ReadOnlySpan<char>> BySpan = ByExtension.GetAlternateLookup<ReadOnlySpan<char>>();
+
     /// <summary>The kind a path's extension names, or null when no module knows it. A hint only: never trusted for work.</summary>
-    public static FileKind? IdentifyByName(string path)
+    public static FileKind? IdentifyByName(string? path)
     {
-        var ext = Path.GetExtension(path);
-        return ext.Length > 0 && ByExtension.TryGetValue(ext, out var kind) ? kind : null;
+        var ext = Path.GetExtension(path.AsSpan());
+        return ext.Length > 0 && BySpan.TryGetValue(ext, out var kind) ? kind : null;
     }
+
+    /// <summary>A kind by its id, or null.</summary>
+    public static FileKind? Find(string id) => All.FirstOrDefault(k => k.Id == id);
 }

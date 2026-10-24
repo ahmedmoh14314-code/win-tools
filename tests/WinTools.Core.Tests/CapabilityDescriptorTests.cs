@@ -44,31 +44,52 @@ public sealed class CapabilityDescriptorTests
         Assert.All(extensions, e => Assert.True(e.StartsWith('.') && e.All(c => !char.IsUpper(c)), e));
     }
 
+    private static readonly IReadOnlySet<string> AnyKind = FileKinds.All.Select(k => k.Id).ToHashSet();
+
     [Fact]
-    public void Every_image_operation_is_a_capability_of_the_image_module_carrying_its_operation()
+    public void The_image_catalog_is_v1s_operations_in_order()
     {
-        var catalog = ImageCapabilities.Catalog(customResizeId: null);
-        Assert.Equal(OperationCatalog.All.Select(o => o.Id), catalog.Select(c => c.Id));
-        Assert.All(catalog, c =>
-        {
-            var op = ImageCapabilities.OperationOf(c);
-            Assert.Equal((ImageCapabilities.Module, op.Id, op.Label, CapabilityShape.PerFile), (c.Module, c.Id, c.Label, c.Shape));
-            Assert.Equal(op.WritesFile ? CapabilityOutput.File : CapabilityOutput.Facts, c.Produces);
-        });
+        Assert.Equal(OperationCatalog.All.Select(o => o.Id), ImageCapabilities.Catalog(customResizeId: null).Select(c => c.Id));
+    }
+
+    [Theory]
+    [InlineData("convert.to-png", "convert", "File", "jpeg webp bmp tiff")]
+    [InlineData("compress.high", "compress", "File", "jpeg webp")]
+    [InlineData("compress.lossless", "compress", "File", "png")]
+    [InlineData("resize.percent-50", "resize", "File", "png jpeg webp bmp tiff")]
+    [InlineData("rotate.right", "rotate", "File", "png jpeg webp bmp tiff")]
+    [InlineData("metadata.strip", "tools", "File", "png jpeg webp tiff")]
+    [InlineData("metadata.info", "tools", "Facts", "png jpeg webp bmp tiff")]
+    public void Each_image_capability_declares_its_category_output_and_the_kinds_it_reads(string id, string category, string produces, string kinds)
+    {
+        var c = ImageCapabilities.Catalog(null).Single(c => c.Id == id);
+        Assert.Equal((ImageCapabilities.Module, category, produces, CapabilityShape.PerFile), (c.Module, c.Category, c.Produces.ToString(), c.Shape));
+        Assert.Equal(kinds.Split(' ').Order(), c.Input.Kinds.Order());   // declarative: the supported inputs can be listed
+        Assert.Equal(id != "metadata.info", c.LongRunning);              // Image info answers at once; everything else shows progress
     }
 
     [Fact]
-    public void Only_the_image_module_can_unwrap_its_payload()
+    public void A_capability_of_another_module_is_not_unwrapped_as_an_image_operation()
     {
-        var foreign = new CapabilityDescriptor("files.sha256", "SHA-256", "tools", "files", new InputRule(_ => true), CapabilityShape.PerFile, CapabilityOutput.Facts, false);
+        var foreign = new CapabilityDescriptor("files.sha256", "SHA-256", "tools", "files", new InputRule(AnyKind), CapabilityShape.PerFile, CapabilityOutput.Facts, false,
+            Payload: OperationCatalog.Get("rotate.right")); // even one that carries an Operation by mistake
+        Assert.False(ImageCapabilities.TryOperationOf(foreign, out _));
         Assert.Throws<ArgumentException>(() => ImageCapabilities.OperationOf(foreign));
+    }
+
+    [Fact]
+    public void A_null_or_extensionless_name_has_no_kind()
+    {
+        Assert.Null(FileKinds.IdentifyByName(null));
+        Assert.Null(FileKinds.IdentifyByName(""));
+        Assert.Same(FileKinds.Png, FileKinds.Find("png"));
     }
 
     [Fact]
     public void The_resolver_honours_a_capabilitys_selection_size()
     {
-        var single = new CapabilityDescriptor("x.one", "One", "tools", "test", new InputRule(_ => true, MinCount: 1, MaxCount: 1), CapabilityShape.Selection, CapabilityOutput.Facts, false);
-        var several = new CapabilityDescriptor("x.many", "Many", "tools", "test", new InputRule(_ => true, MinCount: 2), CapabilityShape.Selection, CapabilityOutput.File, true);
+        var single = new CapabilityDescriptor("x.one", "One", "tools", "test", new InputRule(AnyKind, MinCount: 1, MaxCount: 1), CapabilityShape.Selection, CapabilityOutput.Facts, false);
+        var several = new CapabilityDescriptor("x.many", "Many", "tools", "test", new InputRule(AnyKind, MinCount: 2), CapabilityShape.Selection, CapabilityOutput.File, true);
         var resolver = new CapabilityResolver([single, several]);
         Assert.Equal(["x.one"], resolver.Resolve([@"C:\a.png"]).Select(c => c.Id));
         Assert.Equal(["x.many"], resolver.Resolve([@"C:\a.png", @"C:\b.jpg"]).Select(c => c.Id));
@@ -77,7 +98,7 @@ public sealed class CapabilityDescriptorTests
     [Fact]
     public void Catalogs_of_several_modules_are_resolved_together_by_kind()
     {
-        var pngOnly = new CapabilityDescriptor("y.png", "PNG thing", "tools", "test", new InputRule(k => k == FileKinds.Png), CapabilityShape.PerFile, CapabilityOutput.File, true);
+        var pngOnly = new CapabilityDescriptor("y.png", "PNG thing", "tools", "test", new InputRule(new HashSet<string> { "png" }), CapabilityShape.PerFile, CapabilityOutput.File, true);
         var resolver = new CapabilityResolver([.. ImageCapabilities.Catalog(null), pngOnly]);
         Assert.Contains("y.png", resolver.Resolve([@"C:\a.png"]).Select(c => c.Id));
         Assert.DoesNotContain("y.png", resolver.Resolve([@"C:\a.png", @"C:\b.jpg"]).Select(c => c.Id));

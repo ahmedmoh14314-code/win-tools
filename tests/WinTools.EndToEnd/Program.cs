@@ -60,7 +60,7 @@ var (sample, sourceName, defaultTarget) = scenario switch
     _ => ("quadrants-64x48.png", "photo.png", ImageFormat.Jpeg),
 };
 // The host runs with default settings, so the harness sees the same menu.
-var catalog = RadialMenu.Catalog(new AppSettings().CustomResizeId());
+var catalog = ImageCapabilities.Operations(new AppSettings().CustomResizeId());
 var target = targetArg is null ? defaultTarget : Enum.Parse<ImageFormat>(targetArg, ignoreCase: true);
 var op = opArg is not null ? catalog.FirstOrDefault(o => o.Id == opArg) : target == ImageFormat.Unknown ? null : OperationCatalog.Convert(target);
 if (opArg is not null && op is null) { Console.Error.WriteLine($"Unknown operation {opArg}"); return 64; }

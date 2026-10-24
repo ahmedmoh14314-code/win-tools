@@ -26,9 +26,9 @@ public sealed class RadialMenuTests
         Assert.Equal("resize.box-1600x1600", resize[^1]);
         Assert.Equal(7, resize.Length);
 
-        var preset = RadialMenu.Catalog(new AppSettings { ResizeWidth = 1920, ResizeHeight = 1080 }.CustomResizeId());
+        var preset = ImageCapabilities.Operations(new AppSettings { ResizeWidth = 1920, ResizeHeight = 1080 }.CustomResizeId());
         Assert.Equal(OperationCatalog.All.Count, preset.Count);
-        Assert.Same(OperationCatalog.All, RadialMenu.Catalog(null));
+        Assert.Same(OperationCatalog.All, ImageCapabilities.Operations(null));
     }
 
     [Fact]

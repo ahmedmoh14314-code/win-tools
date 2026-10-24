@@ -32,18 +32,4 @@ public static class RadialMenu
             .Select(c => new MenuGroup(c, LabelOf(c), allowed.Where(o => CategoryOf(o.Category) == c).ToArray()))
             .Where(g => g.Commands.Count > 0)
             .ToArray();
-
-    /// <summary>
-    /// The operations the menu may offer: the fixed catalog plus the exact resize from the settings
-    /// (<see cref="Settings.AppSettings.CustomResizeId"/>), unless that size already is a preset. Grouping keeps catalog
-    /// order, so the exact size ends up last in Resize.
-    /// </summary>
-    public static IReadOnlyList<Operation> Catalog(string? customResizeId)
-    {
-        if (OperationCatalog.Find(customResizeId) is not { } custom || OperationCatalog.All.Any(o => o.Id == custom.Id)) return OperationCatalog.All;
-        // Same size as a preset but different behaviour (stretch, enlarge): the label must tell them apart.
-        if (OperationCatalog.All.Any(o => o.Label == custom.Label))
-            custom = custom with { Label = custom.Label + (custom.Resize is { KeepAspect: false } ? " (stretch)" : " (enlarge)") };
-        return [.. OperationCatalog.All, custom];
-    }
 }

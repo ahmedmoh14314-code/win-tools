@@ -12,12 +12,25 @@ public static class ImageCapabilities
     public const string Module = "images";
 
     /// <summary>The image capabilities, with the settings' exact resize when it is not a preset.</summary>
-    public static IReadOnlyList<CapabilityDescriptor> Catalog(string? customResizeId) =>
-        Interaction.RadialMenu.Catalog(customResizeId).Select(Describe).ToArray();
+    public static IReadOnlyList<CapabilityDescriptor> Catalog(string? customResizeId) => Operations(customResizeId).Select(Describe).ToArray();
+
+    /// <summary>
+    /// The operations the image module offers: the fixed catalog plus the exact resize from the settings
+    /// (<see cref="Settings.AppSettings.CustomResizeId"/>), unless that size already is a preset. It comes last, so it ends
+    /// up last in Resize.
+    /// </summary>
+    public static IReadOnlyList<Operation> Operations(string? customResizeId)
+    {
+        if (OperationCatalog.Find(customResizeId) is not { } custom || OperationCatalog.All.Any(o => o.Id == custom.Id)) return OperationCatalog.All;
+        // Same size as a preset but different behaviour (stretch, enlarge): the label must tell them apart.
+        if (OperationCatalog.All.Any(o => o.Label == custom.Label))
+            custom = custom with { Label = custom.Label + (custom.Resize is { KeepAspect: false } ? " (stretch)" : " (enlarge)") };
+        return [.. OperationCatalog.All, custom];
+    }
 
     public static CapabilityDescriptor Describe(Operation op) => new(
         op.Id, op.Label, CategoryOf(op.Kind), Module,
-        new InputRule(kind => op.AppliesTo(FormatHint.Of(kind))),
+        new InputRule(FileKinds.All.Where(kind => op.AppliesTo(FormatHint.Of(kind))).Select(kind => kind.Id).ToHashSet(StringComparer.Ordinal)),
         CapabilityShape.PerFile,
         op.WritesFile ? CapabilityOutput.File : CapabilityOutput.Facts,
         LongRunning: op.Kind != OperationKind.Info,
@@ -25,7 +38,14 @@ public static class ImageCapabilities
 
     /// <summary>The image operation behind one of this module's capabilities.</summary>
     public static Operation OperationOf(CapabilityDescriptor capability) =>
-        capability.Payload as Operation ?? throw new ArgumentException($"{capability.Id} is not an image capability.", nameof(capability));
+        TryOperationOf(capability, out var op) ? op : throw new ArgumentException($"{capability.Id} is not an image capability.", nameof(capability));
+
+    /// <summary>The image operation behind a capability, if it is one of this module's.</summary>
+    public static bool TryOperationOf(CapabilityDescriptor capability, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Operation? op)
+    {
+        op = capability.Module == Module ? capability.Payload as Operation : null;
+        return op is not null;
+    }
 
     public static string CategoryOf(OperationKind kind) => kind switch
     {

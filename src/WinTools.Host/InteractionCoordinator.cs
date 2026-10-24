@@ -318,7 +318,9 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             return false;
         }
         _log.Event("drop", new { accepted = true, op = chosen.Id, openMs, files = paths.Count, sounds = SoundCounts(), frames });
-        _ = _jobs.Start(ImageCapabilities.OperationOf(chosen), paths); // the only module so far; jobs become generic in V2 PR 1.2
+        // The only module so far; jobs become generic in V2 PR 1.2. Never throw here: this runs inside OLE's Drop.
+        if (ImageCapabilities.TryOperationOf(chosen, out var operation)) _ = _jobs.Start(operation, paths);
+        else _log.Event("job.refused", new { op = chosen.Id, module = chosen.Module });
         return true;
     }
 

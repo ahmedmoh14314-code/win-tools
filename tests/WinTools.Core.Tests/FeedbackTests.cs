@@ -180,7 +180,7 @@ public sealed class FeedbackTextTests
     [Fact]
     public void Every_operation_has_a_past_tense_phrase_and_a_verb()
     {
-        foreach (var op in RadialMenu.Catalog(new AppSettings().CustomResizeId()))
+        foreach (var op in ImageCapabilities.Operations(new AppSettings().CustomResizeId()))
         {
             Assert.False(string.IsNullOrWhiteSpace(FeedbackText.Done(op)), op.Id);
             Assert.False(string.IsNullOrWhiteSpace(FeedbackText.Verb(op)), op.Id);
