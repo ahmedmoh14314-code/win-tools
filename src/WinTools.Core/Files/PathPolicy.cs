@@ -10,26 +10,34 @@ namespace WinTools.Core.Files;
 /// </summary>
 public static class PathPolicy
 {
-    public static bool IsSupported(string? path)
+    public static bool IsSupported(string? path) => Explain(path) == PathVerdict.Supported;
+
+    /// <summary>Why a path is or is not acted on. For diagnostics (the reason, never the path, may be logged).</summary>
+    public static PathVerdict Explain(string? path)
     {
-        if (string.IsNullOrEmpty(path) || !Path.IsPathFullyQualified(path)) return false;
-        if (path.StartsWith(@"\\?\", StringComparison.Ordinal) || path.StartsWith(@"\\.\", StringComparison.Ordinal)) return false;
-        if (path[0] == '\\' && path[1] != '\\') return false; // "\??\..." (NT device namespace): only drive and UNC paths
-        if (path.IndexOf(':', 2) >= 0) return false; // "file.png:stream" names an alternate data stream
+        if (string.IsNullOrEmpty(path)) return PathVerdict.Empty;
+        if (!Path.IsPathFullyQualified(path)) return PathVerdict.Relative;
+        if (path.StartsWith(@"\\?\", StringComparison.Ordinal)) return PathVerdict.Verbatim;
+        if (path.StartsWith(@"\\.\", StringComparison.Ordinal)) return PathVerdict.Device;
+        if (path[0] == '\\' && path[1] != '\\') return PathVerdict.Device; // "\??\..." (NT device namespace): only drive and UNC paths
+        if (path.IndexOf(':', 2) >= 0) return PathVerdict.Stream; // "file.png:stream" names an alternate data stream
         for (var i = 0; i < path.Length; i++)
         {
             var c = path[i];
             if (char.IsHighSurrogate(c))
             {
-                if (i + 1 >= path.Length || !char.IsLowSurrogate(path[i + 1])) return false;
+                if (i + 1 >= path.Length || !char.IsLowSurrogate(path[i + 1])) return PathVerdict.BadText;
                 i++;
             }
-            else if (char.IsLowSurrogate(c) || c < 0x20) return false;
+            else if (char.IsLowSurrogate(c) || c < 0x20) return PathVerdict.BadText;
         }
         string full;
         try { full = Path.GetFullPath(path); }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return false; }
-        if (!string.Equals(full, path, StringComparison.Ordinal)) return false;
-        return Path.GetFileNameWithoutExtension(path).Length > 0;
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return PathVerdict.NotCanonical; }
+        if (!string.Equals(full, path, StringComparison.Ordinal)) return path.Contains('~') ? PathVerdict.ShortName : PathVerdict.NotCanonical;
+        return Path.GetFileNameWithoutExtension(path).Length > 0 ? PathVerdict.Supported : PathVerdict.NoStem;
     }
 }
+
+/// <summary>The outcome of <see cref="PathPolicy.Explain"/>.</summary>
+public enum PathVerdict { Supported, Empty, Relative, Verbatim, Device, Stream, BadText, NotCanonical, ShortName, NoStem }

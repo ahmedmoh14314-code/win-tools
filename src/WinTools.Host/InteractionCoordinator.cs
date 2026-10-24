@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using WinTools.Core.Capabilities;
 using WinTools.Core.Feedback;
+using WinTools.Core.Files;
 using WinTools.Core.Interaction;
 using WinTools.Core.Settings;
 using WinTools.Host.Jobs;
@@ -187,7 +188,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         var hot = Track(dx, dy);
         Apply(action, "dragEnterAfterRelease");
         if (first)
-            _log.Event("drag.enter", new { files = paths.Count, groups = _navigator!.Groups.Select(g => $"{g.Label}:{g.Commands.Count}"), hookToEnterMs = Math.Round(Stopwatch.GetElapsedTime(_triggerTimestamp).TotalMilliseconds, 3) });
+            _log.Event("drag.enter", new { files = paths.Count, groups = _navigator!.Groups.Select(g => $"{g.Label}:{g.Commands.Count}"), hookToEnterMs = Math.Round(Stopwatch.GetElapsedTime(_triggerTimestamp).TotalMilliseconds, 3), paths = PathDiagnostics(paths) });
         else
             _log.Event("drag.reenter");
         return hot;
@@ -202,6 +203,17 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         var hot = Track(dx, dy);
         _log.Event("drag.files", new { files = paths.Count, built, groups = _navigator?.Groups.Select(g => $"{g.Label}:{g.Commands.Count}"), hookToFilesMs = Math.Round(Stopwatch.GetElapsedTime(_triggerTimestamp).TotalMilliseconds, 3) });
         return hot;
+    }
+
+    /// <summary>Why paths were refused, when any were, and the longest length: never the paths themselves.</summary>
+    private static object? PathDiagnostics(IReadOnlyList<string> paths)
+    {
+        var refused = paths.Select(PathPolicy.Explain).Where(v => v != PathVerdict.Supported).ToArray();
+        return refused.Length == 0 ? null : new
+        {
+            refused = refused.GroupBy(v => v).Select(g => $"{g.Key}:{g.Count()}"),
+            longest = paths.Max(p => p.Length),
+        };
     }
 
     /// <summary>
