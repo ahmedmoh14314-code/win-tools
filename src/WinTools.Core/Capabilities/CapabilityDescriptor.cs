@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using WinTools.Core.Files;
 
 namespace WinTools.Core.Capabilities;
@@ -11,11 +12,22 @@ public enum CapabilityOutput { File, Files, Folder, Facts, Clipboard }
 /// <summary>
 /// Which selections a command accepts: every file's kind must be one of <paramref name="Kinds"/> (kind ids), and the
 /// count must be within bounds. A selection of several kinds is allowed as long as each is listed. Declarative, so a
-/// module's supported inputs can be listed and logged.
+/// module's supported inputs can be listed and logged. The rule keeps a frozen copy of the ids and refuses an id no
+/// <see cref="FileKinds"/> entry declares: "PNG" or ".jpg" would otherwise match nothing, silently.
 /// </summary>
 public sealed record InputRule(IReadOnlySet<string> Kinds, int MinCount = 1, int MaxCount = CapabilityResolver.MaxFiles)
 {
+    public IReadOnlySet<string> Kinds { get; } = Checked(Kinds);
+
     public bool Accepts(FileKind kind) => Kinds.Contains(kind.Id);
+
+    private static FrozenSet<string> Checked(IReadOnlySet<string> kinds)
+    {
+        ArgumentNullException.ThrowIfNull(kinds);
+        foreach (var id in kinds)
+            if (FileKinds.Find(id) is null) throw new ArgumentException($"No file kind has the id \"{id}\".", nameof(kinds));
+        return kinds.ToFrozenSet(StringComparer.Ordinal);
+    }
 }
 
 /// <summary>

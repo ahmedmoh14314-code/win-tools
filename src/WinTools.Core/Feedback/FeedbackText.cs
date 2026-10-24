@@ -23,7 +23,8 @@ public static class FeedbackText
     public static FeedbackMessage For(Operation operation, IReadOnlyList<JobItem> items) => For(WordsOf(operation), items);
 
     /// <summary>The image module's words for an operation.</summary>
-    public static FeedbackWords WordsOf(Operation op) => new(Working(op), Verb(op), Done(op), NothingReason(op), "image", "images");
+    public static FeedbackWords WordsOf(Operation op) =>
+        new(Working(op), Verb(op), Done(op), NothingReason(op), "image", "images", Savings: op.Kind == OperationKind.Compress);
 
     public static FeedbackMessage For(FeedbackWords words, IReadOnlyList<JobItem> items)
     {
@@ -36,7 +37,7 @@ public static class FeedbackText
         {
             var item = items[0];
             if (item.Result.Success)
-                return new(FeedbackKind.Success, $"{OutputName(item)} created", Join(words.Done, Sizes(item)));
+                return new(FeedbackKind.Success, $"{OutputName(item)} created", Join(words.Done, Sizes(words, item)));
             if (item.Result.Error == ErrorCode.NothingToDo)
                 return new(FeedbackKind.Nothing, "Nothing to change", words.NothingReason);
             return new(FeedbackKind.Failure, $"Could not {words.Verb} {item.SourceName}", Reason(item.Result.Error));
@@ -44,15 +45,16 @@ public static class FeedbackText
 
         var n = items.Count;
         if (failed.Length == 0 && unchanged.Length == 0)
-            return new(FeedbackKind.Success, $"{Images(n)} completed", Join(words.Done, TotalSizes(ok)));
+            return new(FeedbackKind.Success, $"{Images(n)} completed", Join(words.Done, TotalSizes(words, ok)));
         if (ok.Length == 0 && failed.Length == 0)
             return new(FeedbackKind.Nothing, "Nothing to change", $"{words.NothingReason} ({Images(n)})");
         if (ok.Length == 0 && unchanged.Length == 0)
             return new(FeedbackKind.Failure, $"Could not {words.Verb} {Images(n)}", MostCommonReason(failed));
 
         var parts = new List<string>();
+        if (words.Savings && TotalSizes(words, ok) is { } sizes) parts.Add(sizes); // what was saved is the point
         if (failed.Length > 0) parts.Add($"{failed.Length} failed: {MostCommonReason(failed).TrimEnd('.')}");
-        if (unchanged.Length > 0) parts.Add($"{unchanged.Length} unchanged");
+        if (unchanged.Length > 0) parts.Add(words.Savings ? $"{unchanged.Length} already optimized" : $"{unchanged.Length} unchanged");
         var kind = failed.Length > 0 ? FeedbackKind.Partial : FeedbackKind.Success;
         return new(kind, $"{Images(ok.Length)} of {n} completed", string.Join(" · ", parts));
     }
@@ -63,6 +65,17 @@ public static class FeedbackText
     public static FeedbackMessage Copied(FeedbackWords words, JobItem item) => item.Result.Success
         ? new(FeedbackKind.Success, item.Inputs == 1 ? words.Done : $"{words.Count(item.Inputs)} copied", item.SourceName)
         : new(FeedbackKind.Failure, $"Could not {words.Verb} {(item.Inputs == 1 ? $"the {words.Noun}" : words.Count(item.Inputs))}", Reason(item.Result.Error));
+
+    /// <summary>What the operation is doing, for the progress toast ("Converting").</summary>
+    public static string Working(Operation op) => op.Kind switch
+    {
+        OperationKind.Convert => "Converting",
+        OperationKind.Compress => "Compressing",
+        OperationKind.Resize => "Resizing",
+        OperationKind.Rotate => "Rotating",
+        OperationKind.StripMetadata => "Removing metadata from",
+        _ => "Reading",
+    };
 
     /// <summary>What the operation did, as a short past-tense phrase ("Converted to WebP").</summary>
     public static string Done(Operation op) => op.Kind switch
@@ -85,21 +98,10 @@ public static class FeedbackText
         _ => "read",
     };
 
-    /// <summary>What the operation is doing, for the progress toast ("Converting").</summary>
-    public static string Working(Operation op) => op.Kind switch
-    {
-        OperationKind.Convert => "Converting",
-        OperationKind.Compress => "Compressing",
-        OperationKind.Resize => "Resizing",
-        OperationKind.Rotate => "Rotating",
-        OperationKind.StripMetadata => "Removing metadata from",
-        _ => "Reading",
-    };
-
     private static string NothingReason(Operation op) => op.Kind switch
     {
         OperationKind.Resize => "Already that size or smaller",
-        OperationKind.Compress => "Compressing would not make it smaller",
+        OperationKind.Compress => "Already optimized: a smaller copy would not save enough or would look different",
         OperationKind.StripMetadata => "No metadata to remove",
         _ => "Nothing needed doing",
     };
@@ -135,21 +137,23 @@ public static class FeedbackText
 
     private static string OutputName(JobItem item) => item.Result.OutputPath is { } p ? Path.GetFileName(p) : item.SourceName;
 
-    private static string? Sizes(JobItem item) =>
-        item is { SourceBytes: { } a, OutputBytes: { } b } ? $"{Size(a)} → {Size(b)}{Change(a, b)}" : null;
+    private static string? Sizes(FeedbackWords words, JobItem item) =>
+        item is { SourceBytes: { } a, OutputBytes: { } b } ? $"{Size(a)} → {Size(b)}{Change(words, a, b)}" : null;
 
-    private static string? TotalSizes(JobItem[] ok)
+    private static string? TotalSizes(FeedbackWords words, JobItem[] ok)
     {
         if (ok.Length == 0 || ok.Any(i => i.SourceBytes is null || i.OutputBytes is null)) return null;
         var a = ok.Sum(i => i.SourceBytes!.Value);
         var b = ok.Sum(i => i.OutputBytes!.Value);
-        return $"{Size(a)} → {Size(b)}{Change(a, b)}";
+        return $"{Size(a)} → {Size(b)}{Change(words, a, b)}";
     }
 
-    private static string Change(long before, long after)
+    /// <summary>The size change: "saved 75%" for Compress (what the user asked for), "(+12%)" or "(−40%)" otherwise.</summary>
+    private static string Change(FeedbackWords words, long before, long after)
     {
         if (before <= 0) return "";
         var pct = (int)Math.Round((after - before) * 100.0 / before);
+        if (words.Savings && pct < 0) return string.Create(CultureInfo.InvariantCulture, $", saved {-pct}%");
         return pct == 0 ? "" : string.Create(CultureInfo.InvariantCulture, $" ({(pct > 0 ? "+" : "−")}{Math.Abs(pct)}%)");
     }
 

@@ -52,11 +52,12 @@ public sealed class FidelityTests : IDisposable
         Assert.True(r.Success, r.Message);
     }
 
+    // A photograph-like image large enough that Compress has something to save next to the 3 KB profile (ADR-0017
+    // refuses copies that save under 8 %; a 64×48 image is mostly profile and was refused, which hid nothing about ICC).
     private string JpegWithIcc(string name)
     {
         var icc = File.ReadAllBytes(SrgbProfile);
-        var png = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "samples", "quadrants-64x48.png"));
-        var decoded = ImagePipeline.Decode(png, ImageFormat.Png).Image;
+        var decoded = CompressionCorpus.Photo(seed: 11, width: 480, height: 360);
         var tagged = new RasterImage(decoded.Width, decoded.Height, decoded.Bgra, 300, 300, icc);
         return _dir.Write(name, WicCodec.Encode(tagged, ImageFormat.Jpeg, 0.95f));
     }
