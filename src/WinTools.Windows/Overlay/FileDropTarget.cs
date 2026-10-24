@@ -168,11 +168,13 @@ public sealed class FileDropTarget : IDropTarget
     /// without an extension that may be folders. Both are looked up on a task, never here.</summary>
     private static bool NeedsInspection(IReadOnlyList<string> raw) => ShortNames.NeedsExpansion(raw) || FolderMarks.MayHide(raw);
 
-    private static ShortNames.Expansion Inspect(string[] paths, CancellationToken cancel)
+    /// <summary>One budget and one error-mode scope for both lookups (evaluator, PR #17: the folder lookups had neither).</summary>
+    private static ShortNames.Expansion Inspect(string[] paths, CancellationToken cancel) => ShortNames.WithoutErrorBoxes(() =>
     {
-        var expanded = ShortNames.ExpandAll(paths, cancel);
-        return expanded with { Paths = FolderMarks.Mark(expanded.Paths, cancel) };
-    }
+        var start = System.Diagnostics.Stopwatch.GetTimestamp();
+        var expanded = ShortNames.ExpandAll(paths, start, cancel);
+        return expanded with { Paths = FolderMarks.Mark(expanded.Paths, start, cancel) };
+    });
 
     /// <summary>Takes a read's files: true when they are known now, false when their expansion has started.</summary>
     private bool Accept(IReadOnlyList<string> raw)

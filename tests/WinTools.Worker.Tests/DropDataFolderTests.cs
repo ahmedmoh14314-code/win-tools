@@ -30,10 +30,24 @@ public sealed partial class DropDataTests
     public void Names_with_an_extension_are_not_looked_up()
     {
         var asked = new List<string>();
-        string[] paths = [@"C:\p\a.png", @"C:\p\holiday.png", @"C:\p\notes"];
+        // Only names whose extension no module knows: "Photos 2024.10" and "v1.2" are folder names too (evaluator, PR #17).
+        string[] paths = [@"C:\p\a.png", @"C:\p\holiday.png", @"C:\p\notes", @"C:\p\Photos 2024.10", @"C:\p\v1.2"];
         var marked = FolderMarks.Mark(paths, p => { asked.Add(p); return true; }, () => 0, CancellationToken.None);
-        Assert.Equal([@"C:\p\notes"], asked);
-        Assert.Equal([@"C:\p\a.png", @"C:\p\holiday.png", @"C:\p\notes\"], marked);
+        Assert.Equal([@"C:\p\notes", @"C:\p\Photos 2024.10", @"C:\p\v1.2"], asked);
+        Assert.Equal([@"C:\p\a.png", @"C:\p\holiday.png", @"C:\p\notes\", @"C:\p\Photos 2024.10\", @"C:\p\v1.2\"], marked);
+    }
+
+    [Fact]
+    public void Folder_lookups_share_the_short_name_deadline()
+    {
+        // The inspection began a deadline ago (short names used it up): no folder is asked about, and nothing is marked.
+        var asked = 0;
+        var deadline = (long)(ShortNames.Deadline.TotalSeconds * System.Diagnostics.Stopwatch.Frequency);
+        string[] paths = [@"C:\p
+otes", @"C:\p\more"];
+        var marked = FolderMarks.Mark(paths, _ => { asked++; return true; }, () => deadline, 0, CancellationToken.None);
+        Assert.Equal(0, asked);
+        Assert.Equal(paths, marked);
     }
 
     [Fact]

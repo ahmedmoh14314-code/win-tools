@@ -35,20 +35,29 @@ internal static class ShortNames
     public static bool NeedsExpansion(IReadOnlyList<string> paths) =>
         paths.Count <= CapabilityResolver.MaxFiles && paths.Any(p => PathPolicy.LooksLikeShortName(p, anyCase: true));
 
-    public static Expansion ExpandAll(string[] paths, CancellationToken cancel)
+    /// <summary>Expands on the calling thread, which must run under <see cref="WithoutErrorBoxes"/>; the deadline counts
+    /// from <paramref name="start"/> (Stopwatch ticks), shared with the folder lookups that follow.</summary>
+    public static Expansion ExpandAll(string[] paths, long start, CancellationToken cancel)
     {
         var buffer = new char[Kernel32.MaxLongPath];
-        var previous = 0u;
-        var errorModeSet = Kernel32.SetThreadErrorMode(Kernel32.SEM_FAILCRITICALERRORS | Kernel32.SEM_NOOPENFILEERRORBOX, out previous);
-        try { return ExpandAll(paths, p => Expand(p, buffer), Stopwatch.GetTimestamp, cancel); }
+        return ExpandAll(paths, p => Expand(p, buffer), Stopwatch.GetTimestamp, start, cancel);
+    }
+
+    /// <summary>Runs file-system lookups with Windows' "no disk" and open-file error boxes suppressed on this thread.</summary>
+    public static T WithoutErrorBoxes<T>(Func<T> work)
+    {
+        var errorModeSet = Kernel32.SetThreadErrorMode(Kernel32.SEM_FAILCRITICALERRORS | Kernel32.SEM_NOOPENFILEERRORBOX, out var previous);
+        try { return work(); }
         finally { if (errorModeSet) Kernel32.SetThreadErrorMode(previous, out _); }
     }
 
     /// <summary>The test seam: the expansion of one path (null when it fails) and the clock (Stopwatch ticks).</summary>
-    internal static Expansion ExpandAll(string[] paths, Func<string, string?> expand, Func<long> now, CancellationToken cancel)
+    internal static Expansion ExpandAll(string[] paths, Func<string, string?> expand, Func<long> now, CancellationToken cancel) =>
+        ExpandAll(paths, expand, now, now(), cancel);
+
+    internal static Expansion ExpandAll(string[] paths, Func<string, string?> expand, Func<long> now, long start, CancellationToken cancel)
     {
         var result = (string[])paths.Clone();
-        var start = now();
         var unresolved = 0;
         for (var i = 0; i < paths.Length; i++)
         {
