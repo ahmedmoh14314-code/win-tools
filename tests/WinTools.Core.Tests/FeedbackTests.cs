@@ -178,6 +178,21 @@ public sealed class FeedbackTextTests
     }
 
     [Fact]
+    public void A_mixed_compress_batch_says_what_was_saved_and_which_were_already_optimized()
+    {
+        // Evaluator, PR #12: a batch with both kinds said only "1 unchanged" and dropped the saving.
+        var op = OperationCatalog.Get("compress.balanced");
+        var m = FeedbackText.For(op,
+        [
+            new("a.jpg", ConversionResult.Ok("1", @"C:\x\a (compressed).jpg", "0"), 2_000_000, 500_000),
+            new("b.jpg", ConversionResult.Ok("2", @"C:\x\b (compressed).jpg", "0"), 2_000_000, 1_000_000),
+            new("c.jpg", ConversionResult.Fail("3", ErrorCode.NothingToDo, "")),
+        ]);
+        Assert.Equal((FeedbackKind.Success, "2 images of 3 completed"), (m.Kind, m.Title));
+        Assert.Equal("3.81 MB → 1.43 MB, saved 62% · 1 already optimized", m.Detail);
+    }
+
+    [Fact]
     public void Every_operation_has_a_past_tense_phrase_and_a_verb()
     {
         foreach (var op in ImageCapabilities.Operations(new AppSettings().CustomResizeId()))

@@ -147,10 +147,12 @@ public sealed class OperationTests : IDisposable
         return _dir.Write(name, WicCodec.Encode(image, ImageFormat.Jpeg, quality));
     }
 
+    // A phone-like photograph (CompressionCorpus), not uniform random noise: noise has no structure to keep, so under
+    // ADR-0017 every preset correctly refuses it, and it was the fixture that hid the weak compression in V1.
     [Fact]
     public void Jpeg_compression_levels_are_ordered_and_smaller_than_the_source()
     {
-        var src = NoisyJpeg("photo.jpg", 0.98f);
+        var src = _dir.Write("photo.jpg", CompressionCorpus.All().Single(s => s.Name == "phone.jpg").Bytes);
         var original = new FileInfo(src).Length;
         var sizes = new Dictionary<string, long>();
         foreach (var level in new[] { "high", "balanced", "small" })
@@ -188,10 +190,12 @@ public sealed class OperationTests : IDisposable
         Assert.Equal(Pixels.Load(src).Bgra, Pixels.Load(r.OutputPath!).Bgra);
     }
 
+    // A photograph-like lossless WebP. The earlier x·y pattern is aliasing art that lossy coding visibly damages, which
+    // ADR-0017's gates now (correctly) refuse.
     [Fact]
     public void Webp_compression_shrinks_a_lossless_webp()
     {
-        var image = ImagePipeline.Decode(PngWriter.Rgba(300, 200, (x, y) => ((byte)x, (byte)y, (byte)(x * y), 255)), ImageFormat.Png).Image;
+        var image = CompressionCorpus.Photo(seed: 12, width: 400, height: 300);
         var src = _dir.Write("art.webp", SkiaCodec.EncodeWebP(image, 100, lossless: true));
         var r = Run("compress.small", src);
         Assert.True(r.Success, r.Message);
