@@ -10,16 +10,22 @@ public enum OutputPolicy { SameFolder, Folder }
 /// The user's preferences, persisted locally as JSON (no secrets, nothing personal). Every field has a safe default,
 /// and <see cref="Normalized"/> repairs out-of-range values instead of failing. Schema changes bump
 /// <see cref="CurrentSchema"/>; a file written by a newer version is read for its known fields and never overwritten.
+/// <para>
+/// Schema 2 (V2 PR 1.5) groups the fields in sections (<c>trigger</c>, <c>output</c>, <c>images</c>, <c>ui</c>), so a
+/// module adds its own section without touching the others. In memory the record stays flat. A schema 1 file (flat
+/// fields) is read as it is and saved as schema 2. An older WinTools reads a schema 2 file as newer: it shows its own
+/// defaults and never overwrites it.
+/// </para>
 /// </summary>
 public sealed record AppSettings
 {
-    public const int CurrentSchema = 1;
+    public const int CurrentSchema = 2;
 
-    /// <summary>Keys allowed as the trigger: no modifiers (they change Explorer's drop effect) and nothing Explorer uses during a drag.</summary>
-    public static readonly IReadOnlyDictionary<string, int> TriggerKeys = new Dictionary<string, int>
-    {
-        ["Space"] = 0x20, ["F8"] = 0x77, ["F9"] = 0x78, ["F10"] = 0x79, ["F11"] = 0x7A, ["F12"] = 0x7B,
-    };
+    /// <summary>The defaults, which Reset restores.</summary>
+    public static AppSettings Defaults { get; } = new();
+
+    /// <summary>Keys allowed as the trigger (<see cref="TriggerKeyPolicy"/>): no modifiers, nothing Explorer uses during a drag.</summary>
+    public static IReadOnlyDictionary<string, int> TriggerKeys => TriggerKeyPolicy.Allowed;
 
     public int Schema { get; init; } = CurrentSchema;
     public string TriggerKey { get; init; } = "Space";
@@ -85,13 +91,61 @@ public sealed record AppSettings
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
-    public string ToJson() => JsonSerializer.Serialize(this, Json);
+    /// <summary>The settings as a schema 2 file.</summary>
+    public string ToJson()
+    {
+        var s = Normalized();
+        return JsonSerializer.Serialize(new FileV2(CurrentSchema,
+            new(s.TriggerKey),
+            new(s.OutputPolicy, s.OutputFolder),
+            new(s.JpegQuality, s.WebPQuality, s.ResizeWidth, s.ResizeHeight, s.KeepAspectRatio, s.NoUpscale),
+            new(s.Theme, s.UiSounds, s.Animations)), Json);
+    }
 
-    /// <summary>Parses settings; null when the text is not valid settings JSON (the caller then keeps defaults).</summary>
+    /// <summary>
+    /// Parses settings of schema 1 (flat) or 2 (sections), and the sections a newer schema still has; null when the text
+    /// is not valid settings JSON (the caller then keeps defaults). Missing values take their defaults.
+    /// </summary>
     public static AppSettings? FromJson(string text)
     {
-        try { return JsonSerializer.Deserialize<AppSettings>(text, Json)?.Normalized(); }
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
+            if (!HasSections(doc.RootElement)) return JsonSerializer.Deserialize<AppSettings>(text, Json)?.Normalized(); // schema 1
+            if (JsonSerializer.Deserialize<FileV2>(text, Json) is not { } f) return null;
+            var d = Defaults;
+            return new AppSettings
+            {
+                Schema = Math.Max(f.Schema, CurrentSchema),
+                TriggerKey = f.Trigger?.Key ?? d.TriggerKey,
+                OutputPolicy = f.Output?.Policy ?? d.OutputPolicy,
+                OutputFolder = f.Output?.Folder,
+                JpegQuality = f.Images?.JpegQuality ?? d.JpegQuality,
+                WebPQuality = f.Images?.WebPQuality ?? d.WebPQuality,
+                ResizeWidth = f.Images?.ResizeWidth ?? d.ResizeWidth,
+                ResizeHeight = f.Images?.ResizeHeight ?? d.ResizeHeight,
+                KeepAspectRatio = f.Images?.KeepAspectRatio ?? d.KeepAspectRatio,
+                NoUpscale = f.Images?.NoUpscale ?? d.NoUpscale,
+                Theme = f.Ui?.Theme ?? d.Theme,
+                UiSounds = f.Ui?.Sounds ?? d.UiSounds,
+                Animations = f.Ui?.Animations ?? d.Animations,
+            }.Normalized();
+        }
         catch (JsonException) { return null; }
         catch (NotSupportedException) { return null; }
+        catch (InvalidOperationException) { return null; }
     }
+
+    /// <summary>Schema 2 or later: any section object at the top (any casing).</summary>
+    private static bool HasSections(JsonElement root) =>
+        root.EnumerateObject().Any(p => p.Value.ValueKind == JsonValueKind.Object && Sections.Contains(p.Name));
+
+    private static readonly HashSet<string> Sections = new(["trigger", "output", "images", "ui"], StringComparer.OrdinalIgnoreCase);
+
+    private sealed record FileV2(int Schema, TriggerSection? Trigger, OutputSection? Output, ImagesSection? Images, UiSection? Ui);
+    private sealed record TriggerSection(string? Key);
+    private sealed record OutputSection(OutputPolicy? Policy, string? Folder);
+    private sealed record ImagesSection(int? JpegQuality, int? WebPQuality, int? ResizeWidth, int? ResizeHeight, bool? KeepAspectRatio, bool? NoUpscale);
+    private sealed record UiSection(string? Theme, bool? Sounds, string? Animations);
 }

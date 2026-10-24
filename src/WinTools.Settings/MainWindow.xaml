@@ -170,6 +170,7 @@
     <Border Grid.Row="2" BorderBrush="{StaticResource Edge}" BorderThickness="0,1,0,0" Padding="28,10">
       <Grid>
         <TextBlock x:Name="Footer" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0" />
+        <Button x:Name="Reset" Content="Reset to defaults" HorizontalAlignment="Right" Margin="0,0,96,0" Padding="14,6" AutomationProperties.Name="Reset all settings to their defaults" />
         <Button x:Name="Done" Content="Done" HorizontalAlignment="Right" IsDefault="True" IsCancel="True" Background="{StaticResource Green}" Foreground="{StaticResource TextOnGreen}" BorderBrush="{StaticResource Green}" FontWeight="SemiBold" Padding="20,6" />
       </Grid>
     </Border>
