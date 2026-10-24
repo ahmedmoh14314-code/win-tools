@@ -17,6 +17,7 @@ public sealed class FolderInputTests
     [InlineData(@"C:\photos\holiday\")]
     [InlineData(@"C:\photos\holiday.png\")]                 // a folder named like an image is still a folder
     [InlineData(@"\\server\share\scans\")]
+    [InlineData(@"C:\repo\.git\")]                           // a folder name without a stem is fine
     public void A_path_marked_as_a_folder_is_a_folder_and_supported(string path)
     {
         Assert.Same(FileKinds.Folder, FileKinds.IdentifyByName(path));
@@ -29,6 +30,12 @@ public sealed class FolderInputTests
     [InlineData(@"\\server\share\")]                         // a share root
     [InlineData(@"C:\photos\\")]                             // two separators: not canonical
     [InlineData(@"C:\photos\holiday.\")]                     // a trailing dot Win32 would strip
+    [InlineData(@"C:\photos\holiday \")]                     // a trailing space: without the separator, another folder
+    [InlineData(@"\\server\share\a \")]
+    [InlineData(@"C:\a\nul\")]                               // device names once the separator is trimmed
+    [InlineData(@"C:\x\COM1\")]
+    [InlineData(@"C:\x\com1.png")]                           // a file named after a device, any case, any extension
+    [InlineData(@"C:\aux\photo.png")]                        // a device name as a folder on the way
     public void Roots_and_odd_folder_forms_are_refused(string path)
     {
         Assert.NotEqual(PathVerdict.Supported, PathPolicy.Explain(path));

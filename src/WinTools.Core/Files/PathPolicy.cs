@@ -41,9 +41,38 @@ public static class PathPolicy
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return PathVerdict.NotCanonical; }
         if (!string.Equals(full, probe, StringComparison.Ordinal)) return PathVerdict.NotCanonical;
         if (HasShortAlias(path)) return PathVerdict.ShortName;
+        if (NamesADevice(path)) return PathVerdict.Device;
         if (Path.EndsInDirectorySeparator(path)) // a folder, marked by the drop target (ADR-0019); never a drive or share root
-            return Path.GetPathRoot(path) != path && Path.GetFileName(Path.TrimEndingDirectorySeparator(path)).Length > 0 ? PathVerdict.Supported : PathVerdict.NoStem;
+        {
+            var folder = path[..^1];
+            if (Path.GetPathRoot(path) == path || Path.EndsInDirectorySeparator(folder) || Path.GetFileName(folder).Length == 0) return PathVerdict.NoStem;
+            // The separator shields the name from normalisation: "holiday \" and "nul\" are canonical only as written, and
+            // become another folder or a device once it is trimmed. The folder's own path must pass too; a name without a
+            // stem (".git") is fine for a folder (evaluator, PR #17).
+            var own = Explain(folder);
+            return own is PathVerdict.Supported or PathVerdict.NoStem ? PathVerdict.Supported : own;
+        }
         return Path.GetFileNameWithoutExtension(path).Length > 0 ? PathVerdict.Supported : PathVerdict.NoStem;
+    }
+
+    private static readonly HashSet<string> DeviceNames = new(
+        ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
+         .. Enumerable.Range(0, 10).SelectMany(i => new[] { $"COM{i}", $"LPT{i}" }),
+         "COM¹", "COM²", "COM³", "LPT¹", "LPT²", "LPT³"], StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether a component is a reserved device name ("nul", "COM1.png", "aux .txt"). Windows 11 no longer maps every
+    /// such path to the device, older versions and some APIs still do; a file or folder so named is refused either way
+    /// (evaluator, PR #17).
+    /// </summary>
+    private static bool NamesADevice(string path)
+    {
+        foreach (var part in path.Split('\\'))
+        {
+            var dot = part.IndexOf('.');
+            if (DeviceNames.Contains((dot < 0 ? part : part[..dot]).TrimEnd(' '))) return true;
+        }
+        return false;
     }
 
     /// <summary>
