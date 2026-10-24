@@ -82,4 +82,8 @@ Residuals:
 | 2026-10-24 | PR #12 host (`fe2d2d9`, then `63cccc1`), single scenarios | `photo` at Balanced, 2 cycles, saved 37.3 %; `photo --op compress.high --expect already-optimized`, 2 cycles |
 | 2026-10-24 | PR #13 host (`902af77`), single scenarios | `png --path-style long`, 3 cycles; `batch --batch 10 --path-style long --settle-ms 0`, 2 cycles |
 
-The committed 23 rows have not yet run in full with the committed sample and this harness. That run follows once PR #12 is on main.
+| 2026-10-24 | main `d389835` (PR #12 merged), the committed harness and sample | 22 of 23 rows passed, including `photo-compress-high` (already optimized, nothing written) and `photo-compress` (37 %).
+  - `ctrl-click-held-10` failed its one cycle: a Ctrl-click left 9 of the 10 files selected, so the drag carried 9 and the run went astray.
+  - Re-run: 1/1, then 4/4 more cycles, so 6 of 7 cycles in all. The miss is in the harness's selection, not the product, and is recorded as an intermittent residual.
+  - This run also found a runner defect: without `-Wait`, the exit code was empty and every row counted as failed. Fixed by taking the process handle while it runs.
+  - No key was left down after any row. |

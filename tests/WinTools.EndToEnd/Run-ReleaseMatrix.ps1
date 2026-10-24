@@ -142,6 +142,7 @@ foreach ($row in $rows) {
     $out = Join-Path $Results "$name.txt"
     $jsonl = Join-Path $Results "$name.jsonl"
     $p = Start-Process -FilePath $Harness -ArgumentList "$arguments --results `"$jsonl`"" -WorkingDirectory (Split-Path $Harness) -NoNewWindow -PassThru -RedirectStandardOutput $out
+    $null = $p.Handle # without -Wait, PowerShell keeps the exit code only if the handle was taken while the process ran
     if (-not $p.WaitForExit($RowMinutes * 60 * 1000)) {
         # A hung row may hold a synthetic drag: stop it and release every key and button it could have left down.
         Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
