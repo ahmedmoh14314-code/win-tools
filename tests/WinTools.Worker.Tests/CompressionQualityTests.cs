@@ -122,7 +122,7 @@ public sealed class CompressionQualityTests : IDisposable
 
         var r = ConversionJob.Run(new ConversionRequest($"c{Interlocked.Increment(ref _seq)}", $"compress.{level}", src));
 
-        if (!r.Success) { Assert.Equal(ErrorCode.NothingToDo, r.Error); return; }
+        if (!r.Success) { Assert.Equal(ErrorCode.NothingToDo, r.Error); return; } // already optimized keeps the promise
         var before = Caption(ImagePipeline.Decode(source, ImageFormat.Jpeg).Image);
         var after = Caption(ImagePipeline.Decode(File.ReadAllBytes(r.OutputPath!), ImageFormat.Jpeg).Image);
         var ssim = Ssim.Luma(before, after);
@@ -176,7 +176,7 @@ public sealed class CompressionQualityTests : IDisposable
 
         var r = ConversionJob.Run(new ConversionRequest($"c{Interlocked.Increment(ref _seq)}", $"compress.{level}", src));
 
-        if (!r.Success) { Assert.Equal(ErrorCode.NothingToDo, r.Error); return; }
+        Assert.True(r.Success, $"{level}: {r.Error} {r.Message}"); // a refusal here would hide the very damage the test looks for
         var before = ImagePipeline.Decode(source, ImageFormat.WebP).Image.Bgra;
         var after = ImagePipeline.Decode(File.ReadAllBytes(r.OutputPath!), ImageFormat.WebP).Image.Bgra;
         for (var i = 3; i < before.Length; i += 4)

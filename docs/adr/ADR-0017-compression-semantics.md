@@ -98,8 +98,23 @@ PNG stays lossless and is verified pixel for pixel, with the same 8 % minimum.
   - x·y aliasing art.
 
 ## Amendment: worst-tile gates, search deadline, transparency (2026-10-24, evaluator review of PR #12)
-- **Worst tile.** The worst-region gate (1st percentile of windows) cannot see damage in less than 1 % of the image. Two axes are added: the mean luma SSIM and the mean ΔE of the worst 64×64 tile, with tiles every 32 px, so damage 32 px or more across lies almost wholly in one tile. Gates: tile SSIM ≥ 0.975, 0.950 and 0.900; tile ΔE ≤ 3, 5 and 7 (High, Balanced, Smallest). The probe and the measurements are in `docs/performance/2026-10-23-compression.md`. Before the gates, Balanced left a caption covering 0.4 % of a photo at SSIM 0.926, under its floor.
+- **Worst tile.** The worst-region gate (1st percentile of windows) cannot see damage in less than 1 % of the image. Before any tile gate, Balanced left a caption covering 0.4 % of a photo at SSIM 0.926, under its floor.
+  - A first version used 64×64 tiles. The re-review showed that their means still diluted saturated colour text 32×14 px across, a corner date stamp and a thin coloured line: Smallest left text at SSIM 0.81–0.86 and ΔE 14–36.
+  - Fidelity now pools on 16×16 cells into 32×32 tiles, every 16 px. For the worst tile it reports the luma and chroma SSIM, the mean ΔE, and the share of samples whose ΔE exceeds 4, 6 or 10. ΔE is sampled on every row, the columns alternating, so a line one pixel thin in either direction is seen.
+  - **Gates:**
+
+    | Preset | Tile luma SSIM ≥ | Tile mean ΔE ≤ | Share of tile above ΔE 6 ≤ |
+    |---|---|---|---|
+    | High | 0.970 | 4 | — |
+    | Balanced | 0.930 | 6 | 25 % |
+    | Smallest | 0.880 | 6 | — |
+
+  - **How they were chosen:** the luma gates are the region floors themselves, because the 32×32 tile tracks a caption's own SSIM within about 0.001. The ΔE gates are the cheapest that keep every probe in `SmallDetailTests` within its promise, found by an exhaustive search over the measured ladder (`CompressionMeasurement.Measure_small_detail_tiles`).
+  - **The promise per region:** text keeps the preset's SSIM floor and a mean ΔE no larger than the preset's ΔE99 gate (4, 6, 10).
+  - **Cost on the corpus:** phone Balanced 63.9 → 54.7 %, camera Balanced 67.9 → 62.8 %, moderate Smallest 18.2 → 9.9 %, lossy WebP Smallest 77.9 → 70.2 %, camera Smallest 88.7 → 86.9 %. The camera Balanced expectation moved from 65 % to 60 % in its own commit, with this reason.
+  - **Residual:** the last 1–3 columns or rows of an image whose sides are not multiples of 4 are in no SSIM window; ΔE still samples them.
 - **Thin images.** Images under 8 px on a side were compared as one window, so a damaged stretch of a long strip averaged away. They are compared in windows of the short side × 8 px along the long side.
+- **Second chroma mode.** For a 4:4:4 source, the 4:2:0 pass only looks for copies smaller than the one already found, and skips the exhaustive pass when a copy exists.
 - **Search.** Pass and fail are not monotonic enough for plain bisection: on a GDI+ photo, q85 failed the edge gate and q82 passed, and Balanced reported "already optimized". A failure is checked one quality lower before the search turns back, and when nothing has passed, every small-enough quality not yet tried is tried. "Already optimized" is then true of the whole ladder (`CompressionSearchTests`).
 - **Deadline.** The search stops after 25 s and uses the best passing copy found so far. With none, the job fails with the timeout reason and writes nothing; "already optimized" is said only when the search finished. There is no cancellation token inside the worker: the host's cancel and its 60 s timeout kill the worker process, and the deadline keeps a slow search inside that limit.
 - **Transparency.** Fidelity is measured on white, so a change in alpha alone would be invisible to it. A candidate whose alpha differs from the source's is rejected. libwebp keeps lossy WebP's alpha lossless today; `Lossy_webp_keeps_transparency_exactly` guards it.

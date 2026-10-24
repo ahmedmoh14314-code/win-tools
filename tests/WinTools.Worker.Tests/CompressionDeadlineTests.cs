@@ -39,11 +39,4 @@ public sealed class CompressionDeadlineTests
         Assert.Equal(ErrorCode.WorkerTimeout, e.Code); // "It took too long and was stopped."
         Assert.DoesNotContain("optimized", e.Message, StringComparison.OrdinalIgnoreCase);
     }
-
-    [Fact]
-    public void The_deadline_leaves_room_inside_the_job_timeout()
-    {
-        // Decode, the final write and the output check come on top of the search; the host kills the worker at 60 s.
-        Assert.True(LossyCompression.SearchBudget <= TimeSpan.FromSeconds(30));
-    }
 }

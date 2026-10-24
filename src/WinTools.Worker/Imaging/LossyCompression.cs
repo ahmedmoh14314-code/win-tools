@@ -72,7 +72,10 @@ internal static class LossyCompression
         var outOfTime = false;
         foreach (var fullChroma in modes)
         {
-            var (c, finished) = Search(image, format, preset, ladder, fullChroma, largestUseful, elapsed, cancel);
+            // A second chroma mode only matters if it beats the copy already found: smaller than it, and no exhaustive
+            // pass to prove "already optimized", which the first mode has already disproved.
+            var limit = best is null ? largestUseful : Math.Min(largestUseful, best.Bytes.LongLength - 1);
+            var (c, finished) = Search(image, format, preset, ladder, fullChroma, limit, exhaustive: best is null, elapsed, cancel);
             if (c is not null && (best is null || c.Bytes.Length < best.Bytes.Length)) best = c;
             if (!finished) { outOfTime = true; break; }
         }
@@ -85,7 +88,7 @@ internal static class LossyCompression
     /// <summary>The lowest quality on the ladder that passes the gates and is small enough; and whether the search finished
     /// before the deadline.</summary>
     private static (Candidate? Found, bool Finished) Search(RasterImage image, ImageFormat format, Preset preset, int[] ladder, bool fullChroma, long largestUseful,
-        Func<TimeSpan> elapsed, CancellationToken cancel)
+        bool exhaustive, Func<TimeSpan> elapsed, CancellationToken cancel)
     {
         var encoded = new byte[ladder.Length][];
         var candidates = new Candidate?[ladder.Length];
@@ -99,7 +102,7 @@ internal static class LossyCompression
             candidates[i] = new Candidate(Bytes(i), ladder[i], fullChroma, fidelity);
             return true;
         }
-        var chosen = Choose(ladder.Length, i => Bytes(i).LongLength <= largestUseful, Passes, () => elapsed() >= SearchBudget, out var finished);
+        var chosen = Choose(ladder.Length, i => Bytes(i).LongLength <= largestUseful, Passes, () => elapsed() >= SearchBudget, out var finished, exhaustive);
         return (chosen is { } c ? candidates[c] : null, finished);
     }
 
@@ -115,7 +118,7 @@ internal static class LossyCompression
     /// "already optimized": that is a claim about the ladder, not about the path taken.</item>
     /// </list>
     /// </summary>
-    internal static int? Choose(int count, Func<int, bool> smallEnough, Func<int, bool> passes, Func<bool> outOfTime, out bool finished)
+    internal static int? Choose(int count, Func<int, bool> smallEnough, Func<int, bool> passes, Func<bool> outOfTime, out bool finished, bool exhaustive = true)
     {
         int? best = null;
         var tried = new bool[count];
@@ -135,7 +138,7 @@ internal static class LossyCompression
             }
             hi = mid - 1;
         }
-        if (best is null)
+        if (best is null && exhaustive)
             for (var i = count - 1; i >= 0; i--) // lowest quality first: the first pass is the smallest copy
             {
                 if (tried[i] || !smallEnough(i)) continue;

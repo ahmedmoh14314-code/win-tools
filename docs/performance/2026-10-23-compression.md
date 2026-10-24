@@ -27,12 +27,12 @@ The files are encoded the way real ones are, at the qualities listed in the tabl
 ### After: ADR-0017 gates
 | File | High | Balanced | Smallest |
 |---|---|---|---|
-| phone.jpg | −14.4 %, 0.9920 (q88) | −63.9 %, 0.9811 (q70) | −73.5 %, 0.9732 (q50) |
-| camera.jpg | −13.6 %, 0.9908 (q95, **4:4:4 kept**) | −67.9 %, 0.9812 (q88, 4:4:4) | −88.7 %, 0.9715 (q65, 4:2:0) |
-| moderate.jpg | already optimised | already optimised | −18.2 %, 0.9797 (q50) |
+| phone.jpg | −14.4 %, 0.9920 (q88) | −54.7 %, 0.9854 (was −63.9 % before the 32×32 tiles) | −73.5 %, 0.9732 (q50) |
+| camera.jpg | −13.6 %, 0.9908 (q95, **4:4:4 kept**) | −62.8 %, 0.9825 (was −67.9 %) | −86.9 %, 0.9676 (was −88.7 %) |
+| moderate.jpg | already optimised | already optimised | −9.9 %, 0.9857 (was −18.2 %) |
 | noisy.jpg | already optimised | already optimised | −9.4 %, 0.9623 (q88) |
 | screenshot.jpg | already optimised | −10.8 %, 0.9962 (q93) | −27.1 %, 0.9910 (q88) |
-| photo-lossy.webp | −23.9 %, 0.9914 | −61.7 %, 0.9813 | −77.9 %, 0.9702 |
+| photo-lossy.webp | −23.9 %, 0.9914 | −61.7 %, 0.9813 | −70.2 %, 0.9759 (was −77.9 %) |
 | screenshot-lossless.webp | already optimised | already optimised | already optimised |
 | unoptimized.png (lossless) | | | −99.6 %, identical pixels |
 | optimized.png (lossless) | | | already optimised |
@@ -96,8 +96,8 @@ V1 ran one encode per file and had no fidelity check; its time was not measured 
 | 4:2:0 q93 | 5.2 s | 6.8 s | 7.0 s |
 | 4:4:4 q97 | 11.1 s | 11.5 s | 13.9 s |
 
-Re-measured 2026-10-24 with the tile gates and the final search, on an otherwise idle machine: 4:2:0 2.7, 5.5 and
-4.5 s; 4:4:4 11.4, 12.1 and 9.7 s.
+Re-measured 2026-10-24 with the 32×32 tile gates and the final search, on an otherwise idle machine: 4:2:0 3.7, 7.1 and
+6.2 s; 4:4:4 14.0, 16.3 and 10.0 s.
 The spread between the two runs is itself a reason for the search deadline below.
 
 **Deadline.** The search stops after 25 s and uses the best copy found so far, which has passed every gate. With none
@@ -108,14 +108,16 @@ optimized" (`CompressionDeadlineTests`, fake clock).
 
 | Lanes | High | Smallest |
 |---|---|---|
-| host default | 27.0 s for 4, all written | 39.9 s for 4, all written |
-| 4 | 20.3 s for 4, all written | 26.2 s for 4, all written |
+| host default | 37.0 s for 4, all written | 29.5 s for 4, all written |
+| 4 | 28.8 s for 4, all written | 26.0 s for 4, all written |
+
+(First measured with 64×64 tiles at 27.0, 39.9, 20.3 and 26.2 s; the run-to-run spread on this machine is of that order.)
 
 No job came near its timeout on this machine. On a slower processor the deadline, not the kill, decides.
 
 ## Fidelity cost
 - **2 MP:** about 35 ms per comparison, in parallel bands. The first single-threaded version took about 250 ms.
-- **48 MP:** 0.93 s per comparison and 9.4 MB allocated (before the tile sums, which add a few hundred KB). Its own working memory is a few rows, a histogram and the cell sums per band; the two images being compared are each a whole buffer.
+- **48 MP:** 1.06 s per comparison and 32.5 MB allocated with the 16×16 cell sums (9.4 MB before any tiles; a first version that gave every band sums for the whole image allocated 100.9 MB). Each band keeps only the cell rows it touches; the two images being compared are each a whole buffer.
 
 ## Not yet measured
 - Real photographs, faces, skin tones and real screenshots. The gates await the owner's visual validation (ADR-0017 Consequences).
