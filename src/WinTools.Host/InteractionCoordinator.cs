@@ -24,7 +24,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     private const nuint ArmTimer = 2; // repaints a hovered command as armed when the arm delay has passed
 
     private readonly HostLog _log;
-    private readonly JobRunner _jobs;
+    private readonly JobScheduler _jobs;
     private readonly FeedbackPresenter _feedback;
     private readonly SoundPlayer _sounds;
     private readonly NavigationSounds _navigationSounds;
@@ -40,7 +40,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     private uint _dpi = 96;
     private (int X, int Y) _anchor, _centre;
 
-    public InteractionCoordinator(HostLog log, MessageWindow window, JobRunner jobs, FeedbackPresenter feedback, SoundPlayer sounds, AppSettings settings)
+    public InteractionCoordinator(HostLog log, MessageWindow window, JobScheduler jobs, FeedbackPresenter feedback, SoundPlayer sounds, AppSettings settings)
     {
         _log = log;
         _jobs = jobs;
@@ -318,9 +318,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             return false;
         }
         _log.Event("drop", new { accepted = true, op = chosen.Id, openMs, files = paths.Count, sounds = SoundCounts(), frames });
-        // The only module so far; jobs become generic in V2 PR 1.2. Never throw here: this runs inside OLE's Drop.
-        if (ImageCapabilities.TryOperationOf(chosen, out var operation)) _ = _jobs.Start(operation, paths);
-        else _log.Event("job.refused", new { op = chosen.Id, module = chosen.Module });
+        if (_jobs.Enqueue(chosen, paths) is null) _log.Event("job.refused", new { op = chosen.Id, module = chosen.Module }); // no runner for that module
         return true;
     }
 

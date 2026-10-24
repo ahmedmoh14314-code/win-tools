@@ -75,11 +75,11 @@ foreach (var dpi in dpis)
         surface.SavePng(Path.Combine(outDir, $"toast-{name}-{dpi}.png"));
     }
     var webp = OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.WebP);
-    Toast("success", ToastContent.From(FeedbackText.For(webp, [new("photo.jpg", ConversionResult.Ok("1", @"C:\x\photo.webp", "0"), 2_480_000, 612_000)])));
-    Toast("batch", ToastContent.From(FeedbackText.For(webp, [.. Enumerable.Range(1, 48).Select(i => new JobItem($"p{i}.jpg", ConversionResult.Ok("1", $@"C:\x\p{i}.webp", "0"), 2_000_000, 500_000)),
-        new JobItem("a.jpg", ConversionResult.Fail("1", ErrorCode.DecodeFailed, "")), new JobItem("b.jpg", ConversionResult.Fail("1", ErrorCode.DecodeFailed, ""))])));
-    Toast("failure", ToastContent.From(FeedbackText.For(webp, [new("scan.tif", ConversionResult.Fail("1", ErrorCode.ImageTooLarge, ""))])));
-    Toast("nothing", ToastContent.From(FeedbackText.For(OperationCatalog.Get("resize.box-1920x1080"), [new("small.png", ConversionResult.Fail("1", ErrorCode.NothingToDo, ""))])));
+    Toast("success", ToastContent.From(FeedbackText.For(webp, [new("photo.jpg", JobResult.Ok("1", new JobOutput(@"C:\x\photo.webp", "0")), 2_480_000, 612_000)])));
+    Toast("batch", ToastContent.From(FeedbackText.For(webp, [.. Enumerable.Range(1, 48).Select(i => new JobItem($"p{i}.jpg", JobResult.Ok("1", new JobOutput($@"C:\x\p{i}.webp", "0")), 2_000_000, 500_000)),
+        new JobItem("a.jpg", JobResult.Fail("1", ErrorCode.DecodeFailed, "")), new JobItem("b.jpg", JobResult.Fail("1", ErrorCode.DecodeFailed, ""))])));
+    Toast("failure", ToastContent.From(FeedbackText.For(webp, [new("scan.tif", JobResult.Fail("1", ErrorCode.ImageTooLarge, ""))])));
+    Toast("nothing", ToastContent.From(FeedbackText.For(OperationCatalog.Get("resize.box-1920x1080"), [new("small.png", JobResult.Fail("1", ErrorCode.NothingToDo, ""))])));
     Toast("progress", new ToastContent(FeedbackKind.Success, "Converting 48 images", "12 of 48", 0.25));
 
     var info = new ImageInfo("JPEG", 4032, 3024, 2_480_000, 72, 72, false, 6, true, true, false, true, false, false);

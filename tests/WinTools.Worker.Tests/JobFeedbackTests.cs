@@ -17,10 +17,10 @@ public sealed class JobFeedbackTests
         public readonly List<int> Progress = [];
         public IReadOnlyList<JobItem>? Items;
         public int Starts, Crashes;
-        public void Started(Operation operation, IReadOnlyList<string> paths) => Interlocked.Increment(ref Starts);
-        void IJobFeedback.Progress(Operation operation, int done, int total) { lock (Progress) Progress.Add(done); }
-        public void Finished(Operation operation, IReadOnlyList<JobItem> items) => Items = items;
-        public void Crashed(Operation operation, int files) => Interlocked.Increment(ref Crashes);
+        public void Started(CapabilityDescriptor capability, IReadOnlyList<string> paths) => Interlocked.Increment(ref Starts);
+        void IJobFeedback.Progress(CapabilityDescriptor capability, int done, int total) { lock (Progress) Progress.Add(done); }
+        public void Finished(CapabilityDescriptor capability, IReadOnlyList<JobItem> items) => Items = items;
+        public void Crashed(CapabilityDescriptor capability, int files) => Interlocked.Increment(ref Crashes);
     }
 
     [Fact]
@@ -31,8 +31,8 @@ public sealed class JobFeedbackTests
         var bad = folder.Write("broken.png", [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3]);
         var recorder = new Recorder();
         using var log = HostLog.Open(Path.Combine(folder.Path, "host.jsonl"));
-        var runner = new JobRunner(new WorkerClient(WorkerExe, TimeSpan.FromSeconds(30), parallelism: 2), log, () => new AppSettings(), recorder);
-        await runner.Start(OperationCatalog.Get("convert.to-jpeg"), [.. good, bad]);
+        var scheduler = Scheduler(log, recorder);
+        await scheduler.Enqueue(ImageCapabilities.Describe(OperationCatalog.Get("convert.to-jpeg")), [.. good, bad])!.Completion;
 
         Assert.Equal(1, recorder.Starts);
         Assert.Equal(0, recorder.Crashes);
@@ -46,4 +46,8 @@ public sealed class JobFeedbackTests
         Assert.Equal((FeedbackKind.Partial, "5 images of 6 completed"), (message.Kind, message.Title));
         Assert.DoesNotContain(folder.Path, message.Detail, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static JobScheduler Scheduler(HostLog log, IJobFeedback feedback) =>
+        new([new JobModuleRunner(ImageJobModule.Instance, ImageJobsCompat.Images(WorkerExe, TimeSpan.FromSeconds(30), parallelism: 2), ImageJobModule.Parameters)],
+            log, () => new AppSettings(), feedback);
 }

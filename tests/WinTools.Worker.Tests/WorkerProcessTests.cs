@@ -13,7 +13,7 @@ public sealed class WorkerProcessTests : IDisposable
     public void Dispose() => _dir.Dispose();
 
     private static WorkerClient Client(TimeSpan? timeout = null, string? fault = null) =>
-        new(WorkerExe, timeout ?? TimeSpan.FromSeconds(30), fault is null ? null : new Dictionary<string, string> { ["WINTOOLS_WORKER_FAULT"] = fault });
+        ImageJobsCompat.Images(WorkerExe, timeout ?? TimeSpan.FromSeconds(30), fault is null ? null : new Dictionary<string, string> { ["WINTOOLS_WORKER_FAULT"] = fault });
 
     [Fact]
     public async Task Batch_of_png_and_jpeg_converts_in_one_worker_process()
@@ -22,7 +22,7 @@ public sealed class WorkerProcessTests : IDisposable
         var jpg = _dir.CopySample("quadrants-64x48.jpg", "b.jpg");
 
         var results = await Client().RunAsync(
-            [new("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, png), new("r2", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Png).Id, jpg)], CancellationToken.None);
+            [new ConversionRequest("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, png), new ConversionRequest("r2", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Png).Id, jpg)], CancellationToken.None);
 
         Assert.All(results, r => Assert.True(r.Success, r.Message));
         Assert.Equal(Path.Combine(_dir.Path, "a.jpg"), results[0].OutputPath);
@@ -34,7 +34,7 @@ public sealed class WorkerProcessTests : IDisposable
     public async Task Worker_failure_result_crosses_the_process_boundary_with_its_code()
     {
         var src = _dir.CopySample("quadrants-64x48.jpg", "fake.png");
-        var results = await Client().RunAsync([new("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src)], CancellationToken.None);
+        var results = await Client().RunAsync([new ConversionRequest("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src)], CancellationToken.None);
         Assert.Equal(ErrorCode.ContentMismatch, results.Single().Error);
     }
 
@@ -47,7 +47,7 @@ public sealed class WorkerProcessTests : IDisposable
         var before = Hash.Of(src);
 
         var results = await Client(fault: "crash-after-temp").RunAsync(
-            [new("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src), new("r2", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, second)], CancellationToken.None);
+            [new ConversionRequest("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src), new ConversionRequest("r2", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, second)], CancellationToken.None);
 
         Assert.Equal(ErrorCode.WorkerCrashed, results[0].Error);
         Assert.Equal(ErrorCode.WorkerCrashed, results[1].Error);
@@ -61,7 +61,7 @@ public sealed class WorkerProcessTests : IDisposable
         var src = _dir.CopySample("quadrants-64x48.png", "photo.png");
 
         var started = DateTime.UtcNow;
-        var results = await Client(TimeSpan.FromSeconds(3), "hang-after-temp").RunAsync([new("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src)], CancellationToken.None);
+        var results = await Client(TimeSpan.FromSeconds(3), "hang-after-temp").RunAsync([new ConversionRequest("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src)], CancellationToken.None);
 
         Assert.Equal(ErrorCode.WorkerTimeout, results.Single().Error);
         Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(15));
@@ -79,7 +79,7 @@ public sealed class WorkerProcessTests : IDisposable
         var cut = full[..(scanStart + (full.Length - 2 - scanStart) / 2)];
         var src = _dir.Write("cut.jpg", [.. cut, 0xFF, 0xD9]);
 
-        var results = await Client().RunAsync([new("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Png).Id, src)], CancellationToken.None);
+        var results = await Client().RunAsync([new ConversionRequest("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Png).Id, src)], CancellationToken.None);
 
         Assert.Equal(ErrorCode.DecodeFailed, results.Single().Error);
         Assert.Equal(["cut.jpg"], _dir.Names());
@@ -89,8 +89,8 @@ public sealed class WorkerProcessTests : IDisposable
     public async Task Missing_worker_executable_is_a_structured_failure()
     {
         var src = _dir.CopySample("quadrants-64x48.png", "photo.png");
-        var client = new WorkerClient(Path.Combine(_dir.Path, "no-such-worker.exe"), TimeSpan.FromSeconds(5));
-        var results = await client.RunAsync([new("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src)], CancellationToken.None);
+        var client = ImageJobsCompat.Images(Path.Combine(_dir.Path, "no-such-worker.exe"), TimeSpan.FromSeconds(5));
+        var results = await client.RunAsync([new ConversionRequest("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src)], CancellationToken.None);
         Assert.Equal(ErrorCode.WorkerCrashed, results.Single().Error);
     }
 
@@ -100,13 +100,13 @@ public sealed class WorkerProcessTests : IDisposable
         var src = _dir.CopySample("quadrants-64x48.png", "photo.png");
         var elsewhere = _dir.Write("other.jpg", [1]);
         var req = new ConversionRequest("r1", OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.Jpeg).Id, src);
-        Assert.False(WorkerClient.IsBelievable(req, ConversionResult.Ok("r1", elsewhere, Hash.Of(elsewhere))));
-        Assert.False(WorkerClient.IsBelievable(req, ConversionResult.Ok("r1", Path.Combine(_dir.Path, "photo.jpg"), new string('0', 64)))); // does not exist
+        Assert.False(ImageJobsCompat.IsBelievable(req, ConversionResult.Ok("r1", elsewhere, Hash.Of(elsewhere))));
+        Assert.False(ImageJobsCompat.IsBelievable(req, ConversionResult.Ok("r1", Path.Combine(_dir.Path, "photo.jpg"), new string('0', 64)))); // does not exist
         var notAJpeg = _dir.Write("photo (2).jpg", [1, 2, 3]);
-        Assert.False(WorkerClient.IsBelievable(req, ConversionResult.Ok("r1", notAJpeg, Hash.Of(notAJpeg)))); // right name, wrong content
+        Assert.False(ImageJobsCompat.IsBelievable(req, ConversionResult.Ok("r1", notAJpeg, Hash.Of(notAJpeg)))); // right name, wrong content
         var real = _dir.CopySample("quadrants-64x48.jpg", "photo (3).jpg");
-        Assert.False(WorkerClient.IsBelievable(req, ConversionResult.Ok("r1", real, new string('0', 64)))); // a file that is not the worker's output
-        Assert.True(WorkerClient.IsBelievable(req, ConversionResult.Ok("r1", real, Hash.Of(real))));
+        Assert.False(ImageJobsCompat.IsBelievable(req, ConversionResult.Ok("r1", real, new string('0', 64)))); // a file that is not the worker's output
+        Assert.True(ImageJobsCompat.IsBelievable(req, ConversionResult.Ok("r1", real, Hash.Of(real))));
     }
 
     [Fact]

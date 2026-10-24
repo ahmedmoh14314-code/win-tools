@@ -3,8 +3,9 @@ using System.Text;
 using WinTools.Core.Jobs;
 using WinTools.Worker;
 
-// Conversion worker: started by the host for one batch, reads one JSON request per line on stdin and answers one JSON
-// result per line on stdout, exits when stdin closes. Nothing else is accepted on the command line.
+// Image worker: started by the host for one batch, reads one protocol message per line on stdin (ADR-0018) and answers
+// each request with one result line on stdout, exits when stdin closes. Nothing else is accepted on the command line.
+// A cancel message cannot be read while a job runs (one job at a time): the host's fallback, killing the worker, applies.
 
 internal static class Program
 {
@@ -18,11 +19,12 @@ internal static class Program
         using var output = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
         while (input.ReadLine() is { } line)
         {
-            var request = WorkerProtocol.Deserialize<ConversionRequest>(line);
-            var result = request is null
-                ? ConversionResult.Fail("invalid", ErrorCode.WorkerProtocolError, "Malformed request line.")
-                : ConversionJob.Run(request);
-            output.WriteLine(WorkerProtocol.Serialize(result));
+            var message = WorkerProtocol.Deserialize<WorkerMessage>(line);
+            if (message is { Type: not WorkerMessage.RequestType }) continue; // a type this worker does not handle (ADR-0018)
+            var result = message?.Request is { Id: not null, CapabilityId: not null, Inputs: not null } request
+                ? ImageJobs.Run(request)
+                : JobResult.Fail("invalid", ErrorCode.WorkerProtocolError, "Malformed request line.");
+            output.WriteLine(WorkerProtocol.Serialize(WorkerMessage.ForResult(result)));
         }
         return 0;
     }

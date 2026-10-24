@@ -56,7 +56,8 @@ internal static class Program
             var feedback = new FeedbackPresenter(window, toast, info, sounds, log);
             var current = settings;
             toast.ReducedMotionSource = () => Volatile.Read(ref current).ReducedMotion(SystemPreferences.ReducedMotion());
-            var jobs = new JobRunner(new WorkerClient(workerPath, JobTimeout), log, () => Volatile.Read(ref current), feedback);
+            var images = new JobModuleRunner(ImageJobModule.Instance, new WorkerClient(workerPath, JobTimeout, ImageJobModule.Instance), ImageJobModule.Parameters);
+            var jobs = new JobScheduler([images], log, () => Volatile.Read(ref current), feedback);
             coordinator = new InteractionCoordinator(log, window, jobs, feedback, sounds, settings);
             using (coordinator)
             {
@@ -89,6 +90,7 @@ internal static class Program
                 if (listener is null) log.Event("settings.listen", new { ok = false }); // runs on; changes then apply at the next start
                 log.Event("host.start", new { pid = Environment.ProcessId, runtime = Environment.Version.ToString(), log = log.Path, tray = tray.Visible });
                 MessageWindow.RunLoop();
+                jobs.CancelAll(); // exiting: queued jobs never start; running ones stop and their workers are asked to stop, then killed
                 log.Event("host.stop");
             }
         }

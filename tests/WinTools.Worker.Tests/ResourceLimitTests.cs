@@ -14,7 +14,7 @@ public sealed class ResourceLimitTests : IDisposable
     public void Dispose() => _dir.Dispose();
 
     private static Task<IReadOnlyList<ConversionResult>> RunAsync(string op, string source, IReadOnlyDictionary<string, string>? env = null) =>
-        new WorkerClient(WorkerExe, TimeSpan.FromSeconds(120), env, parallelism: 1).RunAsync([new ConversionRequest("r1", op, source)], CancellationToken.None);
+        ImageJobsCompat.Images(WorkerExe, TimeSpan.FromSeconds(120), env, parallelism: 1).RunAsync([new ConversionRequest("r1", op, source)], CancellationToken.None);
 
     [Fact]
     public void The_limit_is_exactly_the_pixel_count_not_one_more()
@@ -50,7 +50,7 @@ public sealed class ResourceLimitTests : IDisposable
     public async Task A_worker_cannot_commit_past_the_memory_cap()
     {
         var source = _dir.CopySample("quadrants-64x48.png", "p.png");
-        var client = new WorkerClient(WorkerExe, TimeSpan.FromSeconds(60), new Dictionary<string, string> { ["WINTOOLS_WORKER_FAULT"] = "alloc-after-read" }, parallelism: 1);
+        var client = ImageJobsCompat.Images(WorkerExe, TimeSpan.FromSeconds(60), new Dictionary<string, string> { ["WINTOOLS_WORKER_FAULT"] = "alloc-after-read" }, parallelism: 1);
         var r = Assert.Single(await client.RunAsync([new ConversionRequest("m1", "convert.to-jpeg", source)], CancellationToken.None));
         Assert.True(client.JobObjectAssigned);
         Assert.Equal(ErrorCode.ImageTooLarge, r.Error);

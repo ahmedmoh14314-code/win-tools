@@ -187,9 +187,9 @@ public sealed class FidelityTests : IDisposable
     {
         var src = _dir.CopySample("quadrants-64x48.jpg", "x.jpg");
         var png = _dir.CopySample("quadrants-64x48.png", "x (rotated right).png");
-        Assert.False(WorkerClient.IsBelievable(new ConversionRequest("r1", "rotate.right", src), ConversionResult.Ok("r1", png, Hash.Of(png))));
+        Assert.False(ImageJobsCompat.IsBelievable(new ConversionRequest("r1", "rotate.right", src), ConversionResult.Ok("r1", png, Hash.Of(png))));
         var jpg = _dir.CopySample("quadrants-64x48.jpg", "x (rotated right).jpg");
-        Assert.True(WorkerClient.IsBelievable(new ConversionRequest("r1", "rotate.right", src), ConversionResult.Ok("r1", jpg, Hash.Of(jpg))));
+        Assert.True(ImageJobsCompat.IsBelievable(new ConversionRequest("r1", "rotate.right", src), ConversionResult.Ok("r1", jpg, Hash.Of(jpg))));
     }
 
     [Fact]
@@ -197,8 +197,8 @@ public sealed class FidelityTests : IDisposable
     {
         var src = _dir.CopySample("quadrants-64x48.png", "p.png");
         Assert.Equal(ErrorCode.UnsupportedOperation, ConversionJob.Run(new ConversionRequest("n1", null!, src)).Error);
-        var client = new WorkerClient(Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.exe"), TimeSpan.FromSeconds(20));
-        var results = await client.RunAsync([new("n2", "", src), new("n3", "convert.to-jpeg", src)], CancellationToken.None);
+        var client = ImageJobsCompat.Images(Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.exe"), TimeSpan.FromSeconds(20));
+        var results = await client.RunAsync([new ConversionRequest("n2", "", src), new ConversionRequest("n3", "convert.to-jpeg", src)], CancellationToken.None);
         Assert.Equal(ErrorCode.UnsupportedOperation, results[0].Error);
         Assert.True(results[1].Success, results[1].Message); // the worker survived
     }

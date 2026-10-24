@@ -80,7 +80,7 @@ public sealed class SecurityReviewTests : IDisposable
         var src = _dir.CopySample("quadrants-64x48.png", "photo.png");
         var other = _dir.CopySample("quadrants-64x48.jpg", "elsewhere.jpg");
         var sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(other)));
-        Assert.False(WorkerClient.IsBelievable(new ConversionRequest("c1", "convert.to-jpeg", src), ConversionResult.Ok("c1", other, sha)));
+        Assert.False(ImageJobsCompat.IsBelievable(new ConversionRequest("c1", "convert.to-jpeg", src), ConversionResult.Ok("c1", other, sha)));
     }
 
     /// <summary>m8: an oversized settings file is not parsed, moved or overwritten.</summary>
