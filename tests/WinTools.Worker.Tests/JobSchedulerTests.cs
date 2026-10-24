@@ -65,7 +65,7 @@ public sealed class JobSchedulerTests : IDisposable
     }
 
     private static CapabilityDescriptor Capability(string id, string module, CapabilityShape shape = CapabilityShape.PerFile) =>
-        new(id, id, "tools", module, new InputRule(_ => true), shape, CapabilityOutput.Facts, LongRunning: true);
+        new(id, id, "tools", module, new InputRule(WinTools.Core.Files.FileKinds.All.Select(k => k.Id).ToHashSet()), shape, CapabilityOutput.Facts, LongRunning: true);
 
     private JobScheduler Scheduler(Recorder recorder, params (string Name, Gate Gate)[] modules) =>
         new([.. modules.Select(m => new JobModuleRunner(new Module(m.Name), m.Gate, _ => null))], _log, () => new AppSettings(), recorder);
