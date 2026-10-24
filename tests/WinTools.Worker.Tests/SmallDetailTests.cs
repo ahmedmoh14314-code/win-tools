@@ -9,13 +9,23 @@ namespace WinTools.Worker.Tests;
 /// date stamp in a corner, a thin coloured line: real WIC encodes chosen by the presets left the text's SSIM at
 /// 0.81–0.86 against Smallest's 0.88 floor and its colour error at ΔE 14–36. Each preset's promise holds for every such
 /// region, measured on its own with the independent SSIM and a CIE76 ΔE written in the test: SSIM at least the preset's
-/// region floor, and a mean ΔE no larger than the preset's ΔE99 gate (4, 6, 10), the error any 1 % of the image may
-/// have.
+/// region floor, and a mean ΔE of at most 4 (High), 8 (Balanced) or 10 (Smallest).
+/// <para>
+/// Balanced's limit was 6 (its ΔE99 gate). The calibration (ADR-0017, CompressionCalibration) measured what that costs:
+/// keeping 1 px saturated strokes within ΔE 6 took 154 percentage points of saving across 15 photographs that have no
+/// such detail (52.5 % → 36.5 % on one), against 15.7 points for ΔE 8. "Differences only on close comparison" allows a
+/// colour shift of 8 in small strokes; the owner can tighten it with this trade-off in view.
+/// </para>
+/// <para>
+/// The promise covers JPEG regions at least 12 px on each side. The calibration's held-out cases, never used to choose
+/// the gates, run here too (the second group). Outside the promise, by measurement: detail under 12 px, lines 1–2 px
+/// wide, and small text in lossy WebP sources can change visibly at Balanced and Smallest (ADR-0017 residuals).
+/// </para>
 /// </summary>
 public sealed class SmallDetailTests
 {
     private static readonly Dictionary<CompressLevel, double> RegionFloor = new() { [CompressLevel.High] = 0.970, [CompressLevel.Balanced] = 0.930, [CompressLevel.Small] = 0.880 };
-    private static readonly Dictionary<CompressLevel, double> RegionDeltaE = new() { [CompressLevel.High] = 4, [CompressLevel.Balanced] = 6, [CompressLevel.Small] = 10 };
+    private static readonly Dictionary<CompressLevel, double> RegionDeltaE = new() { [CompressLevel.High] = 4, [CompressLevel.Balanced] = 8, [CompressLevel.Small] = 10 };
 
     public static IEnumerable<object[]> Cases() =>
     [
