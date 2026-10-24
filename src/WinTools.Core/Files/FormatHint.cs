@@ -6,15 +6,16 @@ namespace WinTools.Core.Files;
 /// </summary>
 public static class FormatHint
 {
-    public static ImageFormat FromPath(string path)
+    public static ImageFormat FromPath(string path) => Of(FileKinds.IdentifyByName(path));
+
+    /// <summary>The image module's format for a file kind; Unknown for a kind that is not an image it reads.</summary>
+    public static ImageFormat Of(FileKind? kind) => kind?.Id switch
     {
-        var ext = Path.GetExtension(path.AsSpan());
-        static bool Is(ReadOnlySpan<char> e, string candidate) => e.Equals(candidate, StringComparison.OrdinalIgnoreCase);
-        if (Is(ext, ".png")) return ImageFormat.Png;
-        if (Is(ext, ".jpg") || Is(ext, ".jpeg") || Is(ext, ".jpe") || Is(ext, ".jfif")) return ImageFormat.Jpeg;
-        if (Is(ext, ".webp")) return ImageFormat.WebP;
-        if (Is(ext, ".bmp") || Is(ext, ".dib")) return ImageFormat.Bmp;
-        if (Is(ext, ".tif") || Is(ext, ".tiff")) return ImageFormat.Tiff;
-        return ImageFormat.Unknown;
-    }
+        "png" => ImageFormat.Png,
+        "jpeg" => ImageFormat.Jpeg,
+        "webp" => ImageFormat.WebP,
+        "bmp" => ImageFormat.Bmp,
+        "tiff" => ImageFormat.Tiff,
+        _ => ImageFormat.Unknown,
+    };
 }

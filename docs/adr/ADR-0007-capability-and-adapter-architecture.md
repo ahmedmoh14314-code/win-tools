@@ -34,6 +34,22 @@ The radial menu must show only valid operations for the dragged input, derived f
 - `tests/WinTools.Core.Tests/FilesAndCapabilitiesTests.cs` (resolver, signature, structure check, naming); `ConversionJobTests.Mislabelled_file_is_refused_by_content`.
 - Explorer end-to-end runs with a `.txt` file: the overlay shows "No actions" and nothing is written.
 
+## Amendment: file kinds and capability descriptors (2026-10-24, V2 PR 1.1)
+V2 adds modules beyond images (V2 plan §5), so the resolver and the menu stop speaking in image terms.
+
+- **`FileKind`** (`WinTools.Core.Files`): a stable id, a family (`Image`, `Other`; more when a module needs one), a display name and its extensions. `FileKinds.IdentifyByName` is the menu-time hint; the worker still checks the content. `FormatHint` maps an image kind to the image module's `ImageFormat`.
+- **`CapabilityDescriptor`** (`WinTools.Core.Capabilities`): `Id`, `Label`, `Category` (an id string), `Module`, an `InputRule` (which kinds, minimum and maximum count), `Shape` (per file or the whole selection), `Produces` (file, files, folder, facts, clipboard), `LongRunning`, and a module-owned `Payload`.
+- **The image module** (`ImageCapabilities`) describes each `Operation` as a capability and keeps the operation as its payload. Nothing outside the module looks inside it. Ids, labels, categories and order are V1's.
+- **`CapabilityResolver`** takes the descriptors of every module and intersects as before. It now also honours each capability's selection size.
+- **`RadialMenu` and `MenuNavigator`** work on descriptors. The category order and icons are still a fixed table; making them module data is V2 PR 1.3.
+- **Jobs still run image operations.** The coordinator unwraps the payload for the job runner, and generic jobs are V2 PR 1.2.
+- **Not added (YAGNI):** content identification beyond today's signatures, families for modules that do not exist yet, parameters and dialogs. Each comes with the PR that needs it.
+
+**Evidence (no behaviour change):**
+- `MenuGoldenTests` pins the V1 menu: 21 selections, including mixed, unsupported, refused and empty ones, under 4 settings for the exact resize. It records every category, command id, label, output format and name suffix (1,270 lines). The golden file was written from main before the change and the refactor reproduces it byte for byte.
+- All earlier tests pass unchanged in what they assert; only their calls moved to the new types.
+- `CapabilityDescriptorTests` covers the kind registry, the image catalog's mapping, the selection-size rule and resolution across two modules.
+
 ## Evaluator review
 Evaluator for the first product slice (2026-10-21), working from the code, the tests, its own probes against the built worker, and the raw end-to-end logs.
 - Pass 1: CHANGES REQUIRED. B1: a rotated JPEG took about 5 minutes through the flip-rotator. M1: a folder with a trailing dot converted its twin. M2: a lone surrogate was altered on the pipe. M3: damaged image data inside an intact container was reported as success. M4: grace/DragEnter race. M5: the harness could not see a lost drop. Plus 12 minor items.

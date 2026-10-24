@@ -31,7 +31,7 @@ public sealed class MenuGoldenTests
         var text = new StringBuilder();
         foreach (var custom in CustomResizes)
         {
-            var resolver = new CapabilityResolver(RadialMenu.Catalog(custom));
+            var resolver = CapabilityResolver.For(custom);
             text.Append("## custom resize: ").AppendLine(custom ?? "none");
             foreach (var selection in Selections)
             {
@@ -39,7 +39,7 @@ public sealed class MenuGoldenTests
                 foreach (var group in RadialMenu.Build(resolver.Resolve(selection)))
                 {
                     text.Append("  [").Append(group.Category).Append("] ").AppendLine(group.Label);
-                    foreach (var op in group.Commands)
+                    foreach (var op in group.Commands.Select(ImageCapabilities.OperationOf))
                         text.Append("    ").Append(op.Id).Append(" | ").Append(op.Label).Append(" | writes ").Append(op.WritesFile)
                             .Append(" | suffix ").Append(op.NameSuffix ?? "-").Append(" | out ")
                             .AppendLine(string.Join(",", selection.Select(p => op.OutputFormat(Files.FormatHint.FromPath(p)))));

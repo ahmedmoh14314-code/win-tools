@@ -8,7 +8,7 @@ namespace WinTools.Core.Tests;
 public sealed class CapabilityResolverTests
 {
     private static readonly CapabilityResolver R = CapabilityResolver.Default;
-    private static string[] Ids(IEnumerable<Operation> ops) => ops.Where(o => o.Kind == OperationKind.Convert).Select(o => o.Id).ToArray();
+    private static string[] Ids(IEnumerable<CapabilityDescriptor> ops) => ops.Where(o => o.Category == "convert").Select(o => o.Id).ToArray();
 
     [Theory]
     [InlineData(@"C:\p\photo.png", "convert.to-jpeg convert.to-webp convert.to-bmp convert.to-tiff")]
@@ -57,9 +57,9 @@ public sealed class CapabilityResolverTests
     [Fact]
     public void The_catalog_drives_the_answer()
     {
-        var onlyPng = new CapabilityResolver([OperationCatalog.Convert(ImageFormat.Png)]);
+        var onlyPng = new CapabilityResolver([ImageCapabilities.Describe(OperationCatalog.Convert(ImageFormat.Png))]);
         Assert.Empty(onlyPng.Resolve([@"C:\a.png"]));
-        Assert.Equal([OperationCatalog.Convert(ImageFormat.Png)], onlyPng.Resolve([@"C:\a.jpg"]));
+        Assert.Equal([OperationCatalog.Convert(ImageFormat.Png)], onlyPng.Resolve([@"C:\a.jpg"]).Select(ImageCapabilities.OperationOf));
     }
 }
 

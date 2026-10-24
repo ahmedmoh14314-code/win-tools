@@ -223,8 +223,7 @@ public sealed class RingLabelsTests
     [MemberData(nameof(Dpis))]
     public void Label_boxes_never_overlap_and_stay_on_the_ring(int dpi)
     {
-        var catalog = RadialMenu.Catalog(new AppSettings().CustomResizeId());
-        var resolver = new CapabilityResolver(catalog);
+        var resolver = CapabilityResolver.For(new AppSettings().CustomResizeId());
         foreach (var name in new[] { "a.png", "a.jpg", "a.webp", "a.bmp", "a.tif" })
         {
             var menu = RadialMenu.Build(resolver.Resolve([$@"C:\images\{name}"]));
