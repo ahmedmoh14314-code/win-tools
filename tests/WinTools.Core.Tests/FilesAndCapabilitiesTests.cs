@@ -357,6 +357,16 @@ public sealed class PathPolicyTests
     }
 
     [Fact]
+    public void A_path_longer_than_260_characters_is_supported()
+    {
+        var path = @"C:\Users\someone\AppData\Local\Temp\wintools-e2e\png-181700\" + string.Concat(Enumerable.Repeat(@"long path segment 0123456789\", 6))
+            + new string('d', 20) + @"\a long file name for the 260 character test photo.png";
+        Assert.True(path.Length > 260);
+        Assert.True(PathPolicy.IsSupported(path));
+        Assert.NotEmpty(CapabilityResolver.Default.Resolve([path]));
+    }
+
+    [Fact]
     public void Lone_surrogates_are_refused()
     {
         // Built at run time: attribute arguments are stored as UTF-8, which cannot carry a lone surrogate.
