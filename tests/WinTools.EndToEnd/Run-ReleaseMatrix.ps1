@@ -67,7 +67,15 @@ if ($HostPath) {
         @('installed-alt',        "alt --cycles 1 $hostArgs",                                        'installed artifact: Alt refused')
     )
 }
-if ($Only.Count -gt 0) { $rows = @($rows | Where-Object { $Only -contains $_[0] }) }
+if ($Only.Count -gt 0) {
+    # powershell.exe -File passes "-Only a,b" as one string: accept commas, and refuse unknown names, so a typo can never
+    # turn into an empty run that reports success.
+    $Only = @($Only | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $unknown = @($Only | Where-Object { $n = $_; -not ($rows | Where-Object { $_[0] -eq $n }) })
+    if ($unknown.Count -gt 0) { throw "Unknown row(s): $($unknown -join ', ')" }
+    $rows = @($rows | Where-Object { $Only -contains $_[0] })
+}
+if ($rows.Count -eq 0) { throw 'No rows to run.' }
 
 $report = New-Object System.Collections.Generic.List[string]
 $report.Add('# Release regression matrix')

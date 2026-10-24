@@ -15,6 +15,7 @@ internal static partial class Desktop
 
     [LibraryImport("user32.dll", SetLastError = true)] private static partial uint SendInput(uint n, [In] INPUT[] inputs, int size);
     [LibraryImport("user32.dll")] private static partial int GetSystemMetrics(int index);
+    [LibraryImport("user32.dll")] private static partial uint MapVirtualKeyW(uint code, uint mapType);
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool GetCursorPos(out POINT p);
     [LibraryImport("user32.dll")] public static partial nint WindowFromPoint(POINT p);
     [LibraryImport("user32.dll")] public static partial nint GetAncestor(nint hwnd, uint flags);
@@ -115,11 +116,24 @@ internal static partial class Desktop
     public static void KeyUp(int vk) => Key(vk, 0x0002);
     public static void Tap(int vk, int holdMs = 40) { KeyDown(vk); Thread.Sleep(holdMs); KeyUp(vk); }
 
-    private static void Mouse(uint flags, int dx = 0, int dy = 0) =>
-        Send(new INPUT { type = 0, u = new INPUTUNION { mi = new MOUSEINPUT { dx = dx, dy = dy, dwFlags = flags } } });
+    /// <summary>Turns the wheel under the cursor: positive notches away from the user (up), negative towards (down).</summary>
+    public static void Wheel(int notches) => Mouse(0x0800, data: unchecked((uint)(notches * 120)));
 
-    private static void Key(int vk, uint flags) =>
-        Send(new INPUT { type = 1, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = (ushort)vk, dwFlags = flags } } });
+    private static void Mouse(uint flags, int dx = 0, int dy = 0, uint data = 0) =>
+        Send(new INPUT { type = 0, u = new INPUTUNION { mi = new MOUSEINPUT { dx = dx, dy = dy, mouseData = data, dwFlags = flags } } });
+
+    // Navigation keys carry their scan code and the extended-key flag, as a real keyboard sends them: Explorer's list
+    // ignored a bare VK_HOME, so a keyboard range (Home, Shift+End) started from the clicked item instead of the first.
+    private static void Key(int vk, uint flags)
+    {
+        var ki = new KEYBDINPUT { wVk = (ushort)vk, dwFlags = flags };
+        if (vk is >= 0x21 and <= 0x28 or 0x2D or 0x2E) // PgUp, PgDn, End, Home, arrows, Insert, Delete
+        {
+            ki.wScan = (ushort)MapVirtualKeyW((uint)vk, 0 /* MAPVK_VK_TO_VSC */);
+            ki.dwFlags |= 0x0001; // KEYEVENTF_EXTENDEDKEY
+        }
+        Send(new INPUT { type = 1, u = new INPUTUNION { ki = ki } });
+    }
 
     private static void Send(INPUT input)
     {

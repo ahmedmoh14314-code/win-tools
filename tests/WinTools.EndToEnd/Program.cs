@@ -275,22 +275,43 @@ using (var explorer = opened)
                         if (holdKey != "ctrl") Desktop.KeyUp(Desktop.VkControl);
                         break;
                     case "shift-range":
-                        // The whole list as one range, as a user makes it: click the first item, Shift-click the last. A list
-                        // longer than the view is ranged from the keyboard (Home, Shift+End), as a user would; then Shift is
-                        // released before the press, because a Shift-press re-ranges from a different anchor (ADR-0003).
-                        if (explorer.EndItemCentre(last: false) is not { } first || !Desktop.Inside(explorer.Hwnd, first.X, first.Y, Px(8))
-                            || explorer.EndItemCentre(last: true) is not { } end || !Desktop.Inside(explorer.Hwnd, end.X, end.Y, Px(8)))
+                        // The whole list as one range, as a user makes it: click the first item, Shift-click the last. In a list
+                        // longer than the view, the user scrolls with the wheel in between (the wheel leaves the selection alone).
+                        // Explorer's list ignores injected Home and End, so a keyboard range is not used. Shift is released
+                        // before the press, because a Shift-press re-ranges from a different anchor (ADR-0003).
+                        var allNames = batchSources.Select(f => Path.GetFileName(f)!).ToArray();
+                        if (explorer.EndItemCentre(last: false) is not { } first || !explorer.HitsItem(first.X, first.Y, allNames))
                         {
-                            if (holdKey == "shift") { Record(new { cycle, abort = "Shift held needs the whole range on screen (Explorer re-ranges a Shift-press)" }); exitCode = 4; break; }
-                            Desktop.Tap(0x24 /* Home */); Thread.Sleep(30);
-                            Desktop.KeyDown(Desktop.VkShift); Desktop.Tap(Desktop.VkEnd); Desktop.KeyUp(Desktop.VkShift);
-                            Thread.Sleep(150);
+                            Record(new { cycle, abort = "first item not visible" }); exitCode = 4; break;
+                        }
+                        // The folder holds only these files, named so that Explorer's name order is ordinal order.
+                        var lastName = allNames.Order(StringComparer.Ordinal).Last();
+                        bool IsLast((string Name, (int X, int Y) Centre)? item) =>
+                            item is { } i && (i.Name == lastName || i.Name == Path.GetFileNameWithoutExtension(lastName)) && explorer.HitsItem(i.Centre.X, i.Centre.Y, allNames);
+                        (int X, int Y)? end = explorer.EndItem(last: true) is var e0 && IsLast(e0) ? e0!.Value.Centre : null;
+                        if (end is null && holdKey == "shift") { Record(new { cycle, abort = "Shift held needs the whole range on screen (Explorer re-ranges a Shift-press)" }); exitCode = 4; break; }
+                        if (end is null)
+                        {
+                            Desktop.MoveTo(first.X, first.Y); Thread.Sleep(30);
+                            Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); Thread.Sleep(60);
+                            for (var turn = 0; turn < 60 && end is null; turn++)
+                            {
+                                Desktop.Wheel(-3); Thread.Sleep(60);
+                                if (explorer.EndItem(last: true) is var e && IsLast(e)) end = e!.Value.Centre;
+                            }
+                            if (end is not { } scrolledEnd) { Record(new { cycle, abort = "last item never scrolled into view" }); exitCode = 4; break; }
+                            Thread.Sleep((int)Desktop.GetDoubleClickTime());
+                            Desktop.KeyDown(Desktop.VkShift);
+                            Desktop.MoveTo(scrolledEnd.X, scrolledEnd.Y); Thread.Sleep(30);
+                            Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); Thread.Sleep(60);
+                            Desktop.KeyUp(Desktop.VkShift);
+                            (lastClick, lastClickAt) = (scrolledEnd, Stopwatch.GetTimestamp());
                             break;
                         }
                         Desktop.MoveTo(first.X, first.Y); Thread.Sleep(30);
                         Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); Thread.Sleep(60);
                         Desktop.KeyDown(Desktop.VkShift);
-                        Desktop.MoveTo(end.X, end.Y); Thread.Sleep(30);
+                        Desktop.MoveTo(end.Value.X, end.Value.Y); Thread.Sleep(30);
                         Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); Thread.Sleep(60);
                         (lastClick, lastClickAt) = (end, Stopwatch.GetTimestamp());
                         if (holdKey != "shift") Desktop.KeyUp(Desktop.VkShift);
@@ -302,11 +323,15 @@ using (var explorer = opened)
                 // Drag from a selected item that is visible now. With Shift held, Explorer treats the press as a Shift-click and
                 // re-ranges the selection from its anchor, so press on the range's end, as a user keeping Shift down would.
                 // Never press where the last click landed within the double-click time: Explorer would open the file.
-                var visible = batchSources.Select(f => explorer.ItemCentre(Path.GetFileName(f)))
-                    .Where(p => p is { } v && Desktop.Inside(explorer.Hwnd, v.X, v.Y, Px(8))).Select(p => p!.Value).ToList();
+                var names = batchSources.Select(f => Path.GetFileName(f)!).ToArray();
+                var visible = explorer.RealisedItemCentres(names)
+                    .Where(v => Desktop.Inside(explorer.Hwnd, v.X, v.Y, Px(8)) && explorer.HitsItem(v.X, v.Y, names)).ToList();
                 if (visible.Count == 0) { if (heldVk != 0) Desktop.KeyUp(heldVk); Record(new { cycle, abort = "no selected item visible to drag" }); exitCode = 4; break; }
-                var vis = selectMode == "shift-range" && lastClick is { } rangeEnd ? rangeEnd
-                    : selectMode == "shift-range" && explorer.EndItemCentre(last: true) is { } keyboardEnd && Desktop.Inside(explorer.Hwnd, keyboardEnd.X, keyboardEnd.Y, Px(8)) ? keyboardEnd
+                Record(new { cycle, candidates = string.Join(" ", visible.Select(v => $"{v.X},{v.Y}")), selection = explorer.StatusText() });
+                var vis = selectMode == "shift-range" && holdKey == "shift" && lastClick is { } rangeEnd ? rangeEnd
+                    // Shift released: any selected item will do, so take the middle one (the range's end may sit at the very
+                    // bottom of the view, partly hidden, where a press starts no drag).
+                    : selectMode == "shift-range" ? visible.OrderBy(v => v.Y).ElementAt(visible.Count / 2)
                     : visible.FirstOrDefault(v => lastClick is not { } lc || Math.Abs(v.X - lc.X) + Math.Abs(v.Y - lc.Y) > Px(8), visible[0]);
                 var sinceClick = Stopwatch.GetElapsedTime(lastClickAt).TotalMilliseconds;
                 if (lastClick is { } l && Math.Abs(vis.X - l.X) + Math.Abs(vis.Y - l.Y) <= Px(8) && sinceClick < Desktop.GetDoubleClickTime() + 50)
@@ -487,7 +512,7 @@ using (var explorer = opened)
                 var bok = allValid && intact && present.SequenceEqual(expectedSet) && baccepted == 1 && btoast && bfocus && bsounds;
                 if (bok) passed++; else exitCode = 1;
                 var dropped = bev.Where(e => Ev(e) == "drop" && Is(e, "accepted", true)).Select(e => Data(e).TryGetProperty("files", out var fc) ? fc.GetInt32() : -1).FirstOrDefault(-1);
-                Record(new { scenario, cycle, op = op?.Id, select = selectMode, hold = holdKey, settleMs, pathStyle, files = batchSources.Count, dropped, outputs = wanted.Count(File.Exists), allValid, sourcesIntact = intact, cleanFolder = present.SequenceEqual(expectedSet), hostAccepted = baccepted,
+                Record(new { scenario, cycle, op = op?.Id, select = selectMode, hold = holdKey, settleMs, pathStyle, files = batchSources.Count, pressAt = $"{cx},{cy}", dropped, outputs = wanted.Count(File.Exists), allValid, sourcesIntact = intact, cleanFolder = present.SequenceEqual(expectedSet), hostAccepted = baccepted,
                     toastShown = btoast, focusKept = bfocus, soundsHeld = bsounds, ok = bok });
                 foreach (var w in wanted) if (File.Exists(w)) File.Delete(w);
                 Thread.Sleep((int)Desktop.GetDoubleClickTime() + 300);
