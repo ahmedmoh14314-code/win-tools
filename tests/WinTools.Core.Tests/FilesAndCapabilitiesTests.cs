@@ -366,6 +366,30 @@ public sealed class PathPolicyTests
         Assert.NotEmpty(CapabilityResolver.Default.Resolve([path]));
     }
 
+    // PathPolicy runs on the UI thread for every dropped path. Path.GetFullPath expands a name with '~' by asking the
+    // file system (a network round trip on a UNC path), so an 8.3 alias was refused only when that lookup succeeded,
+    // and a hostile source could stall the overlay with thousands of such paths. Aliases are recognised by shape now.
+    [Theory]
+    [InlineData(@"C:\nowhere\LONGPA~1\photo.png")]
+    [InlineData(@"C:\nowhere\folder\PHOTO~12.PNG")]
+    [InlineData(@"\\wintools-test-host.invalid\share\LONGPA~1\a.png")]
+    [InlineData(@"Z:\A~1\B.JPG")]
+    public void An_8_3_alias_is_recognised_without_asking_the_file_system(string path)
+    {
+        Assert.Equal(PathVerdict.ShortName, PathPolicy.Explain(path));
+    }
+
+    [Theory]
+    [InlineData(@"C:\p\my~holiday.png")]
+    [InlineData(@"C:\p\~draft.jpg")]
+    [InlineData(@"C:\p\photo~2.png")]          // lower case: a name a person chose, not an alias (aliases are upper case)
+    [InlineData(@"C:\p\LONG FOLDER~1\a.png")]  // a space cannot be in an alias
+    [InlineData(@"C:\p\ABCDEFGHI~1.PNG")]      // more than 8 characters before the extension
+    public void Long_names_with_a_tilde_are_supported(string path)
+    {
+        Assert.Equal(PathVerdict.Supported, PathPolicy.Explain(path));
+    }
+
     [Fact]
     public void Lone_surrogates_are_refused()
     {
