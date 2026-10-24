@@ -75,6 +75,16 @@ public sealed class TextWorkerTests : IDisposable
     }
 
     [Fact]
+    public void An_avif_that_lists_its_brand_second_is_still_an_avif()
+    {
+        // ftyp box: size 24, major brand "mif1", minor version, compatible brands "avif" and "miaf".
+        byte[] head = [0, 0, 0, 24, .. "ftyp"u8, .. "mif1"u8, 0, 0, 0, 0, .. "avif"u8, .. "miaf"u8, 0, 0, 0, 0];
+        var type = Run(FilesCapabilities.InfoId, _dir.Write("photo.avif", head)).Facts.Single(f => f.Label == "Type");
+        Assert.Equal("AVIF image", type.Value);
+        Assert.False(type.Notice);
+    }
+
+    [Fact]
     public void An_online_only_file_is_never_read()
     {
         // Reading a cloud placeholder downloads it (evaluator, PR #18). The offline attribute stands in for one here.

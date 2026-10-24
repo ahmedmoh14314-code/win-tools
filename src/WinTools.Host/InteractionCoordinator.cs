@@ -226,7 +226,9 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     private bool BuildMenu(IReadOnlyList<string> paths, int startDx, int startDy, TimeSpan shownAt)
     {
         if (_navigator is not null && (_navigator.Groups.Count > 0 || paths.Count == 0)) return false;
-        _navigator = new MenuNavigator(RadialMenu.Build(_sessionResolver, paths), _dpi, RadialMenu.EmptyReason(_sessionResolver, paths));
+        var menu = RadialMenu.Build(_sessionResolver, paths);
+        // The reason is worked out only for an empty ring: it resolves the selection again (evaluator, PR #18).
+        _navigator = new MenuNavigator(menu, _dpi, menu.Count == 0 ? RadialMenu.EmptyReason(_sessionResolver, paths) : null);
         _navigator.Shown(startDx, startDy, shownAt, _dpi);
         return true;
     }

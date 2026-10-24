@@ -66,7 +66,7 @@ internal static class FileJobs
                 new("Modified", When(file.LastWriteTime)),
                 new("Created", When(file.CreationTime)),
             };
-            if (Attributes(named.Attributes) is { } a) online.Add(new("Attributes", a));
+            if (Attributes(named.Attributes & ~(FileAttributes.Offline | RecallOnDataAccess)) is { } a) online.Add(new("Attributes", a)); // "Online only" is already the type
             return JobResult.WithFacts(id, online);
         }
         var head = new byte[ContentType.HeaderLength];

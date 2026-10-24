@@ -59,12 +59,15 @@ internal static class ContentType
         if (head.Length >= 10 && head.StartsWith("ID3"u8) && head[3] is >= 2 and <= 4 && head[4] != 0xFF && head[6..10].IndexOfAnyInRange((byte)0x80, (byte)0xFF) < 0)
             return new("MP3 audio", "mp3");
         if (head.Length >= 12 && head[4..8].SequenceEqual("ftyp"u8))
-            return System.Text.Encoding.ASCII.GetString(head[8..12]) switch
-            {
-                "heic" or "heix" or "hevc" or "heim" or "heis" or "mif1" or "msf1" => new("HEIF image", "heif"),
-                "avif" or "avis" => new("AVIF image", "avif"),
-                _ => new("MP4 or QuickTime media", "mp4"),
-            };
+        {
+            // The major brand, then the compatible ones (an AVIF may say "mif1" first and "avif" after).
+            var size = (int)Math.Min(head.Length, System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(head[..4]));
+            var brands = new List<string> { System.Text.Encoding.ASCII.GetString(head[8..12]) };
+            for (var at = 16; at + 4 <= size; at += 4) brands.Add(System.Text.Encoding.ASCII.GetString(head.Slice(at, 4)));
+            if (brands.Any(b => b is "avif" or "avis")) return new("AVIF image", "avif");
+            if (brands.Any(b => b is "heic" or "heix" or "hevc" or "heim" or "heis" or "mif1" or "msf1")) return new("HEIF image", "heif");
+            return new("MP4 or QuickTime media", "mp4");
+        }
         foreach (var (magic, offset, kind) in Signatures)
             if (head.Length >= offset + magic.Length && head.Slice(offset, magic.Length).SequenceEqual(magic)) return kind;
         if (head.StartsWith((ReadOnlySpan<byte>)[0xEF, 0xBB, 0xBF]) || head.StartsWith((ReadOnlySpan<byte>)[0xFF, 0xFE]) || head.StartsWith((ReadOnlySpan<byte>)[0xFE, 0xFF]))
