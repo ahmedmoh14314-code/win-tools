@@ -5,7 +5,7 @@ namespace WinTools.EndToEnd;
 /// <summary>SendInput and window queries for the harness. Absolute moves use virtual-desktop coordinates.</summary>
 internal static partial class Desktop
 {
-    public const int VkSpace = 0x20, VkEscape = 0x1B, VkControl = 0x11, VkShift = 0x10, VkAlt = 0x12, VkEnd = 0x23;
+    public const int VkSpace = 0x20, VkEscape = 0x1B, VkControl = 0x11, VkShift = 0x10, VkAlt = 0x12;
 
     [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] private struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public nuint extra; }
@@ -111,12 +111,31 @@ internal static partial class Desktop
 
     public static void LeftDown() => Mouse(0x0002);
     public static void LeftUp() => Mouse(0x0004);
+
+    /// <summary>
+    /// Whether the user swapped the mouse buttons. Injected LEFTDOWN is the physical left button, which is then the logical
+    /// right one: every click would open a context menu. The harness refuses to run (evaluator, PR #14).
+    /// </summary>
+    public static bool ButtonsSwapped => GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0;
+
+    /// <summary>Releases every key and button the harness may hold, each on its own: one failing never skips the rest.</summary>
+    public static void ReleaseAll()
+    {
+        foreach (var release in new Action[] { () => KeyUp(VkControl), () => KeyUp(VkShift), () => KeyUp(VkAlt), () => Tap(VkEscape), () => KeyUp(VkSpace), LeftUp })
+        {
+            try { release(); }
+            catch (InvalidOperationException) { } // SendInput refused (secure desktop, lock screen): nothing more can be done from here
+        }
+    }
     public static void KeyDown(int vk) => Key(vk, 0);
     public static void KeyUp(int vk) => Key(vk, 0x0002);
     public static void Tap(int vk, int holdMs = 40) { KeyDown(vk); Thread.Sleep(holdMs); KeyUp(vk); }
 
-    private static void Mouse(uint flags, int dx = 0, int dy = 0) =>
-        Send(new INPUT { type = 0, u = new INPUTUNION { mi = new MOUSEINPUT { dx = dx, dy = dy, dwFlags = flags } } });
+    /// <summary>Turns the wheel under the cursor: positive notches away from the user (up), negative towards (down).</summary>
+    public static void Wheel(int notches) => Mouse(0x0800, data: unchecked((uint)(notches * 120)));
+
+    private static void Mouse(uint flags, int dx = 0, int dy = 0, uint data = 0) =>
+        Send(new INPUT { type = 0, u = new INPUTUNION { mi = new MOUSEINPUT { dx = dx, dy = dy, mouseData = data, dwFlags = flags } } });
 
     private static void Key(int vk, uint flags) =>
         Send(new INPUT { type = 1, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = (ushort)vk, dwFlags = flags } } });
