@@ -82,30 +82,47 @@ internal static class LossyCompression
         return best;
     }
 
-    /// <summary>The lowest quality on the ladder that passes the gates and is small enough, by bisection; and whether the
-    /// search finished before the deadline.</summary>
+    /// <summary>The lowest quality on the ladder that passes the gates and is small enough; and whether the search finished
+    /// before the deadline.</summary>
     private static (Candidate? Found, bool Finished) Search(RasterImage image, ImageFormat format, Preset preset, int[] ladder, bool fullChroma, long largestUseful,
         Func<TimeSpan> elapsed, CancellationToken cancel)
     {
-        Candidate? found = null;
-        int lo = 0, hi = ladder.Length - 1;
-        while (lo <= hi)
+        var encoded = new byte[ladder.Length][];
+        var candidates = new Candidate?[ladder.Length];
+        byte[] Bytes(int i) => encoded[i] ??= Encode(image, format, ladder[i], fullChroma);
+        bool Passes(int i)
         {
             cancel.ThrowIfCancellationRequested();
-            if (elapsed() >= SearchBudget) return (found, false);
-            var mid = (lo + hi) / 2;
-            var bytes = Encode(image, format, ladder[mid], fullChroma);
-            if (bytes.LongLength > largestUseful) { lo = mid + 1; continue; } // too big: only a lower quality can help
-            var decoded = ImagePipeline.Decode(bytes, format).Image;
+            var decoded = ImagePipeline.Decode(Bytes(i), format).Image;
             var fidelity = Fidelity.Compare(image, decoded);
-            if (preset.Accepts(fidelity) && SameAlpha(image, decoded))
-            {
-                found = new Candidate(bytes, ladder[mid], fullChroma, fidelity);
-                lo = mid + 1;
-            }
+            if (!preset.Accepts(fidelity) || !SameAlpha(image, decoded)) return false;
+            candidates[i] = new Candidate(Bytes(i), ladder[i], fullChroma, fidelity);
+            return true;
+        }
+        var chosen = Choose(ladder.Length, i => Bytes(i).LongLength <= largestUseful, Passes, () => elapsed() >= SearchBudget, out var finished);
+        return (chosen is { } c ? candidates[c] : null, finished);
+    }
+
+    /// <summary>
+    /// The search over ladder indexes (0 is the highest quality, larger indexes encode smaller): the largest index that
+    /// is small enough and passes. Bisection, because a candidate that is too big leaves only lower qualities, and pass
+    /// or fail is close to monotonic in quality. <paramref name="finished"/> is false when the deadline cut it short.
+    /// </summary>
+    internal static int? Choose(int count, Func<int, bool> smallEnough, Func<int, bool> passes, Func<bool> outOfTime, out bool finished)
+    {
+        int? best = null;
+        int lo = 0, hi = count - 1;
+        finished = false;
+        while (lo <= hi)
+        {
+            if (outOfTime()) return best;
+            var mid = (lo + hi) / 2;
+            if (!smallEnough(mid)) { lo = mid + 1; continue; } // too big: only a lower quality can help
+            if (passes(mid)) { best = mid; lo = mid + 1; }
             else hi = mid - 1;
         }
-        return (found, true);
+        finished = true;
+        return best;
     }
 
     /// <summary>Fidelity is measured on white, where a change in transparency alone would not show: alpha must not change.</summary>

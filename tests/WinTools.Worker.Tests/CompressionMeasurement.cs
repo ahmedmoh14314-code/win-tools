@@ -189,5 +189,26 @@ public sealed class CompressionMeasurement(ITestOutputHelper output) : IDisposab
             }
     }
 
+    /// <summary>
+    /// Every axis across the ladder for one real file named by WINTOOLS_MEASURE_FILE (a JPEG or WebP): how to check a file
+    /// the owner reports, without adding it to the repository.
+    /// </summary>
+    [MeasurementFact]
+    public void Measure_a_named_file()
+    {
+        var path = Environment.GetEnvironmentVariable("WINTOOLS_MEASURE_FILE");
+        if (string.IsNullOrEmpty(path)) { output.WriteLine("WINTOOLS_MEASURE_FILE is not set"); return; }
+        var source = File.ReadAllBytes(path);
+        var format = WinTools.Core.Files.FileSignature.Detect(source);
+        var original = ImagePipeline.Decode(source, format).Image;
+        output.WriteLine($"{Path.GetFileName(path)}: {original.Width}x{original.Height} {format}, {source.Length} bytes, 4:4:4 {WinTools.Core.Files.Metadata.IsFullChromaJpeg(source)}");
+        foreach (var q in new[] { 95, 93, 90, 88, 85, 82, 80, 75, 70, 65, 60, 55, 50 })
+        {
+            var bytes = format == WinTools.Core.Files.ImageFormat.Jpeg ? WicCodec.Encode(original, format, q / 100f) : SkiaCodec.EncodeWebP(original, q, lossless: false);
+            var f = Fidelity.Compare(original, ImagePipeline.Decode(bytes, format).Image);
+            output.WriteLine($"q{q}: saved {100.0 * (source.Length - bytes.Length) / source.Length,5:0.0}% luma {f.LumaSsim:0.0000} worst {f.WorstLumaSsim:0.0000} chroma {f.ChromaSsim:0.0000} dE {f.MeanDeltaE:0.00} dE99 {f.DeltaE99:0.00} edge {f.EdgeSsim:0.0000} tile {f.WorstTileLumaSsim:0.0000} tileDE {f.WorstTileDeltaE:0.00}");
+        }
+    }
+
     public void Dispose() => _dir.Dispose();
 }
