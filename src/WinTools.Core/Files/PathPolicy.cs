@@ -41,6 +41,8 @@ public static class PathPolicy
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return PathVerdict.NotCanonical; }
         if (!string.Equals(full, probe, StringComparison.Ordinal)) return PathVerdict.NotCanonical;
         if (HasShortAlias(path)) return PathVerdict.ShortName;
+        if (Path.EndsInDirectorySeparator(path)) // a folder, marked by the drop target (ADR-0019); never a drive or share root
+            return Path.GetPathRoot(path) != path && Path.GetFileName(Path.TrimEndingDirectorySeparator(path)).Length > 0 ? PathVerdict.Supported : PathVerdict.NoStem;
         return Path.GetFileNameWithoutExtension(path).Length > 0 ? PathVerdict.Supported : PathVerdict.NoStem;
     }
 

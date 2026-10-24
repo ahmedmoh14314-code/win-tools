@@ -44,6 +44,8 @@ public enum ErrorCode
     WorkerProtocolError,
     Cancelled,
     Internal,
+    /// <summary>A folder reached a command that reads files (one named like a file, "holiday.png").</summary>
+    IsAFolder,
 }
 
 /// <summary>The worker's answer. Success carries the final output path; failure carries a code and a short message.</summary>

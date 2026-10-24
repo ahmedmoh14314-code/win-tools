@@ -10,8 +10,9 @@ namespace WinTools.Core.Interaction;
 /// <param name="FirstSweep">Width of sector 0 (Back on a category's ring), or 0 when all sectors are equal.</param>
 /// <param name="Categories">On the categories' ring, the icon key of each sector; otherwise null.</param>
 /// <param name="Open">On a category's ring, that category's icon key; otherwise null.</param>
+/// <param name="EmptyText">For a ring with no commands, what it says instead of "No actions" (RadialMenu.EmptyReason).</param>
 public sealed record MenuView(IReadOnlyList<string> Labels, double Start, int Hot, bool Armed, string Hub, double FirstSweep = 0,
-    IReadOnlyList<string>? Categories = null, string? Open = null);
+    IReadOnlyList<string>? Categories = null, string? Open = null, string? EmptyText = null);
 
 /// <summary>
 /// Navigation of the two-level radial menu during a drag, driven only by pointer offsets from the centre of the ring
@@ -46,9 +47,12 @@ public sealed class MenuNavigator
     private bool _hubVisited;
     private TimeSpan _shownAt;
 
-    public MenuNavigator(IReadOnlyList<MenuGroup> groups, uint dpi)
+    private readonly string? _emptyText;
+
+    public MenuNavigator(IReadOnlyList<MenuGroup> groups, uint dpi, string? emptyText = null)
     {
         _groups = groups;
+        _emptyText = groups.Count == 0 ? emptyText : null;
         _groupLabels = groups.Select(g => g.Label).ToArray();
         _levelLabels = groups.Select(g => new[] { BackLabel }.Concat(g.Commands.Select(c => c.Label)).ToArray()).ToArray();
         _categories = groups.Select(g => g.Category.Icon).ToArray();
@@ -121,7 +125,7 @@ public sealed class MenuNavigator
     public TimeSpan ShownFor(TimeSpan now) => now - _shownAt;
 
     public MenuView View(TimeSpan now) => _level < 0
-        ? new MenuView(_groupLabels, 0, _hot, false, "", 0, _categories)
+        ? new MenuView(_groupLabels, 0, _hot, false, "", 0, _categories, EmptyText: _emptyText)
         : new MenuView(_levelLabels[_level], Start, _hot, Armed(now) is not null, _groups[_level].Label, FirstSweep, null, _groups[_level].Category.Icon);
 
     private void SetDpi(uint dpi)

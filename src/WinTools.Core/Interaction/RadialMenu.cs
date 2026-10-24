@@ -43,7 +43,7 @@ public static class RadialMenu
         if (group.Commands.Count <= RingCapacity - 1) return group;
         var shown = group.Commands.Take(RingCapacity - 2).ToArray();
         var rest = group.Commands.Skip(RingCapacity - 2).ToArray();
-        var more = new CapabilityDescriptor(MoreId, "More…", group.Category.Id, "menu", new InputRule(_ => true),
+        var more = new CapabilityDescriptor(MoreId, "More…", group.Category.Id, "menu", new InputRule(new HashSet<string>()), // never resolved: it only carries the overflow
             CapabilityShape.Selection, CapabilityOutput.Facts, LongRunning: false, Payload: rest);
         return group with { Commands = [.. shown, more] };
     }
@@ -54,6 +54,13 @@ public static class RadialMenu
     /// <summary>The commands a "More…" sector holds, in menu order.</summary>
     public static IReadOnlyList<CapabilityDescriptor> Overflow(CapabilityDescriptor more) =>
         IsMore(more) ? (IReadOnlyList<CapabilityDescriptor>)more.Payload! : throw new ArgumentException($"{more.Id} is not a More… sector.", nameof(more));
+
+    /// <summary>
+    /// Why a selection gets no commands, when the ring can say something more useful than "No actions": folders, which
+    /// no command of today's modules reads (UX-009). Null for the general case.
+    /// </summary>
+    public static string? EmptyReason(IReadOnlyList<string> paths) =>
+        paths.Any(p => ReferenceEquals(Files.FileKinds.IdentifyByName(p), Files.FileKinds.Folder)) ? "Not for folders" : null;
 
     /// <summary>The menu for what a resolver allows, with that resolver's categories.</summary>
     public static IReadOnlyList<MenuGroup> Build(CapabilityResolver resolver, IReadOnlyList<string> paths) => Build(resolver.Resolve(paths), resolver.Categories);

@@ -225,7 +225,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     private bool BuildMenu(IReadOnlyList<string> paths, int startDx, int startDy, TimeSpan shownAt)
     {
         if (_navigator is not null && (_navigator.Groups.Count > 0 || paths.Count == 0)) return false;
-        _navigator = new MenuNavigator(RadialMenu.Build(_sessionResolver, paths), _dpi);
+        _navigator = new MenuNavigator(RadialMenu.Build(_sessionResolver, paths), _dpi, RadialMenu.EmptyReason(paths));
         _navigator.Shown(startDx, startDy, shownAt, _dpi);
         return true;
     }
