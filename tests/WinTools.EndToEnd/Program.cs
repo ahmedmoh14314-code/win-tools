@@ -35,6 +35,11 @@ using WinTools.EndToEnd;
 // sound the host logged must follow the rules: one level sound per level change, never more ticks than sector changes.
 
 var scenario = args.Length > 0 ? args[0] : "png";
+if (Desktop.ButtonsSwapped)
+{
+    Console.Error.WriteLine("The mouse buttons are swapped in Windows settings; injected clicks would be right-clicks. Not running.");
+    return 6;
+}
 var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; string? opArg = null; var batchSize = 12; var animations = "On"; string? hostArg = null; var selectMode = "ctrl-a"; var holdKey = "none"; var settleMs = 250; var pathStyle = "plain"; var expectNothing = false;
 for (var i = 1; i < args.Length; i++)
 {
@@ -85,7 +90,9 @@ if (pathStyle == "long")
     // Nest until the folder is just under 248 characters (the longest folder Explorer opens); the file name then takes
     // the source's full path past 260, which the product must handle (\\?\ paths).
     while (folder.Length < 220) folder = Path.Combine(folder, "long path segment 0123456789");
-    folder = Path.Combine(folder, new string('d', 246 - folder.Length - 1));
+    // Pad to 246 when there is room; a temp path that already lands at 245-248 needs no pad (evaluator, PR #14: the pad
+    // went negative for some profile-name lengths).
+    if (folder.Length <= 244) folder = Path.Combine(folder, new string('d', 246 - folder.Length - 1));
 }
 if (pathStyle != "plain")
     sourceName = (pathStyle == "unicode" ? "صورة 😀 " : "a long file name for the 260 character test ") + sourceName;
@@ -191,7 +198,8 @@ static bool SoundsHeld(IEnumerable<JsonElement> events) => events.Where(e => Dat
 
 ExplorerWindow opened;
 try { opened = ExplorerWindow.Open(folder); }
-catch (InvalidOperationException ex)
+catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException or System.ComponentModel.Win32Exception
+    or System.Windows.Automation.ElementNotAvailableException)
 {
     // Never leave the harness's host running behind a failed start.
     if (!host.HasExited) { host.Kill(); host.WaitForExit(5000); }
@@ -244,6 +252,7 @@ using (var explorer = opened)
 
             var heldVk = holdKey switch { "ctrl" => Desktop.VkControl, "shift" => Desktop.VkShift, _ => 0 };
             (int X, int Y)? lastClick = null; var lastClickAt = 0L;
+            double? pressGapMs = null; string? selectionText = null; var candidateCount = 0;
             if (scenario == "batch")
             {
                 // Select the harness folder's files (guarded), then drag one of the selected items. With --hold the modifier
@@ -252,14 +261,25 @@ using (var explorer = opened)
                 Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp();
                 Thread.Sleep((int)Desktop.GetDoubleClickTime() + 200);
                 if (!explorer.EnsureForeground(cx, cy)) { Record(new { cycle, abort = "foreground lost before selecting" }); exitCode = 4; break; }
+                // Where to press is worked out BEFORE the last selection input: walking the UI Automation tree takes time, and
+                // "--settle-ms 0" must mean a press right after selecting, as a quick user does (evaluator, PR #14). Positions
+                // do not change with the selection; the gap from the last selection input to the press is recorded.
+                var names = batchSources.Select(f => Path.GetFileName(f)!).ToArray();
+                List<(int X, int Y)> Candidates() => explorer.RealisedItemCentres(names)
+                    .Where(v => Desktop.Inside(explorer.Hwnd, v.X, v.Y, Px(8)) && explorer.HitsItem(v.X, v.Y, names)).ToList();
+                List<(int X, int Y)> visible = [];
+                var selectedAt = 0L;
                 switch (selectMode)
                 {
                     case "ctrl-a":
+                        visible = Candidates();
                         Desktop.KeyDown(Desktop.VkControl); Desktop.Tap('A');
+                        selectedAt = Stopwatch.GetTimestamp();
                         if (holdKey != "ctrl") Desktop.KeyUp(Desktop.VkControl);
                         break;
                     case "ctrl-click":
                         // The first item is already selected by the plain click; add the others one by one with Ctrl held.
+                        visible = Candidates();
                         Desktop.KeyDown(Desktop.VkControl);
                         foreach (var other in batchSources.Where(f => Path.GetFileName(f) != grabName))
                         {
@@ -274,6 +294,7 @@ using (var explorer = opened)
                             (lastClick, lastClickAt) = (oc, Stopwatch.GetTimestamp());
                         }
                         if (exitCode == 4) break;
+                        selectedAt = lastClickAt;
                         if (holdKey != "ctrl") Desktop.KeyUp(Desktop.VkControl);
                         break;
                     case "shift-range":
@@ -302,20 +323,25 @@ using (var explorer = opened)
                                 if (explorer.EndItem(last: true) is var e && IsLast(e)) end = e!.Value.Centre;
                             }
                             if (end is not { } scrolledEnd) { Record(new { cycle, abort = "last item never scrolled into view" }); exitCode = 4; break; }
+                            visible = Candidates();
                             Thread.Sleep((int)Desktop.GetDoubleClickTime());
+                            if (!explorer.EnsureForeground(scrolledEnd.X, scrolledEnd.Y)) { Record(new { cycle, abort = "foreground lost while scrolling" }); exitCode = 4; break; }
                             Desktop.KeyDown(Desktop.VkShift);
                             Desktop.MoveTo(scrolledEnd.X, scrolledEnd.Y); Thread.Sleep(30);
                             Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); Thread.Sleep(60);
                             Desktop.KeyUp(Desktop.VkShift);
                             (lastClick, lastClickAt) = (scrolledEnd, Stopwatch.GetTimestamp());
+                            selectedAt = lastClickAt;
                             break;
                         }
+                        visible = Candidates();
                         Desktop.MoveTo(first.X, first.Y); Thread.Sleep(30);
                         Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); Thread.Sleep(60);
                         Desktop.KeyDown(Desktop.VkShift);
                         Desktop.MoveTo(end.Value.X, end.Value.Y); Thread.Sleep(30);
                         Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); Thread.Sleep(60);
                         (lastClick, lastClickAt) = (end, Stopwatch.GetTimestamp());
+                        selectedAt = lastClickAt;
                         if (holdKey != "shift") Desktop.KeyUp(Desktop.VkShift);
                         break;
                 }
@@ -325,11 +351,8 @@ using (var explorer = opened)
                 // Drag from a selected item that is visible now. With Shift held, Explorer treats the press as a Shift-click and
                 // re-ranges the selection from its anchor, so press on the range's end, as a user keeping Shift down would.
                 // Never press where the last click landed within the double-click time: Explorer would open the file.
-                var names = batchSources.Select(f => Path.GetFileName(f)!).ToArray();
-                var visible = explorer.RealisedItemCentres(names)
-                    .Where(v => Desktop.Inside(explorer.Hwnd, v.X, v.Y, Px(8)) && explorer.HitsItem(v.X, v.Y, names)).ToList();
                 if (visible.Count == 0) { if (heldVk != 0) Desktop.KeyUp(heldVk); Record(new { cycle, abort = "no selected item visible to drag" }); exitCode = 4; break; }
-                Record(new { cycle, candidates = string.Join(" ", visible.Select(v => $"{v.X},{v.Y}")), selection = explorer.StatusText() });
+                candidateCount = visible.Count;
                 var vis = selectMode == "shift-range" && holdKey == "shift" && lastClick is { } rangeEnd ? rangeEnd
                     // Shift released: any selected item will do, so take the middle one (the range's end may sit at the very
                     // bottom of the view, partly hidden, where a press starts no drag).
@@ -339,9 +362,15 @@ using (var explorer = opened)
                 if (lastClick is { } l && Math.Abs(vis.X - l.X) + Math.Abs(vis.Y - l.Y) <= Px(8) && sinceClick < Desktop.GetDoubleClickTime() + 50)
                     Thread.Sleep((int)(Desktop.GetDoubleClickTime() + 50 - sinceClick));
                 (cx, cy) = vis;
+                Desktop.MoveTo(cx, cy);
+                pressGapMs = Math.Round(Stopwatch.GetElapsedTime(selectedAt).TotalMilliseconds, 1);
+                Desktop.LeftDown(); Thread.Sleep(80);
             }
-            Desktop.MoveTo(cx, cy); Thread.Sleep(60);
-            Desktop.LeftDown(); Thread.Sleep(80);
+            else
+            {
+                Desktop.MoveTo(cx, cy); Thread.Sleep(60);
+                Desktop.LeftDown(); Thread.Sleep(80);
+            }
             Desktop.GlideTo(cx + Px(40), cy + Px(30));
             if (scenario == "edge")
             {
@@ -511,10 +540,14 @@ using (var explorer = opened)
                 var bev = HostEventsSinceLastCycle();
                 var baccepted = bev.Count(e => Ev(e) == "drop" && Is(e, "accepted", true));
                 var bsounds = SoundsHeld(bev);
-                var bok = allValid && intact && present.SequenceEqual(expectedSet) && baccepted == 1 && btoast && bfocus && bsounds;
+                selectionText = explorer.StatusText(); // diagnostics, read after the drop so it cannot delay the press
+                // "At once" is a claim the record must prove: with --settle-ms 0 the press follows the last selection input
+                // within 150 ms (the move to the item and the input queue), unless a double-click wait was unavoidable.
+                var atOnce = settleMs > 0 || pressGapMs is <= 150;
+                var bok = allValid && intact && present.SequenceEqual(expectedSet) && baccepted == 1 && btoast && bfocus && bsounds && atOnce;
                 if (bok) passed++; else exitCode = 1;
                 var dropped = bev.Where(e => Ev(e) == "drop" && Is(e, "accepted", true)).Select(e => Data(e).TryGetProperty("files", out var fc) ? fc.GetInt32() : -1).FirstOrDefault(-1);
-                Record(new { scenario, cycle, op = op?.Id, select = selectMode, hold = holdKey, settleMs, pathStyle, files = batchSources.Count, pressAt = $"{cx},{cy}", dropped, outputs = wanted.Count(File.Exists), allValid, sourcesIntact = intact, cleanFolder = present.SequenceEqual(expectedSet), hostAccepted = baccepted,
+                Record(new { scenario, cycle, op = op?.Id, select = selectMode, hold = holdKey, settleMs, pathStyle, files = batchSources.Count, pressAt = $"{cx},{cy}", pressGapMs, atOnce, candidates = candidateCount, selection = selectionText, dropped, outputs = wanted.Count(File.Exists), allValid, sourcesIntact = intact, cleanFolder = present.SequenceEqual(expectedSet), hostAccepted = baccepted,
                     toastShown = btoast, focusKept = bfocus, soundsHeld = bsounds, ok = bok });
                 foreach (var w in wanted) if (File.Exists(w)) File.Delete(w);
                 Thread.Sleep((int)Desktop.GetDoubleClickTime() + 300);
@@ -611,10 +644,9 @@ using (var explorer = opened)
         }
         catch
         {
-            // Never leave a synthetic drag behind: cancel it, release everything, stop the host, then fail loudly.
-            Desktop.KeyUp(Desktop.VkControl); Desktop.KeyUp(Desktop.VkShift); Desktop.KeyUp(Desktop.VkAlt); // before Escape
-            Desktop.Tap(Desktop.VkEscape); Desktop.KeyUp(Desktop.VkSpace); Desktop.LeftUp();
-            if (!host.HasExited) host.Kill();
+            // Never leave a synthetic drag behind: cancel it, release everything (each on its own), stop the host, fail loudly.
+            try { Desktop.ReleaseAll(); }
+            finally { if (!host.HasExited) host.Kill(); }
             throw;
         }
     }
@@ -630,8 +662,7 @@ var spaceDownAtEnd = Desktop.IsDown(Desktop.VkSpace);
 var modifiersDownAtEnd = Desktop.IsDown(Desktop.VkControl) || Desktop.IsDown(Desktop.VkShift) || Desktop.IsDown(Desktop.VkAlt);
 if (leftDownAtEnd || spaceDownAtEnd || modifiersDownAtEnd)
 {
-    Desktop.KeyUp(Desktop.VkControl); Desktop.KeyUp(Desktop.VkShift); Desktop.KeyUp(Desktop.VkAlt); // before Escape
-    Desktop.Tap(Desktop.VkEscape); Desktop.KeyUp(Desktop.VkSpace); Desktop.LeftUp();
+    Desktop.ReleaseAll();
     exitCode = 5;
 }
 Record(new { scenario, summary = true, cycles, passed, hostAliveAtEnd = hostAlive, leftDownAtEnd, spaceDownAtEnd, modifiersDownAtEnd, hostPrivateMb, hostWorkingSetMb, hostLog = Path.GetFullPath(hostLog), folder });

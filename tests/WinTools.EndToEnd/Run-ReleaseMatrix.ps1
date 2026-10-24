@@ -8,6 +8,12 @@
 #       [-HostPath <WinTools.Host.exe>]      run the installed-artifact subset against this host (e.g. the installed copy)
 #       [-Results <folder>]                  default: %TEMP%\wintools-e2e\matrix-<time>
 #       [-Only <name,name>]                  run only these rows (names as in the report)
+#       [-IdleSeconds 20]                    how long nobody may have touched the mouse or keyboard before injecting
+#       [-MaxWaitMinutes 30]                 give up when the desktop stays in use this long
+#       [-RowMinutes 15]                     a row that runs longer is stopped and every key and button released
+#
+# Start it and leave the PC: it waits until the mouse and keyboard have been idle for -IdleSeconds before the first
+# row, and pauses the same way whenever someone uses the PC between rows. It never injects while the PC is in use.
 #
 # Not automated here, by design: restarting Explorer (it is the user's shell), sign-in with "Start with Windows", and
 # rubber-band selection (UI Automation cannot drive it reliably). Those are manual protocol items in
@@ -17,7 +23,9 @@ param(
     [string]$HostPath = '',
     [string]$Results = (Join-Path $env:TEMP ('wintools-e2e\matrix-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))),
     [string[]]$Only = @(),
-    [int]$IdleSeconds = 20
+    [int]$IdleSeconds = 20,
+    [int]$MaxWaitMinutes = 30,
+    [int]$RowMinutes = 15
 )
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Harness)) { throw "Harness not found: $Harness (build tests\WinTools.EndToEnd -c Release first)" }
@@ -29,6 +37,18 @@ public static class MatrixIdle {
   [StructLayout(LayoutKind.Sequential)] struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
   [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO p);
   public static double Seconds() { var i = new LASTINPUTINFO(); i.cbSize = 8; GetLastInputInfo(ref i); return ((uint)Environment.TickCount - i.dwTime) / 1000.0; }
+  [StructLayout(LayoutKind.Sequential)] struct KEYBDINPUT { public ushort wVk, wScan; public uint dwFlags, time; public UIntPtr extra; }
+  [StructLayout(LayoutKind.Sequential)] struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public UIntPtr extra; }
+  [StructLayout(LayoutKind.Explicit)] struct UNION { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
+  [StructLayout(LayoutKind.Sequential)] struct INPUT { public uint type; public UNION u; }
+  [DllImport("user32.dll")] static extern uint SendInput(uint n, INPUT[] inputs, int size);
+  /// Releases the keys and the button a killed harness may have left down (Ctrl, Shift, Alt, Space, left button).
+  public static void ReleaseAll() {
+    var list = new System.Collections.Generic.List<INPUT>();
+    foreach (ushort vk in new ushort[] { 0x11, 0x10, 0x12, 0x20 }) { var k = new INPUT(); k.type = 1; k.u.ki.wVk = vk; k.u.ki.dwFlags = 2; list.Add(k); }
+    var m = new INPUT(); m.type = 0; m.u.mi.dwFlags = 4; list.Add(m);
+    SendInput((uint)list.Count, list.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+  }
 }
 '@
 
@@ -46,7 +66,7 @@ $rows = @(
     @('ctrl-click-released',  'batch --batch 10 --select ctrl-click --settle-ms 0 --cycles 1',    'Ctrl-click 10, released, drag at once'),
     @('shift-range-held-10',  'batch --batch 10 --select shift-range --hold shift --cycles 2',    'Shift-click range 10, Shift held'),
     @('shift-range-10',       'batch --batch 10 --select shift-range --settle-ms 0 --cycles 1',   'Shift-click range 10, released, drag at once'),
-    @('shift-range-100',      'batch --batch 100 --select shift-range --settle-ms 0 --cycles 1',  'keyboard range of 100 (Home, Shift+End)'),
+    @('shift-range-100',      'batch --batch 100 --select shift-range --settle-ms 0 --cycles 1',  'range of 100: click, scroll with the wheel, Shift-click'),
     @('alt-refused',          'alt --cycles 2',                                                   'Alt held: refused with a toast, nothing runs'),
     @('escape',               'escape --cycles 2',                                                'Esc cancels'),
     @('outside',              'outside --cycles 2',                                               'release outside the ring runs nothing'),
@@ -80,29 +100,58 @@ if ($rows.Count -eq 0) { throw 'No rows to run.' }
 $report = New-Object System.Collections.Generic.List[string]
 $report.Add('# Release regression matrix')
 $report.Add('')
+# The build under test: the host the rows use (next to the harness unless -HostPath), by version and content hash.
+$testedHost = if ($HostPath) { $HostPath } else { Join-Path (Split-Path $Harness) 'WinTools.Host.exe' }
+$hostDll = Join-Path (Split-Path $testedHost) 'WinTools.Host.dll'
+$identity = if (Test-Path $hostDll) { '{0}, WinTools.Host.dll SHA-256 {1}' -f (Get-Item $hostDll).VersionInfo.ProductVersion, (Get-FileHash $hostDll -Algorithm SHA256).Hash.Substring(0, 12) } else { 'host not found' }
 $report.Add(('Run {0} on {1}, harness `{2}`{3}.' -f (Get-Date -Format 's'), $env:COMPUTERNAME, $Harness, $(if ($HostPath) { ", installed host ``$HostPath``" } else { '' })))
+$report.Add("Build under test: $identity.")
 $report.Add('')
 $report.Add('| Row | Proves | Cycles passed | Exit | Keys left down |')
 $report.Add('|---|---|---|---|---|')
+# Waits until nobody has touched the mouse or keyboard for $seconds; false when that does not happen in $MaxWaitMinutes.
+function Wait-Idle([double]$seconds) {
+    $deadline = (Get-Date).AddMinutes($MaxWaitMinutes)
+    $told = $false
+    while ([MatrixIdle]::Seconds() -lt $seconds) {
+        if ((Get-Date) -gt $deadline) { return $false }
+        if (-not $told) { Write-Host "Waiting until the mouse and keyboard have been idle for $seconds s..."; $told = $true }
+        Start-Sleep -Milliseconds 500
+    }
+    return $true
+}
+
 $failed = 0
 $first = $true
+$stopped = $null
 foreach ($row in $rows) {
     $name, $arguments, $proves = $row
-    # The harness's own injected input counts as input too: before the first row the desktop must have been idle for
-    # $IdleSeconds; between rows, nobody may touch it during a 3 s pause.
+    if ($stopped) { $report.Add("| $name | $proves | not run: $stopped | - | - |"); $failed++; continue }
+    # The harness's own injected input counts as input too. Before the first row the desktop must have been idle for
+    # $IdleSeconds. Between rows there is a 3 s pause; input in its last 2.5 s is someone using the PC, and the run then
+    # waits until they have left it alone for $IdleSeconds again.
     if (-not $first) { Start-Sleep -Seconds 3 }
-    $idle = [MatrixIdle]::Seconds()
-    $needed = if ($first) { $IdleSeconds } else { 2.5 }
+    $ready = if ($first -or [MatrixIdle]::Seconds() -lt 2.5) { Wait-Idle $IdleSeconds } else { $true }
     $first = $false
-    if ($idle -lt $needed) {
-        $report.Add("| $name | $proves | not run: the desktop was in use ($([Math]::Round($idle, 1)) s since the last input) | - | - |")
-        Write-Warning "Stopping: the mouse or keyboard was used $([Math]::Round($idle, 1)) s ago."
-        $failed++
-        break
+    if (-not $ready) {
+        $stopped = "the PC stayed in use for $MaxWaitMinutes min"
+        $report.Add("| $name | $proves | not run: $stopped | - | - |"); $failed++
+        Write-Warning "Stopping: $stopped."
+        continue
     }
     $out = Join-Path $Results "$name.txt"
     $jsonl = Join-Path $Results "$name.jsonl"
-    $p = Start-Process -FilePath $Harness -ArgumentList "$arguments --results `"$jsonl`"" -WorkingDirectory (Split-Path $Harness) -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out
+    $p = Start-Process -FilePath $Harness -ArgumentList "$arguments --results `"$jsonl`"" -WorkingDirectory (Split-Path $Harness) -NoNewWindow -PassThru -RedirectStandardOutput $out
+    if (-not $p.WaitForExit($RowMinutes * 60 * 1000)) {
+        # A hung row may hold a synthetic drag: stop it and release every key and button it could have left down.
+        Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+        Get-Process WinTools.Host -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $testedHost } | Stop-Process -Force -ErrorAction SilentlyContinue
+        [MatrixIdle]::ReleaseAll()
+        $stopped = "row $name hung for $RowMinutes min and was stopped"
+        $report.Add("| $name | $proves | hung, stopped | - | released |"); $failed++
+        Write-Warning "Stopping: $stopped."
+        continue
+    }
     $summary = Get-Content $out -Encoding UTF8 | Where-Object { $_ -match '"summary":true' } | Select-Object -Last 1
     $s = if ($summary) { $summary | ConvertFrom-Json } else { $null }
     $keys = if ($s -and -not $s.leftDownAtEnd -and -not $s.spaceDownAtEnd -and -not $s.modifiersDownAtEnd) { 'none' } else { 'CHECK' }
@@ -110,7 +159,11 @@ foreach ($row in $rows) {
     if ($p.ExitCode -ne 0 -or -not $s -or $s.passed -ne $s.cycles -or $keys -ne 'none') { $failed++ }
     $report.Add("| $name | $proves | $cyclesText | $($p.ExitCode) | $keys |")
     Write-Host ("{0,-22} {1,-8} exit {2}" -f $name, $cyclesText, $p.ExitCode)
-    if ($keys -ne 'none') { Write-Warning "A key or button may still be down after $name; stopping."; break }
+    if ($keys -ne 'none') {
+        [MatrixIdle]::ReleaseAll()
+        $stopped = "a key or button may have been down after $name"
+        Write-Warning "Stopping: $stopped (released)."
+    }
 }
 $report.Add('')
 $report.Add($(if ($failed -eq 0) { '**All rows passed.**' } else { "**$failed row(s) failed or did not run.** Per-row output and JSONL results: ``$Results``." }))

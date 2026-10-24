@@ -134,7 +134,8 @@ internal sealed class ExplorerWindow : IDisposable
         try
         {
             var texts = _root.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text));
-            return string.Join(" | ", texts.Cast<AutomationElement>().Select(t => t.Current.Name).Where(n => n.Contains("item", StringComparison.OrdinalIgnoreCase)));
+            // Status-bar texts carry counts ("100 items", "20 items selected"); matching digits works in any display language.
+            return string.Join(" | ", texts.Cast<AutomationElement>().Select(t => t.Current.Name).Where(n => n.Any(char.IsDigit) && n.Length < 80));
         }
         catch (ElementNotAvailableException) { return "?"; }
     }
