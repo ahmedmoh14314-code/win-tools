@@ -56,7 +56,7 @@ public sealed class MenuCategoryDataTests
     [Fact]
     public void The_navigator_passes_icon_keys_to_the_view()
     {
-        var menu = RadialMenu.Build(CapabilityResolver.Default, [@"C:\p\a.jpg"]);
+        var menu = RadialMenu.Build(CapabilityResolver.Images(null), [@"C:\p\a.jpg"]);
         var view = new MenuNavigator(menu, 96).View(TimeSpan.Zero);
         Assert.Equal(["convert", "compress", "resize", "rotate", "tools"], view.Categories);
     }

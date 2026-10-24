@@ -44,7 +44,8 @@ public static class ImageCapabilities
         CapabilityShape.PerFile,
         op.WritesFile ? CapabilityOutput.File : CapabilityOutput.Facts,
         LongRunning: op.Kind != OperationKind.Info,
-        Payload: op);
+        Payload: op,
+        Feedback: Feedback.FeedbackText.WordsOf(op));
 
     /// <summary>The image operation behind one of this module's capabilities.</summary>
     public static Operation OperationOf(CapabilityDescriptor capability) =>

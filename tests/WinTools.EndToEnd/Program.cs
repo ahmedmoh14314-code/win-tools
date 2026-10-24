@@ -9,7 +9,7 @@ using WinTools.Core.Settings;
 using WinTools.EndToEnd;
 
 // Explorer end-to-end harness for the product host (local and interactive only; it drives the real mouse and keyboard).
-// Usage: WinTools.EndToEnd <png|jpg|bmp|tif|webp|photo|batch|escape|outside|unsupported|category|fast|edge|worker-crash|alt>
+// Usage: WinTools.EndToEnd <png|jpg|bmp|tif|webp|photo|batch|escape|outside|unsupported|category|fast|edge|worker-crash|alt|file|folder>
 //          [--op <operation id>] [--target jpeg|png|webp|bmp|tiff] [--batch N] [--cycles N] [--fast-ms N] [--results file.jsonl]
 //          [--animations on|off|system]   (default on: the menu's animations run, the heavier path for latency)
 //          [--host <WinTools.Host.exe>]   (default: the host next to the harness; e.g. an installed copy)
@@ -18,6 +18,9 @@ using WinTools.EndToEnd;
 //          [--path-style plain|unicode|long]   (unicode: Arabic, emoji and spaces in the folder and file names; long: the
 //          source's full path is longer than 260 characters, its folder just under 248 so Explorer can open it)
 // "alt": a drag with Alt held, then the trigger: nothing may open or run, and the refusal toast must appear.
+// "file" and "folder" (V2 PR 1.4, UX-009): a text file and a folder, each with File info by default (--op files.sha256
+// for a file): the info panel must appear, nothing may be written. Copy path is not run here: it would overwrite the
+// user's clipboard (unit-tested in FilesModuleTests; manual protocol in docs/testing/release-matrix.md).
 // "photo": a 960x720 photograph-like JPEG (tests/samples/New-PhotoSample.ps1), compressed (default compress.balanced):
 // the copy must be valid and save at least 8 %, the rule Compress promises (ADR-0017). With --expect already-optimized
 // the honest outcome is the other one: no file, a "Nothing to change" toast, the job reported as NothingToDo.
@@ -69,15 +72,21 @@ var (sample, sourceName, defaultTarget) = scenario switch
     "tif" => ("quadrants-64x48.tif", "photo.tif", ImageFormat.Jpeg),
     "webp" => ("quadrants-64x48.webp", "photo.webp", ImageFormat.Png),
     "photo" => ("photo-960x720.jpg", "photo.jpg", ImageFormat.Jpeg),
-    "unsupported" => ("", "notes.txt", ImageFormat.Unknown),
+    "unsupported" or "file" => ("", "notes.txt", ImageFormat.Unknown),
+    "folder" => ("", "holiday photos", ImageFormat.Unknown),
     _ => ("quadrants-64x48.png", "photo.png", ImageFormat.Jpeg),
 };
 // The host runs with default settings, so the harness sees the same menu.
 var catalog = ImageCapabilities.Operations(new AppSettings().CustomResizeId());
 var target = targetArg is null ? defaultTarget : Enum.Parse<ImageFormat>(targetArg, ignoreCase: true);
 if (scenario == "photo") opArg ??= "compress.balanced";
+if (opArg is null && scenario is "file" or "folder") opArg = FilesCapabilities.InfoId;
 var op = opArg is not null ? catalog.FirstOrDefault(o => o.Id == opArg) : target == ImageFormat.Unknown ? null : OperationCatalog.Convert(target);
-if (opArg is not null && op is null) { Console.Error.WriteLine($"Unknown operation {opArg}"); return 64; }
+// Every module, as the host resolves them: the ring positions the harness aims at must be the host's.
+var resolver = CapabilityResolver.For(new AppSettings().CustomResizeId());
+var capability = resolver.Catalog.FirstOrDefault(c => c.Id == (opArg ?? op?.Id));
+if (opArg is not null && capability is null) { Console.Error.WriteLine($"Unknown operation {opArg}"); return 64; }
+var facts = op is { WritesFile: false } || capability?.Produces == CapabilityOutput.Facts; // the info panel, no file
 var sourceFormat = FormatHint.FromPath(sourceName);
 var outputFormat = op is null || !op.WritesFile ? ImageFormat.Unknown : op.OutputFormat(sourceFormat);
 string? OutputNameFor(string path) => outputFormat == ImageFormat.Unknown ? null : Path.GetFileName(OutputNaming.Candidates(path, outputFormat, op!.NameSuffix).First());
@@ -98,7 +107,9 @@ if (pathStyle != "plain")
     sourceName = (pathStyle == "unicode" ? "صورة 😀 " : "a long file name for the 260 character test ") + sourceName;
 Directory.CreateDirectory(folder);
 var source = Path.Combine(folder, sourceName);
-if (sample.Length > 0) File.Copy(Path.Combine(AppContext.BaseDirectory, "samples", sample), source);
+var isFolder = scenario == "folder";
+if (isFolder) { Directory.CreateDirectory(source); File.WriteAllText(Path.Combine(source, "inside.txt"), "a file in the dropped folder"); }
+else if (sample.Length > 0) File.Copy(Path.Combine(AppContext.BaseDirectory, "samples", sample), source);
 else File.WriteAllText(source, "plain text, not an image");
 // Remove metadata on a JPEG: give the copy a comment segment right after SOI, which the allow-list must drop.
 var metadataMarker = "wintools-e2e comment"u8.ToArray();
@@ -109,7 +120,9 @@ if (strip)
     var len = metadataMarker.Length + 2;
     File.WriteAllBytes(source, [.. original[..2], 0xFF, 0xFE, (byte)(len >> 8), (byte)len, .. metadataMarker, .. original[2..]]);
 }
-var sourceHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source)));
+// A folder's "hash" is its listing: a dropped folder must keep its contents.
+string HashOf(string path) => isFolder ? string.Join("|", Directory.GetFileSystemEntries(path).Order(StringComparer.Ordinal)) : Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+var sourceHash = HashOf(source);
 var outputName = OutputNameFor(source);
 // Batch: the source plus copies with Unicode names, all selected with Ctrl+A and dragged together.
 var batchSources = new List<string> { source };
@@ -120,11 +133,12 @@ if (scenario == "batch")
         File.Copy(source, copy);
         batchSources.Add(copy);
     }
-var batchHashes = batchSources.ToDictionary(f => f, f => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(f))));
-var menu = RadialMenu.Build(new CapabilityResolver(catalog.Select(ImageCapabilities.Describe).ToArray()), batchSources);
-var groupIndex = op is null ? -1 : menu.ToList().FindIndex(g => g.Commands.Any(c => c.Id == op.Id));
-var commandIndex = groupIndex < 0 ? -1 : menu[groupIndex].Commands.ToList().FindIndex(c => c.Id == op!.Id);
-if (producing && op is not null && groupIndex < 0) { Console.Error.WriteLine($"{op.Id} is not offered for {sourceName}"); return 4; }
+var batchHashes = batchSources.ToDictionary(f => f, HashOf);
+// The drop target marks a folder with a trailing separator (ADR-0019); the menu is built from the paths as marked.
+var menu = RadialMenu.Build(resolver, [.. batchSources.Select(f => isFolder ? f + Path.DirectorySeparatorChar : f)]);
+var groupIndex = capability is null ? -1 : menu.ToList().FindIndex(g => g.Commands.Any(c => c.Id == capability.Id));
+var commandIndex = groupIndex < 0 ? -1 : menu[groupIndex].Commands.ToList().FindIndex(c => c.Id == capability!.Id);
+if ((producing || facts) && capability is not null && groupIndex < 0) { Console.Error.WriteLine($"{capability.Id} is not offered for {sourceName}"); return 4; }
 
 var hostLog = Path.Combine(folder, "..", $"host-{scenario}-{stamp}.jsonl");
 var settingsFile = Path.Combine(folder, "..", $"settings-{scenario}-{stamp}.json");
@@ -571,7 +585,7 @@ using (var explorer = opened)
                 if (expectNothing && HostLines().Skip(hostLogLines).Any(l => l.Contains("\"ev\":\"job.done\"", StringComparison.Ordinal))) break;
                 var produced = Directory.GetFiles(folder).Where(f => !string.Equals(f, source, StringComparison.OrdinalIgnoreCase)).ToArray();
                 if (produced.Length > 0 && !produced.Any(f => Path.GetFileName(f).StartsWith("~wintools-", StringComparison.Ordinal))) { output = produced.Single(); break; }
-                if (op is { WritesFile: false } && Desktop.VisibleWindowsOf(host.Id, "WinTools.InfoPanel").Count > 0)
+                if (facts && Desktop.VisibleWindowsOf(host.Id, "WinTools.InfoPanel").Count > 0)
                 {
                     // "Image info": the panel, no file. Explorer must still be in front; then close it as a user would.
                     infoShown = true;
@@ -583,8 +597,8 @@ using (var explorer = opened)
             }
             if (output is not null || expectNothing) (toastShown, focusKept) = WaitForSurface("WinTools.Toast", explorer.Hwnd, TimeSpan.FromSeconds(3));
             Thread.Sleep(300);
-            var files = Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
-            var sourceIntact = File.Exists(source) && Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source))) == sourceHash;
+            var files = Directory.GetFileSystemEntries(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray(); // the "folder" scenario's source is a folder
+            var sourceIntact = (isFolder ? Directory.Exists(source) : File.Exists(source)) && HashOf(source) == sourceHash;
             var outputValid = output is not null && File.ReadAllBytes(output) is var bytes && FileSignature.Detect(bytes) == outputFormat && ContainerCheck.IsComplete(bytes, outputFormat, out _)
                 && (!strip || bytes.AsSpan().IndexOf(metadataMarker) < 0); // the comment is gone
             double? saved = op is { Kind: OperationKind.Compress } && output is not null ? Math.Round(1 - (double)new FileInfo(output).Length / new FileInfo(source).Length, 4) : null;
@@ -615,7 +629,7 @@ using (var explorer = opened)
                 "photo" when expectNothing => output is null && accepted == 1 && toastShown == true && focusKept == true
                     && ev.Any(e => Ev(e) == "toast" && Data(e).TryGetProperty("kind", out var tk) && tk.GetString() == "Nothing")
                     && ev.Any(e => Ev(e) == "job.result" && Data(e).TryGetProperty("error", out var er) && er.GetString() == "NothingToDo"),
-                "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" when op is { WritesFile: false } => output is null && infoShown && focusKept == true && accepted == 1,
+                "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "file" or "folder" when facts => output is null && infoShown && focusKept == true && accepted == 1,
                 "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 // Corner: the trigger really was off-centre and deep in a sector, nothing opened before the centre was
                 // reached, then exactly the wanted category opened and the wanted command ran.

@@ -30,9 +30,11 @@ public sealed class CapabilityDescriptorTests
     [InlineData(@"C:\p\no-extension")]
     [InlineData(@"C:\p\trailing.")]
     [InlineData(@"C:\p\.png.folder\file")]
-    public void Unknown_names_have_no_kind(string path)
+    public void Unknown_names_are_plain_files(string path)
     {
-        Assert.Null(FileKinds.IdentifyByName(path));
+        // No kind claims them by name; since the General Files module (V2 PR 1.4) they are still files.
+        Assert.Null(FileKinds.ByExtensionOf(path));
+        Assert.Same(FileKinds.AnyFile, FileKinds.IdentifyByName(path));
     }
 
     [Fact]

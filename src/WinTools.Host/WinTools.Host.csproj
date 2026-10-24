@@ -13,6 +13,8 @@
     <!-- Built and copied next to the host so it can be started as a separate process. The host never calls worker code
          in-process; WinTools.Worker.Tests asserts the host assembly does not reference it. -->
     <ProjectReference Include="..\WinTools.Worker\WinTools.Worker.csproj" />
+    <!-- The General Files module's worker (V2 PR 1.4), the same way: a separate process, never called in-process. -->
+    <ProjectReference Include="..\WinTools.Worker.Text\WinTools.Worker.Text.csproj" />
     <!-- The settings window (WPF) is a separate program: built first and copied next to the host by CopySettingsApp, but
          never referenced, so the host's runtimeconfig does not name the WPF framework and WPF never loads into it. -->
     <ProjectReference Include="..\WinTools.Settings\WinTools.Settings.csproj" ReferenceOutputAssembly="false" Private="false" />

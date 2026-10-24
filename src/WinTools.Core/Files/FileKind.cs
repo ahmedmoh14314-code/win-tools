@@ -1,7 +1,7 @@
 namespace WinTools.Core.Files;
 
 /// <summary>The broad family a kind of file belongs to; a module usually serves one family.</summary>
-public enum FileFamily { Image, Folder }
+public enum FileFamily { Image, Folder, Other }
 
 /// <summary>
 /// One kind of file the product recognises: a stable id (used in capability rules, settings and logs), its family, a
@@ -10,7 +10,10 @@ public enum FileFamily { Image, Folder }
 /// </summary>
 public sealed record FileKind(string Id, FileFamily Family, string DisplayName, IReadOnlyList<string> Extensions);
 
-/// <summary>The registry of file kinds. Today: the image formats the image module reads.</summary>
+/// <summary>
+/// The registry of file kinds: the image formats the image module reads (<see cref="All"/>, recognised by extension), a
+/// folder, and any other file (<see cref="AnyFile"/>), which the General Files module serves (V2 PR 1.4).
+/// </summary>
 public static class FileKinds
 {
     public static FileKind Png { get; } = new("png", FileFamily.Image, "PNG", [".png"]);
@@ -24,18 +27,31 @@ public static class FileKinds
     /// <summary>A folder. The drop target marks dropped folders with a trailing separator (UX-009, ADR-0019).</summary>
     public static FileKind Folder { get; } = new("folder", FileFamily.Folder, "Folder", []);
 
+    /// <summary>Any file whose extension no kind claims, or that has none: still a file, which general commands accept.</summary>
+    public static FileKind AnyFile { get; } = new("file", FileFamily.Other, "File", []);
+
     /// <summary>Every kind a capability's input rule may name.</summary>
-    public static IReadOnlyList<FileKind> Declared { get; } = [.. All, Folder];
+    public static IReadOnlyList<FileKind> Declared { get; } = [.. All, Folder, AnyFile];
 
     private static readonly Dictionary<string, FileKind> ByExtension =
         All.SelectMany(k => k.Extensions.Select(e => (e, k))).ToDictionary(p => p.e, p => p.k, StringComparer.OrdinalIgnoreCase);
 
     private static readonly Dictionary<string, FileKind>.AlternateLookup<ReadOnlySpan<char>> BySpan = ByExtension.GetAlternateLookup<ReadOnlySpan<char>>();
 
-    /// <summary>The kind a path's extension names, or null when no module knows it. A hint only: never trusted for work.</summary>
+    /// <summary>
+    /// The kind a path's name says: a folder (trailing separator), the kind its extension names, or any file. Null only
+    /// for no path. A hint only: never trusted for work.
+    /// </summary>
     public static FileKind? IdentifyByName(string? path)
     {
-        if (path is not null && Path.EndsInDirectorySeparator(path)) return Folder;
+        if (string.IsNullOrEmpty(path)) return null;
+        if (Path.EndsInDirectorySeparator(path)) return Folder;
+        return ByExtensionOf(path) ?? AnyFile;
+    }
+
+    /// <summary>The kind the extension names, or null when no kind claims it (none, or an unknown one).</summary>
+    public static FileKind? ByExtensionOf(string path)
+    {
         var ext = Path.GetExtension(path.AsSpan());
         return ext.Length > 0 && BySpan.TryGetValue(ext, out var kind) ? kind : null;
     }
