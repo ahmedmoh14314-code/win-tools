@@ -195,7 +195,7 @@ public sealed class FeedbackTextTests
     [Fact]
     public void Every_operation_has_a_past_tense_phrase_and_a_verb()
     {
-        foreach (var op in RadialMenu.Catalog(new AppSettings().CustomResizeId()))
+        foreach (var op in ImageCapabilities.Operations(new AppSettings().CustomResizeId()))
         {
             Assert.False(string.IsNullOrWhiteSpace(FeedbackText.Done(op)), op.Id);
             Assert.False(string.IsNullOrWhiteSpace(FeedbackText.Verb(op)), op.Id);
@@ -238,8 +238,7 @@ public sealed class RingLabelsTests
     [MemberData(nameof(Dpis))]
     public void Label_boxes_never_overlap_and_stay_on_the_ring(int dpi)
     {
-        var catalog = RadialMenu.Catalog(new AppSettings().CustomResizeId());
-        var resolver = new CapabilityResolver(catalog);
+        var resolver = CapabilityResolver.For(new AppSettings().CustomResizeId());
         foreach (var name in new[] { "a.png", "a.jpg", "a.webp", "a.bmp", "a.tif" })
         {
             var menu = RadialMenu.Build(resolver.Resolve([$@"C:\images\{name}"]));

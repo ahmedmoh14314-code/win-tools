@@ -20,7 +20,7 @@ public sealed partial class UiSurfaceTests
 
     private static IReadOnlyList<MenuGroup> MenuFor(params string[] names)
     {
-        var resolver = new CapabilityResolver(RadialMenu.Catalog(new AppSettings().CustomResizeId()));
+        var resolver = CapabilityResolver.For(new AppSettings().CustomResizeId());
         return RadialMenu.Build(resolver.Resolve(names.Select(n => $@"C:\images\{n}").ToArray()));
     }
 

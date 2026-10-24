@@ -48,7 +48,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         _sounds = sounds;
         _settings = settings;
         _navigationSounds = new NavigationSounds(settings.UiSounds);
-        _resolver = new CapabilityResolver(RadialMenu.Catalog(settings.CustomResizeId()));
+        _resolver = CapabilityResolver.For(settings.CustomResizeId());
         _sessionResolver = _resolver;
         _window = window;
         _overlay = new RadialOverlay(this);
@@ -69,7 +69,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     {
         _settings = settings;
         _hooks.SetTriggerKey(settings.TriggerVirtualKey);
-        _resolver = new CapabilityResolver(RadialMenu.Catalog(settings.CustomResizeId()));
+        _resolver = CapabilityResolver.For(settings.CustomResizeId());
         _navigationSounds.Enabled = settings.UiSounds;
     }
 
@@ -285,7 +285,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     bool IOverlayEvents.Dropped(IReadOnlyList<string> paths, int dx, int dy, bool copyAllowed)
     {
         var now = Stopwatch.GetElapsedTime(_shownTimestamp);
-        Operation? chosen = null, hot = null;
+        CapabilityDescriptor? chosen = null, hot = null;
         var openMs = 0.0;
         if (copyAllowed && _navigator is { } nav)
         {
@@ -317,8 +317,17 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             _log.Event("drop", new { accepted = false, reason = "commandsChanged", files = paths.Count });
             return false;
         }
+        // The only module so far; jobs become generic in V2 PR 1.2. Never throw here: this runs inside OLE's Drop. A command
+        // no module can run is refused like a changed one, with the Nothing sound: a drop that runs nothing never reads as
+        // accepted (evaluator, PR #15).
+        if (!ImageCapabilities.TryOperationOf(chosen, out var operation))
+        {
+            _sounds.Play(UiSound.Nothing);
+            _log.Event("drop", new { accepted = false, reason = "noModule", op = chosen.Id, module = chosen.Module, files = paths.Count });
+            return false;
+        }
         _log.Event("drop", new { accepted = true, op = chosen.Id, openMs, files = paths.Count, sounds = SoundCounts(), frames });
-        _ = _jobs.Start(chosen, paths);
+        _ = _jobs.Start(operation, paths);
         return true;
     }
 
