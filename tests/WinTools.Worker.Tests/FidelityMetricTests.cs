@@ -88,6 +88,30 @@ public sealed class FidelityMetricTests
         Assert.Equal(0, f.WorstTileDeltaE);
     }
 
+    [Theory]
+    [InlineData(1600, 1200)]
+    [InlineData(1603, 1203)]
+    public void A_small_colour_swap_reads_the_same_at_the_edges_as_inside(int width, int height)
+    {
+        // Evaluator, PR #12: windows were given to the cell of their top-left corner, so the last cells along the right
+        // and bottom edges held too few to count and a swap in the bottom-right corner read 0.996 instead of about 0.61.
+        var photo = CompressionCorpus.Photo(seed: 25, width: width, height: height);
+        double Swap(int x0, int y0)
+        {
+            var bgra = (byte[])photo.Bgra.Clone();
+            for (var y = y0; y < y0 + 16; y++)
+                for (var x = x0; x < x0 + 16; x++)
+                {
+                    var i = (y * width + x) * 4;
+                    (bgra[i], bgra[i + 2]) = (bgra[i + 2], bgra[i]);   // red and blue swapped
+                }
+            return Fidelity.Compare(photo, photo.WithPixels(width, height, bgra)).WorstCellChromaSsim;
+        }
+        var inside = Swap(800, 600);
+        foreach (var (x, y) in new[] { (width - 16, 600), (800, height - 16), (width - 16, height - 16), (0, 0) })
+            Assert.True(Swap(x, y) < inside + 0.15, $"swap at {x},{y}: {Swap(x, y):0.000} against {inside:0.000} inside");
+    }
+
     [Fact]
     public void A_long_thin_image_is_compared_in_windows_along_its_length()
     {

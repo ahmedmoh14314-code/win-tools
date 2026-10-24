@@ -99,10 +99,10 @@ PNG stays lossless and is verified pixel for pixel, with the same 8 % minimum.
 
 ## Amendment: worst-tile gates, search deadline, transparency (2026-10-24, evaluator review of PR #12)
 - **Worst tile.** The worst-region gate (1st percentile of windows) cannot see damage in less than 1 % of the image. Before any tile gate, Balanced left a caption covering 0.4 % of a photo at SSIM 0.926, under its floor.
-  - **Measures.** Fidelity pools on 16×16 cells into 32×32 tiles every 16 px. It reports the worst tile's mean luma SSIM and mean ΔE, and the worst cell's chroma SSIM. ΔE is sampled on every row, the columns alternating, so a line one pixel thin in either direction is seen.
+  - **Measures.** Fidelity pools on 16×16 cells into 32×32 tiles every 16 px; a window belongs to the cell its centre is in, so cells along the right and bottom edges are not starved of windows. It reports the worst tile's mean luma SSIM and mean ΔE, and the worst cell's chroma SSIM. ΔE is sampled on every row, the columns alternating, so a line one pixel thin in either direction is seen.
   - **How the gates were chosen.** `CompressionCalibration` measures every axis on the whole quality ladder for three sets:
     - `train`: the regions the gates are tuned on (`SmallDetailTests` and the caption);
-    - `held`: the evaluator's probes on PR #12, never used for tuning (WebP sources, detail under 16 px, 1–2 px lines, regions at the borders);
+    - `held`: the evaluator's probes on PR #12 (WebP sources, detail under 16 px, 1–2 px lines, regions at the borders). This was a validation set: two candidate gate sets were rejected because of it, so it was used for selection, not only for judging;
     - `free`: 15 photographs without small detail, on which a gate must not cost the saving.
 
     Gates were searched to keep `train` within its promise, then judged on `held` and on the saving lost on `free`. Two earlier versions failed that test:
@@ -116,12 +116,15 @@ PNG stays lossless and is verified pixel for pixel, with the same 8 % minimum.
     | Balanced | 0.910 | 5 | — |
     | Smallest | 0.880 | 6 | — |
 
-  - **The promise per region** (`SmallDetailTests`: 9 tuned and 12 held-out cases, all pass through the product's own search): a JPEG region at least 12 px on each side keeps the preset's SSIM floor (0.970 / 0.930 / 0.880) and a mean ΔE of at most 4 / 8 / 10.
+  - **The promise per region.** Text and graphic detail regions in JPEG, at least 12 px on each side, keep the preset's SSIM floor (0.970 / 0.930 / 0.880) and a mean ΔE of at most 4 / 8 / 10.
+    - It is measured in `SmallDetailTests`: 9 tuned and 12 validation cases, all passing through the product's own search.
+    - It is a measured property, not a guarantee for every region. Arbitrary regions of a text-free photo can fall below the floor: at Balanced, 815 of 118,604 12×12 regions of phone.jpg were under 0.93, the worst at 0.807. Balanced's tile gate is 0.910, below its 0.930 floor.
+    - The evaluator's third round tried 28 new JPEG cases inside the scope: one exceeded it, a red-on-blue 28×14 word at Smallest with ΔE 10.81 against 10.
   - **Balanced's region ΔE is 8, not 6. This is a product trade-off for the owner.** Holding 1 px saturated strokes to ΔE 6 cost 154 percentage points of saving across the 15 text-free photographs (one went from 52.5 % to 36.5 %). ΔE 8 costs 15.7 points (at most 6.4 on one photo). "Differences only on close comparison" allows that shift in small strokes. Tightening it is a one-line change once the owner weighs it.
   - **Outside the promise, measured:** these can change visibly at Balanced and Smallest:
     - detail under 12 px: red-on-blue text 12×8 px, Smallest SSIM 0.84;
     - lines 1–2 px wide: a 1 px coloured line, ΔE 11–26;
-    - small text in lossy WebP sources: SSIM 0.81–0.90, because libwebp filters small colour detail.
+    - small text in lossy WebP sources: SSIM 0.81–0.90, and 0.67 for 12×8 text, because libwebp filters small colour detail.
 
     At High, two WebP cases reach ΔE 5.7 against 4. Protecting these classes with a smaller cell gate cost 74–194 points of saving and still did not protect them. That is the resolution limit of a full-reference check at this grain, and of lossy coding.
   - **Cost on text-free photographs** (real search): phone Balanced 63.9 %, camera Balanced 67.9 %, photo111 q88 Balanced 50.2 %. moderate Smallest dropped from 18.2 to 9.9 %, and lossy WebP Smallest from 77.9 to 70.2 %. photo112 q88 saves 12.0 % at Balanced because of the older 1st-percentile gate (0.927 against 0.930 at q75), not the tiles.

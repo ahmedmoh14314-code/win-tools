@@ -73,12 +73,12 @@ internal static class Fidelity
         public int RowOf(int y) => Math.Min(y / Size, Y - 1);
 
         /// <summary>The lowest (or highest) tile mean, a tile being cells (cx..cx+1, cy..cy+1).</summary>
-        /// <summary>The lowest mean of a single 16×16 cell that holds a full 4×4 grid of windows.</summary>
+        /// <summary>The lowest mean of a single 16×16 cell that holds at least half a 4×4 grid of windows.</summary>
         public static double WorstCell(double[] sums, long[] counts)
         {
             var worst = 1.0;
             for (var c = 0; c < sums.Length; c++)
-                if (counts[c] >= 16) worst = Math.Min(worst, sums[c] / counts[c]);
+                if (counts[c] >= 8) worst = Math.Min(worst, sums[c] / counts[c]); // edge cells hold 9–15 windows; a sliver less is noise
             return worst;
         }
 
@@ -112,7 +112,7 @@ internal static class Fidelity
 
         public static Band Run(RasterImage a, RasterImage b, Cells cells, int first, int end)
         {
-            var band = new Band(cells, cells.RowOf((first - 1) * Block), cells.RowOf((end - 2) * Block));
+            var band = new Band(cells, cells.RowOf((first - 1) * Block + Block), cells.RowOf((end - 2) * Block + Block));
             var w = a.Width;
             var bw = w / Block;
             var lumaA = new LumaRows(a);
@@ -141,7 +141,9 @@ internal static class Fidelity
                         var l = Window(previous, current, bx, 0, win);
                         band.Luma += l;
                         band.Worst.Add(l);
-                        var cell = cells.Of(bx * Block, (by - 1) * Block) - band.Offset;
+                        // A window belongs to the cell its centre is in, so the cells along the right and bottom edges are
+                        // not starved of windows (evaluator, PR #12: a corner swap read 0.996 instead of 0.61).
+                        var cell = cells.Of(bx * Block + Block, (by - 1) * Block + Block) - band.Offset;
                         var chroma = (Window(previous, current, bx, 1, win) + Window(previous, current, bx, 2, win)) / 2;
                         band.TileLuma[cell] += l;
                         band.TileChroma[cell] += chroma;
