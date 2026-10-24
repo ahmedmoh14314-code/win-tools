@@ -105,6 +105,91 @@ public sealed class CompressionQualityTests : IDisposable
         Assert.Equal([$"{level}-{file}"], _dir.Names().Where(n => n.StartsWith(level + "-", StringComparison.Ordinal) && n.Contains(Path.GetFileNameWithoutExtension(file), StringComparison.Ordinal)).ToArray());
     }
 
+    // Evaluator, PR #12: the worst-region gate was the 1st percentile of 8×8 windows, so damage confined to less than 1 %
+    // of the image (a caption, a sign, a watermark in a large photograph) was averaged away and a preset could ruin it.
+    // Each preset's promise holds for every region: the patch is measured on its own, with the independent SSIM, against
+    // the preset's worst-region floor.
+    private static readonly Dictionary<string, double> RegionFloor = new() { ["high"] = 0.970, ["balanced"] = 0.930, ["small"] = 0.880 };
+
+    [Theory]
+    [InlineData("high")]
+    [InlineData("balanced")]
+    [InlineData("small")]
+    public void Small_text_in_a_large_photograph_keeps_the_presets_floor(string level)
+    {
+        var source = CaptionedPhoto();
+        var src = _dir.Write($"{level}-captioned.jpg", source);
+
+        var r = ConversionJob.Run(new ConversionRequest($"c{Interlocked.Increment(ref _seq)}", $"compress.{level}", src));
+
+        if (!r.Success) { Assert.Equal(ErrorCode.NothingToDo, r.Error); return; }
+        var before = Caption(ImagePipeline.Decode(source, ImageFormat.Jpeg).Image);
+        var after = Caption(ImagePipeline.Decode(File.ReadAllBytes(r.OutputPath!), ImageFormat.Jpeg).Image);
+        var ssim = Ssim.Luma(before, after);
+        Assert.True(ssim >= RegionFloor[level], $"{level}: the caption's SSIM is {ssim:0.0000}, below {RegionFloor[level]}");
+    }
+
+    private const int CaptionX = 700, CaptionY = 820, CaptionW = 160, CaptionH = 48; // 0.4 % of the image
+
+    /// <summary>A phone-style JPEG photograph with a small caption: 1 px dark strokes on a light panel.</summary>
+    internal static byte[] CaptionedPhoto()
+    {
+        var photo = CompressionCorpus.Photo(seed: 31);
+        var bgra = (byte[])photo.Bgra.Clone();
+        var rnd = new Random(32);
+        void Fill(int x0, int y0, int x1, int y1, byte v)
+        {
+            for (var y = y0; y < y1; y++)
+                for (var x = x0; x < x1; x++)
+                {
+                    var i = (y * photo.Width + x) * 4;
+                    (bgra[i], bgra[i + 1], bgra[i + 2]) = (v, v, v);
+                }
+        }
+        Fill(CaptionX, CaptionY, CaptionX + CaptionW, CaptionY + CaptionH, 246);
+        for (var line = 0; line < 2; line++)
+            for (var x = CaptionX + 6; x < CaptionX + CaptionW - 8; x += 5)
+            {
+                var y = CaptionY + 8 + line * 20;
+                Fill(x, y + rnd.Next(0, 3), x + 1, y + 11, 30);          // 1 px glyph stems
+                if (rnd.Next(3) == 0) Fill(x, y + 5, x + 4, y + 6, 30);  // and bars
+            }
+        return WicCodec.Encode(photo.WithPixels(photo.Width, photo.Height, bgra), ImageFormat.Jpeg, 0.93f);
+    }
+
+    internal static RasterImage Caption(RasterImage image) => Crop(image, CaptionX, CaptionY, CaptionW, CaptionH);
+
+    // Evaluator, PR #12: fidelity is measured on white, so a change in transparency alone would be invisible to it.
+    // A guard (libwebp keeps lossy WebP's alpha lossless today), backed by an explicit check in the search.
+    [Theory]
+    [InlineData("high")]
+    [InlineData("balanced")]
+    [InlineData("small")]
+    public void Lossy_webp_keeps_transparency_exactly(string level)
+    {
+        var photo = CompressionCorpus.Photo(seed: 33, width: 800, height: 600);
+        var bgra = (byte[])photo.Bgra.Clone();
+        for (var y = 0; y < 600; y++)
+            for (var x = 0; x < 800; x++) bgra[(y * 800 + x) * 4 + 3] = (byte)(x < 400 ? 255 : Math.Max(0, 255 - (x - 400) * 255 / 300));
+        var source = SkiaCodec.EncodeWebP(photo.WithPixels(800, 600, bgra), 92, lossless: false);
+        var src = _dir.Write($"{level}-transparent.webp", source);
+
+        var r = ConversionJob.Run(new ConversionRequest($"c{Interlocked.Increment(ref _seq)}", $"compress.{level}", src));
+
+        if (!r.Success) { Assert.Equal(ErrorCode.NothingToDo, r.Error); return; }
+        var before = ImagePipeline.Decode(source, ImageFormat.WebP).Image.Bgra;
+        var after = ImagePipeline.Decode(File.ReadAllBytes(r.OutputPath!), ImageFormat.WebP).Image.Bgra;
+        for (var i = 3; i < before.Length; i += 4)
+            if (before[i] != after[i]) Assert.Fail($"{level}: alpha changed at pixel {i / 4}: {before[i]} → {after[i]}");
+    }
+
+    private static RasterImage Crop(RasterImage image, int x0, int y0, int w, int h)
+    {
+        var bgra = new byte[w * h * 4];
+        for (var y = 0; y < h; y++) Array.Copy(image.Bgra, ((y0 + y) * image.Width + x0) * 4, bgra, y * w * 4, w * 4);
+        return new RasterImage(w, h, bgra);
+    }
+
     [Fact]
     public void High_quality_keeps_full_colour_resolution_of_a_4_4_4_jpeg()
     {
