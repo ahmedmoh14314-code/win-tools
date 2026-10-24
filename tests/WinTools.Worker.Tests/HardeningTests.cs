@@ -67,8 +67,8 @@ public sealed class MetadataHardeningTests : IDisposable
         var src = _dir.CopySample("quadrants-64x48.png", "s.png");
         var request = new ConversionRequest("h4", "convert.to-jpeg", src);
         var sha = new string('A', 64);
-        Assert.False(WorkerClient.IsBelievable(request, ConversionResult.Ok("h4", "", sha)));
-        Assert.False(WorkerClient.IsBelievable(request, ConversionResult.Ok("h4", Path.Combine(_dir.Path, "s\0.jpg"), sha)));
+        Assert.False(ImageJobsCompat.IsBelievable(request, ConversionResult.Ok("h4", "", sha)));
+        Assert.False(ImageJobsCompat.IsBelievable(request, ConversionResult.Ok("h4", Path.Combine(_dir.Path, "s\0.jpg"), sha)));
     }
 }
 
@@ -150,7 +150,7 @@ public sealed class PoolHardeningTests : IDisposable
         var files = Enumerable.Range(0, 10).Select(i => _dir.CopySample("quadrants-64x48.png", $"k{i}.png")).ToArray();
         using var cts = new CancellationTokenSource();
         cts.Cancel();
-        var results = await new WorkerClient(WorkerExe, TimeSpan.FromSeconds(30), parallelism: 1)
+        var results = await ImageJobsCompat.Images(WorkerExe, TimeSpan.FromSeconds(30), parallelism: 1)
             .RunAsync(files.Select((f, i) => new ConversionRequest($"k{i}", "convert.to-jpeg", f)).ToArray(), cts.Token);
         Assert.All(results, r => Assert.Equal(ErrorCode.Cancelled, r.Error));
         Assert.Equal(10, _dir.Names().Length); // nothing written
@@ -163,7 +163,7 @@ public sealed class PoolHardeningTests : IDisposable
         // Every third file crashes its worker: more crashes than MaxRestartsPerLane, but never in a row.
         var files = Enumerable.Range(0, 15).Select(i => _dir.CopySample("quadrants-64x48.png", i % 3 == 0 ? $"boom{i}.png" : $"ok{i}.png")).ToArray();
         var env = new Dictionary<string, string> { ["WINTOOLS_WORKER_FAULT"] = "crash-after-temp", ["WINTOOLS_WORKER_FAULT_MATCH"] = "boom" };
-        var results = await new WorkerClient(WorkerExe, TimeSpan.FromSeconds(30), env, parallelism: 1)
+        var results = await ImageJobsCompat.Images(WorkerExe, TimeSpan.FromSeconds(30), env, parallelism: 1)
             .RunAsync(files.Select((f, i) => new ConversionRequest($"s{i}", "convert.to-jpeg", f)).ToArray(), CancellationToken.None);
         Assert.Equal(5, results.Count(r => r.Error == ErrorCode.WorkerCrashed));
         Assert.Equal(10, results.Count(r => r.Success));
@@ -174,9 +174,9 @@ public sealed class PoolHardeningTests : IDisposable
     {
         var files = Enumerable.Range(0, 8).Select(i => _dir.CopySample("quadrants-64x48.png", $"boom{i}.png")).ToArray();
         var env = new Dictionary<string, string> { ["WINTOOLS_WORKER_FAULT"] = "crash-after-temp" };
-        var results = await new WorkerClient(WorkerExe, TimeSpan.FromSeconds(30), env, parallelism: 1)
+        var results = await ImageJobsCompat.Images(WorkerExe, TimeSpan.FromSeconds(30), env, parallelism: 1)
             .RunAsync(files.Select((f, i) => new ConversionRequest($"n{i}", "convert.to-jpeg", f)).ToArray(), CancellationToken.None);
-        Assert.Equal(WorkerClient.MaxRestartsPerLane + 1, results.Count(r => r.Message!.StartsWith("The conversion worker stopped", StringComparison.Ordinal)));
+        Assert.Equal(WorkerClient.MaxRestartsPerLane + 1, results.Count(r => r.Error == ErrorCode.WorkerCrashed && !r.Message!.StartsWith("Not run", StringComparison.Ordinal)));
         Assert.All(results.Skip(WorkerClient.MaxRestartsPerLane + 1), r => Assert.StartsWith("Not run", r.Message, StringComparison.Ordinal));
         Assert.DoesNotContain(results, r => r.Success);
     }
@@ -187,7 +187,7 @@ public sealed class PoolHardeningTests : IDisposable
         var outDir = Directory.CreateDirectory(Path.Combine(_dir.Path, "out")).FullName;
         var files = new[] { _dir.CopySample("quadrants-64x48.png", "ok0.png"), _dir.CopySample("quadrants-64x48.png", "hang.png"), _dir.CopySample("quadrants-64x48.png", "ok2.png") };
         var env = new Dictionary<string, string> { ["WINTOOLS_WORKER_FAULT"] = "hang-after-temp", ["WINTOOLS_WORKER_FAULT_MATCH"] = "hang" };
-        var results = await new WorkerClient(WorkerExe, TimeSpan.FromSeconds(3), env, parallelism: 1)
+        var results = await ImageJobsCompat.Images(WorkerExe, TimeSpan.FromSeconds(3), env, parallelism: 1)
             .RunAsync(files.Select((f, i) => new ConversionRequest($"t{i}", "convert.to-jpeg", f, outDir)).ToArray(), CancellationToken.None);
         Assert.Equal([true, false, true], results.Select(r => r.Success));
         Assert.Equal(ErrorCode.WorkerTimeout, results[1].Error);

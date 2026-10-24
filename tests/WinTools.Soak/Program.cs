@@ -100,9 +100,9 @@ static async Task<int> Jobs(int files, string folder, string workerExe, Action<o
     for (var round = -1; round < files / sources.Length; round++)
     {
         if (round >= 0) samples.Add(Native.Sample());
-        var client = new WorkerClient(workerExe, TimeSpan.FromSeconds(60));
+        var client = new WorkerClient(workerExe, TimeSpan.FromSeconds(60), WinTools.Host.Jobs.ImageJobModule.Instance);
         var t = Stopwatch.GetTimestamp();
-        var batch = await client.RunAsync(sources.Select((s, i) => new ConversionRequest($"r{round + 1}n{i}", "convert.to-jpeg", s)).ToArray(), CancellationToken.None);
+        var batch = await client.RunAsync(sources.Select((s, i) => new JobRequest($"r{round + 1}n{i}", "convert.to-jpeg", [s])).ToArray(), CancellationToken.None);
         if (round >= 0) times.Add(Stopwatch.GetElapsedTime(t).TotalMilliseconds);
         failed += batch.Count(r => !r.Success);
         foreach (var r in batch) if (r.OutputPath is not null) File.Delete(r.OutputPath);
@@ -138,8 +138,8 @@ static int Stall(int cycles, string folder, string workerExe, Action<object> rec
     // Large enough that the batch outlasts the measurement: 4000×3000 BMPs converted to WebP.
     var bmp = Native.Bmp24(4000, 3000);
     var sources = Enumerable.Range(0, 40).Select(i => { var p = Path.Combine(folder, $"big {i:00}.bmp"); File.WriteAllBytes(p, bmp); return p; }).ToArray();
-    var client = new WorkerClient(workerExe, TimeSpan.FromSeconds(120));
-    var batch = Task.Run(() => client.RunAsync(sources.Select((s, i) => new ConversionRequest($"b{i}", "convert.to-webp", s)).ToArray(), CancellationToken.None));
+    var client = new WorkerClient(workerExe, TimeSpan.FromSeconds(120), WinTools.Host.Jobs.ImageJobModule.Instance);
+    var batch = Task.Run(() => client.RunAsync(sources.Select((s, i) => new JobRequest($"b{i}", "convert.to-webp", [s])).ToArray(), CancellationToken.None));
     Thread.Sleep(1500); // workers started and decoding
     var busy = new List<double>();
     for (var i = 0; i < cycles && !batch.IsCompleted; i++) busy.Add(Cycle(i));

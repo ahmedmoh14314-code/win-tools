@@ -61,8 +61,12 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         if (toast.Content is { Progress: null }) toast.Hide();
     }
 
-    public void Started(Operation operation, IReadOnlyList<string> paths) => ui.Post(() =>
+    // The image module is the only one so far; module-supplied words replace these lookups when a second one arrives.
+    private static Operation Op(CapabilityDescriptor capability) => ImageCapabilities.OperationOf(capability);
+
+    public void Started(CapabilityDescriptor capability, IReadOnlyList<string> paths) => ui.Post(() =>
     {
+        var operation = Op(capability);
         _batch++;
         _total = paths.Count;
         _done = 0;
@@ -78,24 +82,26 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         }), TaskScheduler.Default);
     });
 
-    public void Progress(Operation operation, int done, int total) => ui.Post(() =>
+    public void Progress(CapabilityDescriptor capability, int done, int total) => ui.Post(() =>
     {
         _done = Math.Max(_done, done);
         if (toast.Content is { Progress: not null } c) toast.Update(c with { Detail = ProgressText(), Progress = Fraction() });
     });
 
-    public void Finished(Operation operation, IReadOnlyList<JobItem> items) => ui.Post(() =>
+    public void Finished(CapabilityDescriptor capability, IReadOnlyList<JobItem> items) => ui.Post(() =>
     {
         _done = _total;
-        var facts = items.Where(i => i.Result.Info is not null).ToArray();
-        if (operation.Kind == OperationKind.Info && facts.Length > 0)
+        var operation = Op(capability);
+        var facts = items.Where(i => i.Result.Success && i.Result.Facts.Count > 0).ToArray(); // only a believed success shows facts
+        if (capability.Produces == CapabilityOutput.Facts && facts.Length > 0)
         {
             toast.Hide();
-            var sections = facts.Take(InfoPanelRenderer.MaxSections).Select(i => new InfoSection(i.SourceName, InfoRows.For(i.Result.Info!))).ToArray();
+            var sections = facts.Take(InfoPanelRenderer.MaxSections)
+                .Select(i => new InfoSection(i.SourceName, [.. i.Result.Facts.Select(f => new InfoRow(f.Label, f.Value, f.Notice))])).ToArray();
             if (_overlayVisible()) _deferredInfo = (sections, facts.Length - sections.Length);
             else info.Show(sections, facts.Length - sections.Length, _anchor.X, _anchor.Y);
             log.Event("info.show", new { files = facts.Length, shown = sections.Length, deferred = _deferredInfo is not null });
-            var unread = items.Where(i => i.Result.Info is null).ToArray();
+            var unread = items.Where(i => i.Result.Facts.Count == 0).ToArray();
             if (unread.Length > 0)
             {
                 ShowToast(ToastContent.From(FeedbackText.For(operation, unread))); // say which files could not be read, and why
@@ -131,10 +137,10 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         log.Event("toast", new { kind = "triggerRefused", shown = true });
     }
 
-    public void Crashed(Operation operation, int files) => ui.Post(() =>
+    public void Crashed(CapabilityDescriptor capability, int files) => ui.Post(() =>
     {
         _done = _total;
-        ShowToast(new ToastContent(FeedbackKind.Failure, $"Could not {FeedbackText.Verb(operation)} {(files == 1 ? "the image" : $"{files} images")}",
+        ShowToast(new ToastContent(FeedbackKind.Failure, $"Could not {FeedbackText.Verb(Op(capability))} {(files == 1 ? "the image" : $"{files} images")}",
             "Something went wrong. The originals are unchanged."));
         sounds.Play(UiSound.Failure);
         log.Event("toast", new { kind = "Failure", files });

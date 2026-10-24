@@ -214,11 +214,11 @@ public sealed class CompressionQualityTests : IDisposable
     public void The_summary_says_how_much_was_saved()
     {
         var op = OperationCatalog.Get("compress.balanced");
-        var item = new JobItem("photo.jpg", ConversionResult.Ok("1", @"C:\x\photo (compressed).jpg", "0"), 2_480_000, 612_000);
+        var item = new JobItem("photo.jpg", WinTools.Worker.ImageJobs.From(ConversionResult.Ok("1", @"C:\x\photo (compressed).jpg", "0")), 2_480_000, 612_000);
         var m = FeedbackText.For(op, [item]);
         Assert.Contains("2.37 MB → 597.7 KB", m.Detail, StringComparison.Ordinal);
         Assert.Contains("saved 75%", m.Detail, StringComparison.Ordinal);
-        var nothing = FeedbackText.For(op, [new JobItem("a.jpg", ConversionResult.Fail("1", ErrorCode.NothingToDo, ""))]);
+        var nothing = FeedbackText.For(op, [new JobItem("a.jpg", WinTools.Worker.ImageJobs.From(ConversionResult.Fail("1", ErrorCode.NothingToDo, "")))]);
         Assert.Contains("Already optimized", nothing.Title + " " + nothing.Detail, StringComparison.OrdinalIgnoreCase);
     }
 

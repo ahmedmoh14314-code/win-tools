@@ -207,8 +207,8 @@ public sealed class OperationTests : IDisposable
     public async Task Operation_outputs_pass_the_hosts_success_check_across_the_process_boundary()
     {
         var src = Quadrants(200, 100, "p.png");
-        var client = new WorkerClient(Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.exe"), TimeSpan.FromSeconds(30));
-        var results = await client.RunAsync([new("p1", "resize.percent-50", src), new("p2", "rotate.right", src), new("p3", "resize.box-1920x1080", src)],
+        var client = ImageJobsCompat.Images(Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.exe"), TimeSpan.FromSeconds(30));
+        var results = await client.RunAsync([new ConversionRequest("p1", "resize.percent-50", src), new ConversionRequest("p2", "rotate.right", src), new ConversionRequest("p3", "resize.box-1920x1080", src)],
             CancellationToken.None);
         Assert.True(results[0].Success, results[0].Message);
         Assert.True(results[1].Success, results[1].Message);
