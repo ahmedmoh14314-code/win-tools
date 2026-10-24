@@ -201,7 +201,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         // the centre first) and the arm delay counts from now, so the commands are seen before a drop can run one.
         var built = BuildMenu(paths, dx, dy, Stopwatch.GetElapsedTime(_shownTimestamp));
         var hot = Track(dx, dy);
-        _log.Event("drag.files", new { files = paths.Count, built, groups = _navigator?.Groups.Select(g => $"{g.Label}:{g.Commands.Count}"), hookToFilesMs = Math.Round(Stopwatch.GetElapsedTime(_triggerTimestamp).TotalMilliseconds, 3) });
+        _log.Event("drag.files", new { files = paths.Count, built, groups = _navigator?.Groups.Select(g => $"{g.Label}:{g.Commands.Count}"), hookToFilesMs = Math.Round(Stopwatch.GetElapsedTime(_triggerTimestamp).TotalMilliseconds, 3), paths = PathDiagnostics(paths) });
         return hot;
     }
 
@@ -236,6 +236,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         DropDataStage.Recovered => "drag.data.recovered",
         DropDataStage.GaveUp => "drag.data.gaveUp",
         DropDataStage.SessionFallback => "drag.data.sessionFallback",
+        DropDataStage.ShortNamesUnresolved => "drag.data.shortNamesUnresolved",
         _ => "drag.data.dropUnavailable",
     }, new { status = report.Status.ToString(), hr = $"0x{report.HResult:X8}", read = report.Read, files = report.Files });
 

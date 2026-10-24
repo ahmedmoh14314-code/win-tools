@@ -135,9 +135,62 @@ public sealed partial class DropDataTests
         var step = (long)(ShortNames.Deadline.TotalSeconds * System.Diagnostics.Stopwatch.Frequency * 0.6);
         string[] five = [.. Enumerable.Range(1, 5).Select(i => $@"C:\photos\LONGPA~{i}\a.png")];
         var result = ShortNames.ExpandAll(five, p => { ticks += step; return p.Replace("~", "-long-"); }, () => ticks, CancellationToken.None);
-        Assert.DoesNotContain('~', result[0]);
-        Assert.DoesNotContain('~', result[1]);
-        Assert.Equal(five[2..], result[2..]);
+        Assert.DoesNotContain('~', result.Paths[0]);
+        Assert.DoesNotContain('~', result.Paths[1]);
+        Assert.Equal(five[2..], result.Paths[2..]);
+        Assert.Equal(3, result.Unresolved);                // and so the drag gets no commands
+    }
+
+    [Fact]
+    public async Task A_lower_case_alias_that_cannot_be_expanded_gets_no_commands()
+    {
+        // PathPolicy cannot tell "cafaul~1.png" from a name a person chose; unexpanded, it would run under its 8.3 name.
+        var (target, sink, _) = CreateExpanding((paths, _) => new ShortNames.Expansion(paths, Unresolved: 1));
+        Enter(target, new FakeData(_ => Reply.Files([@"C:\p\cafaul~1.png"])));
+        await target.Expansion!.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(Ole32.DROPEFFECT_NONE, Over(target));
+        Assert.Empty(sink.Resolved!);
+        Assert.Contains(sink.Reports, r => r.Stage == DropDataStage.ShortNamesUnresolved && r.Files == 1);
+        Assert.Equal(Ole32.DROPEFFECT_NONE, Drop(target, new FakeData(_ => Reply.Files([@"C:\p\cafaul~1.png"]))));
+    }
+
+    [Fact]
+    public async Task A_failed_expansion_gives_no_commands()
+    {
+        var (target, sink, _) = CreateExpanding((Func<string[], CancellationToken, ShortNames.Expansion>)((_, _) => throw new InvalidOperationException("lookup failed")));
+        Enter(target, new FakeData(_ => Reply.Files([@"C:\p\LONGPA~1\a.png"])));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => target.Expansion!);
+        Over(target);
+        Assert.Empty(sink.Resolved!);
+    }
+
+    [Fact]
+    public async Task An_expansion_still_running_when_the_drag_ends_is_discarded()
+    {
+        using var gate = new ManualResetEventSlim();
+        var (target, sink, _) = CreateExpanding((paths, ct) => { gate.Wait(TimeSpan.FromSeconds(30), CancellationToken.None); return [.. paths.Select(p => p.Replace("LONGPA~1", "old drag"))]; });
+        Enter(target, new FakeData(_ => Reply.Files([@"C:\p\LONGPA~1\a.png"])));
+        var stale = target.Expansion!;
+        target.Reset();                                    // the ring was hidden: the next drag is another drag
+        gate.Set();
+        await stale.WaitAsync(TimeSpan.FromSeconds(10));
+
+        string[] next = [@"C:\q\b.png"];
+        Enter(target, new FakeData(_ => Reply.Files(next)));
+        Over(target);
+        Assert.Equal(next, sink.Entered);
+        Assert.Null(sink.Resolved);
+        Assert.Null(target.Expansion);
+    }
+
+    [Fact]
+    public void Paths_refused_for_another_reason_are_never_looked_up()
+    {
+        var asked = new List<string>();
+        string[] paths = [@"\\.\C:\p\CAFAUL~1.PNG", @"C:\p\PHOTO~1.PNG:stream", @"C:\p\LONGPA~1\a.png"];
+        var result = ShortNames.ExpandAll(paths, p => { asked.Add(p); return p; }, () => 0, CancellationToken.None);
+        Assert.Equal([@"C:\p\LONGPA~1\a.png"], asked);
+        Assert.Equal(0, result.Unresolved);
     }
 
     [Fact]
@@ -149,7 +202,10 @@ public sealed partial class DropDataTests
         Assert.Equal(paths, sink.Entered);
     }
 
-    private static (FileDropTarget Target, Sink Sink, ManualTime Time) CreateExpanding(Func<string[], CancellationToken, string[]> expand)
+    private static (FileDropTarget Target, Sink Sink, ManualTime Time) CreateExpanding(Func<string[], CancellationToken, string[]> expand) =>
+        CreateExpanding((paths, ct) => new ShortNames.Expansion(expand(paths, ct), 0));
+
+    private static (FileDropTarget Target, Sink Sink, ManualTime Time) CreateExpanding(Func<string[], CancellationToken, ShortNames.Expansion> expand)
     {
         var sink = new Sink();
         var time = new ManualTime();

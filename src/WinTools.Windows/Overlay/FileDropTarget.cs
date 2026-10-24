@@ -52,12 +52,12 @@ public sealed class FileDropTarget : IDropTarget
     private long _lastReadEnd;
     private TimeSpan _readTime;
     private bool _gaveUp, _copyAllowed;
-    private readonly Func<string[], CancellationToken, string[]> _expand;
-    private Task<string[]>? _expansion;             // running for this drag's paths, or done and not yet taken
+    private readonly Func<string[], CancellationToken, ShortNames.Expansion> _expand;
+    private Task<ShortNames.Expansion>? _expansion; // running for this drag's paths, or done and not yet taken
     private string[]? _expansionInput, _expansionResult;
     private CancellationTokenSource? _expansionCancel;
 
-    internal FileDropTarget(IDropSink sink, TimeProvider? time = null, Func<string[], CancellationToken, string[]>? expand = null)
+    internal FileDropTarget(IDropSink sink, TimeProvider? time = null, Func<string[], CancellationToken, ShortNames.Expansion>? expand = null)
     {
         _sink = sink;
         _time = time ?? TimeProvider.System;
@@ -65,7 +65,7 @@ public sealed class FileDropTarget : IDropTarget
     }
 
     /// <summary>For tests: the expansion this drag is waiting for, if any.</summary>
-    internal Task<string[]>? Expansion => _expansion;
+    internal Task<ShortNames.Expansion>? Expansion => _expansion;
 
     // COPY over a command, and only if the source allows COPY; NONE everywhere else (and while a read is owed).
     private uint Effect(bool overCommand) => _dragPaths.Count > 0 && _pending is null && _copyAllowed && overCommand ? Ole32.DROPEFFECT_COPY : Ole32.DROPEFFECT_NONE;
@@ -173,7 +173,8 @@ public sealed class FileDropTarget : IDropTarget
         var input = raw.ToArray();
         var cancel = new CancellationTokenSource();
         (_expansionInput, _expansionResult, _expansionCancel) = (input, null, cancel);
-        _expansion = Task.Run(() => _expand(input, cancel.Token), CancellationToken.None);
+        // A thread of its own: one lookup can block for many seconds and must not hold a shared pool thread.
+        _expansion = Task.Factory.StartNew(() => _expand(input, cancel.Token), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         return false;
     }
 
@@ -181,8 +182,11 @@ public sealed class FileDropTarget : IDropTarget
     private bool TakeExpansion()
     {
         if (_expansion is not { IsCompleted: true } done) return false;
-        _expansionResult = done.IsCompletedSuccessfully ? done.Result : _expansionInput; // a failed expansion leaves them refused
-        _dragPaths = _expansionResult!;
+        // Anything left unexpanded, or a failed expansion, means no commands: the files cannot be named canonically.
+        var unresolved = done.IsCompletedSuccessfully ? done.Result.Unresolved : _expansionInput!.Length;
+        _expansionResult = unresolved == 0 ? done.Result.Paths : [];
+        if (unresolved > 0) _sink.OnDropData(new DropDataEvent(DropDataStage.ShortNamesUnresolved, DropReadStatus.Files, 0, _reads, unresolved));
+        _dragPaths = _expansionResult;
         _expansion = null;
         return true;
     }
