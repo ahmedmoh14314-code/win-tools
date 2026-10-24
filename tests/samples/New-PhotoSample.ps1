@@ -43,15 +43,17 @@ $font = New-Object System.Drawing.Font 'Segoe UI', 22, ([System.Drawing.FontStyl
 $g.DrawString('WinTools sample 2026', $font, (New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)), 30, 640)
 $g.Dispose()
 
-# Sensor-like noise, luminance and a little colour, from the seeded generator.
+# Sensor-like noise, luminance and a little colour, from the seeded generator. Light, as a phone's output is after its
+# own noise reduction: white noise of +-6 on flat GDI+ gradients made the image behave like a high-ISO shot, which
+# Compress rightly reports as already optimized at High and Balanced (measured 2026-10-24).
 $rect = New-Object System.Drawing.Rectangle 0, 0, $w, $h
 $data = $bmp.LockBits($rect, [System.Drawing.Imaging.ImageLockMode]::ReadWrite, $bmp.PixelFormat)
 $bytes = New-Object byte[] ($data.Stride * $h)
 [System.Runtime.InteropServices.Marshal]::Copy($data.Scan0, $bytes, 0, $bytes.Length)
 for ($i = 0; $i -lt $bytes.Length; $i += 3) {
-    $n = $rnd.Next(-6, 7)
+    $n = $rnd.Next(-2, 3)
     for ($k = 0; $k -lt 3; $k++) {
-        $v = $bytes[$i + $k] + $n + $rnd.Next(-2, 3)
+        $v = $bytes[$i + $k] + $n + $rnd.Next(-1, 2)
         $bytes[$i + $k] = [byte][Math]::Max(0, [Math]::Min(255, $v))
     }
 }

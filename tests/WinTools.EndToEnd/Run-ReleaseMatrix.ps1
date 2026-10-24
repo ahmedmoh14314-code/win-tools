@@ -36,7 +36,7 @@ public static class MatrixIdle {
 $rows = @(
     @('first-use-png',        'png --cycles 3',                                                   'first operation after a fresh host (cycle 1), then warm'),
     @('photo-compress',       'photo --cycles 2',                                                 'compress a real-size photo: valid copy, saves >= 8 %'),
-    @('photo-compress-high',  'photo --op compress.high --cycles 1',                              'High on a phone-like photo'),
+    @('photo-compress-high',  'photo --op compress.high --expect already-optimized --cycles 1',    'High on a photo already near its quality: nothing written, says so'),
     @('ctrl-a-2',             'batch --batch 2 --select ctrl-a --settle-ms 0 --cycles 2',         '2 files, Ctrl+A, drag at once'),
     @('ctrl-a-10',            'batch --batch 10 --select ctrl-a --settle-ms 0 --cycles 2',        '10 files, Ctrl+A, drag at once'),
     @('ctrl-a-100',           'batch --batch 100 --select ctrl-a --settle-ms 0 --cycles 1',       '100 files, Ctrl+A, drag at once'),

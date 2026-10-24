@@ -19,7 +19,8 @@ using WinTools.EndToEnd;
 //          source's full path is longer than 260 characters, its folder just under 248 so Explorer can open it)
 // "alt": a drag with Alt held, then the trigger: nothing may open or run, and the refusal toast must appear.
 // "photo": a 960x720 photograph-like JPEG (tests/samples/New-PhotoSample.ps1), compressed (default compress.balanced):
-// the copy must be valid and save at least 8 %, the rule Compress promises (ADR-0017).
+// the copy must be valid and save at least 8 %, the rule Compress promises (ADR-0017). With --expect already-optimized
+// the honest outcome is the other one: no file, a "Nothing to change" toast, the job reported as NothingToDo.
 // Each scenario: fresh folder with copies of the committed samples, fresh host with its own log and default settings,
 // one Explorer window on that folder. Before every injection the window is re-verified; a release happens only over our
 // overlay or over the folder's own background, otherwise the drag is cancelled with Escape. After every cycle the folder
@@ -34,7 +35,7 @@ using WinTools.EndToEnd;
 // sound the host logged must follow the rules: one level sound per level change, never more ticks than sector changes.
 
 var scenario = args.Length > 0 ? args[0] : "png";
-var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; string? opArg = null; var batchSize = 12; var animations = "On"; string? hostArg = null; var selectMode = "ctrl-a"; var holdKey = "none"; var settleMs = 250; var pathStyle = "plain";
+var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; string? opArg = null; var batchSize = 12; var animations = "On"; string? hostArg = null; var selectMode = "ctrl-a"; var holdKey = "none"; var settleMs = 250; var pathStyle = "plain"; var expectNothing = false;
 for (var i = 1; i < args.Length; i++)
 {
     switch (args[i])
@@ -49,6 +50,7 @@ for (var i = 1; i < args.Length; i++)
         case "--select": selectMode = args[++i] is "ctrl-a" or "ctrl-click" or "shift-range" ? args[i] : throw new ArgumentException($"--select {args[i]}"); break;
         case "--hold": holdKey = args[++i] is "none" or "ctrl" or "shift" ? args[i] : throw new ArgumentException($"--hold {args[i]}"); break;
         case "--settle-ms": settleMs = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
+        case "--expect": expectNothing = args[++i] switch { "copy" => false, "already-optimized" => true, var x => throw new ArgumentException($"--expect {x}") }; break;
         case "--path-style": pathStyle = args[++i] is "plain" or "unicode" or "long" ? args[i] : throw new ArgumentException($"--path-style {args[i]}"); break;
         case "--animations": animations = args[++i] switch { "on" => "On", "off" => "Off", "system" => "System", var a => throw new ArgumentException($"--animations {a}") }; break;
         default: Console.Error.WriteLine($"Unknown option {args[i]}"); return 64;
@@ -527,6 +529,8 @@ using (var explorer = opened)
             bool? toastShown = null, focusKept = null;
             while (Stopwatch.GetElapsedTime(deadline) < waitFor)
             {
+                // Already optimized: the job ends without a file; stop waiting so the toast is still up when it is checked.
+                if (expectNothing && HostLines().Skip(hostLogLines).Any(l => l.Contains("\"ev\":\"job.done\"", StringComparison.Ordinal))) break;
                 var produced = Directory.GetFiles(folder).Where(f => !string.Equals(f, source, StringComparison.OrdinalIgnoreCase)).ToArray();
                 if (produced.Length > 0 && !produced.Any(f => Path.GetFileName(f).StartsWith("~wintools-", StringComparison.Ordinal))) { output = produced.Single(); break; }
                 if (op is { WritesFile: false } && Desktop.VisibleWindowsOf(host.Id, "WinTools.InfoPanel").Count > 0)
@@ -539,7 +543,7 @@ using (var explorer = opened)
                 }
                 Thread.Sleep(100);
             }
-            if (output is not null) (toastShown, focusKept) = WaitForSurface("WinTools.Toast", explorer.Hwnd, TimeSpan.FromSeconds(3));
+            if (output is not null || expectNothing) (toastShown, focusKept) = WaitForSurface("WinTools.Toast", explorer.Hwnd, TimeSpan.FromSeconds(3));
             Thread.Sleep(300);
             var files = Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
             var sourceIntact = File.Exists(source) && Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source))) == sourceHash;
@@ -570,6 +574,9 @@ using (var explorer = opened)
             var feedbackOk = output is null || (toastShown == true && focusKept == true);
             var ok = sourceIntact && cleanFolder && soundsHeld && feedbackOk && scenario switch
             {
+                "photo" when expectNothing => output is null && accepted == 1 && toastShown == true && focusKept == true
+                    && ev.Any(e => Ev(e) == "toast" && Data(e).TryGetProperty("kind", out var tk) && tk.GetString() == "Nothing")
+                    && ev.Any(e => Ev(e) == "job.result" && Data(e).TryGetProperty("error", out var er) && er.GetString() == "NothingToDo"),
                 "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" when op is { WritesFile: false } => output is null && infoShown && focusKept == true && accepted == 1,
                 "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 // Corner: the trigger really was off-centre and deep in a sector, nothing opened before the centre was
