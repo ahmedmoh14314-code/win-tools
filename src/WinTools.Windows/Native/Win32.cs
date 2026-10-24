@@ -134,6 +134,12 @@ internal static partial class Kernel32
     [LibraryImport("kernel32.dll", SetLastError = true)] public static partial nuint GlobalSize(nint hMem);
     [LibraryImport("kernel32.dll", SetLastError = true)] public static partial nint GlobalLock(nint hMem);
     [LibraryImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool GlobalUnlock(nint hMem);
+    // Explorer drops a file beyond MAX_PATH as its 8.3 short path; this gives back the long one (up to 32,767 chars).
+    public const int MaxLongPath = 32_768;
+    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    public static partial uint GetLongPathNameW(string shortPath, [Out] char[] longPath, uint length);
+    public const uint SEM_FAILCRITICALERRORS = 0x0001, SEM_NOOPENFILEERRORBOX = 0x8000;
+    [LibraryImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool SetThreadErrorMode(uint newMode, out uint oldMode);
     [LibraryImport("kernel32.dll")] public static unsafe partial int MultiByteToWideChar(uint codePage, uint flags, byte* multiByte, int multiByteLength, char* wide, int wideLength);
 }
 
