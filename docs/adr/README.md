@@ -22,5 +22,6 @@ Template: `template.md`. Numbering is sequential and never reused. Old ADRs are 
 | [ADR-0015](ADR-0015-worker-resource-limits.md) | Worker resource limits: pixels, memory cap, memory-bounded pool | Accepted | — |
 | [ADR-0016](ADR-0016-v1-ui-surfaces.md) | V1 user interface surfaces: rendering, motion, sound, feedback, tray and settings | Accepted | — |
 | [ADR-0018](ADR-0018-job-contract-and-scheduler.md) | Job contract v2 and the job scheduler | Proposed (V2 PR 1.2) | Evaluator review |
+| [ADR-0019](ADR-0019-menu-categories-more-and-dialogs.md) | Menu categories as module data, "More…", the dialogs process, folder inputs | Proposed (V2 PR 1.3) | Evaluator review; More… keyboard focus needs a spike before a module relies on it |
 
 Decision order recommended: 0002 → 0003 → 0001/0004 (same spike) → 0005 → 0011 → 0007 → 0006 → 0008. 0009 and 0010 can be confirmed any time.

@@ -17,7 +17,8 @@ namespace WinTools.Host;
 /// Connects input, session, overlay, capabilities and jobs on the UI thread. It translates events into calls on
 /// <see cref="InteractionSession"/> and carries out the actions the session returns; the rules live in the session.
 /// It also plays the navigation sounds (<see cref="NavigationSounds"/> decides which) and tells the feedback layer where
-/// the user dropped.
+/// the user dropped. One exception: a "More…" pick is awaited on a pool thread and then enqueued from there (the
+/// scheduler, the log and the presenter are thread-safe).
 /// </summary>
 internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
 {
