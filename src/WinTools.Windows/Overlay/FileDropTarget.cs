@@ -24,6 +24,11 @@ namespace WinTools.Windows.Overlay;
 /// re-entry or at the drop, falls back to them.
 /// </para>
 /// <para>
+/// Paths that look like 8.3 aliases (Explorer sends them for files beyond MAX_PATH) are expanded by
+/// <see cref="ShortNames"/> on a task, never here: a lookup can block for seconds. Until it finishes the ring waits, as
+/// for a read that is owed, and a later DragOver hands the expanded files on. A drop before that runs nothing.
+/// </para>
+/// <para>
 /// COM lifetime: each data object arrives through COM interop as a runtime-callable wrapper whose count went up by one
 /// for that call. The target gives exactly that one count back (<see cref="Marshal.ReleaseComObject"/>) when it is done
 /// with the object: at the end of the call, or, for a data object kept for a retry, when the read resolves or on
@@ -47,12 +52,20 @@ public sealed class FileDropTarget : IDropTarget
     private long _lastReadEnd;
     private TimeSpan _readTime;
     private bool _gaveUp, _copyAllowed;
+    private readonly Func<string[], CancellationToken, ShortNames.Expansion> _expand;
+    private Task<ShortNames.Expansion>? _expansion; // running for this drag's paths, or done and not yet taken
+    private string[]? _expansionInput, _expansionResult;
+    private CancellationTokenSource? _expansionCancel;
 
-    internal FileDropTarget(IDropSink sink, TimeProvider? time = null)
+    internal FileDropTarget(IDropSink sink, TimeProvider? time = null, Func<string[], CancellationToken, ShortNames.Expansion>? expand = null)
     {
         _sink = sink;
         _time = time ?? TimeProvider.System;
+        _expand = expand ?? ShortNames.ExpandAll;
     }
+
+    /// <summary>For tests: the expansion this drag is waiting for, if any.</summary>
+    internal Task<ShortNames.Expansion>? Expansion => _expansion;
 
     // COPY over a command, and only if the source allows COPY; NONE everywhere else (and while a read is owed).
     private uint Effect(bool overCommand) => _dragPaths.Count > 0 && _pending is null && _copyAllowed && overCommand ? Ole32.DROPEFFECT_COPY : Ole32.DROPEFFECT_NONE;
@@ -61,13 +74,14 @@ public sealed class FileDropTarget : IDropTarget
     {
         Let(ref _pending);
         _copyAllowed = (effect & Ole32.DROPEFFECT_COPY) != 0;
-        var pending = false;
+        bool pending = false, expanding = false;
         if (_copyAllowed && _dragPaths.Count == 0 && !_gaveUp)
         {
-            if (CanRead())
+            if (_expansion is not null) expanding = !TakeExpansion(); // re-entered while the paths are being expanded
+            else if (CanRead())
             {
                 var read = Read(dataObject);
-                if (read.Status == DropReadStatus.Files) _dragPaths = read.Paths;
+                if (read.Status == DropReadStatus.Files) expanding = !Accept(read.Paths);
                 else if (EndOfRetries()) GiveUp(read);
                 else { pending = true; Report(DropDataStage.Unavailable, read); }
             }
@@ -75,6 +89,7 @@ public sealed class FileDropTarget : IDropTarget
         }
         if (pending) _pending = dataObject; // keeps this call's count until the read resolves or the drag ends
         else Release(dataObject);
+        pending |= expanding;
         effect = Effect(_sink.OnDragEnter(_copyAllowed && !pending ? _dragPaths : [], pending, pt.X, pt.Y));
         return 0;
     }
@@ -82,7 +97,11 @@ public sealed class FileDropTarget : IDropTarget
     public int DragOver(uint keyState, POINTL pt, ref uint effect)
     {
         _copyAllowed = (effect & Ole32.DROPEFFECT_COPY) != 0;
-        if (_pending is { } data && CanRead())
+        if (_expansion is not null && _dragPaths.Count == 0)
+        {
+            if (TakeExpansion()) { effect = Effect(_sink.OnFilesResolved(_dragPaths, pt.X, pt.Y)); return 0; }
+        }
+        else if (_pending is { } data && CanRead())
         {
             var read = Read(data);
             if (read.Status == DropReadStatus.Files || EndOfRetries())
@@ -90,8 +109,9 @@ public sealed class FileDropTarget : IDropTarget
                 Let(ref _pending);
                 if (read.Status == DropReadStatus.Files)
                 {
-                    _dragPaths = read.Paths;
+                    var known = Accept(read.Paths);
                     Report(DropDataStage.Recovered, read);
+                    if (!known) { effect = Effect(_sink.OnDragOver(pt.X, pt.Y)); return 0; } // still waiting: for the expansion now
                 }
                 else GiveUp(read);
                 effect = Effect(_sink.OnFilesResolved(_dragPaths, pt.X, pt.Y));
@@ -118,7 +138,7 @@ public sealed class FileDropTarget : IDropTarget
         if (copyAllowed)
         {
             var read = HDrop.Read(dataObject);
-            if (read.Status == DropReadStatus.Files) paths = read.Paths;
+            if (read.Status == DropReadStatus.Files) paths = Expanded(read.Paths);
             else
             {
                 paths = _dragPaths;
@@ -137,9 +157,48 @@ public sealed class FileDropTarget : IDropTarget
     {
         Let(ref _pending);
         _dragPaths = [];
+        _expansionCancel?.Cancel();
+        (_expansion, _expansionInput, _expansionResult, _expansionCancel) = (null, null, null, null);
         _reads = 0;
         _readTime = TimeSpan.Zero;
         _gaveUp = false;
+    }
+
+    /// <summary>Takes a read's files: true when they are known now, false when their expansion has started.</summary>
+    private bool Accept(IReadOnlyList<string> raw)
+    {
+        if (!ShortNames.NeedsExpansion(raw)) { _dragPaths = raw; return true; }
+        if (_expansionResult is not null && raw.SequenceEqual(_expansionInput!)) { _dragPaths = _expansionResult; return true; }
+        _expansionCancel?.Cancel();
+        var input = raw.ToArray();
+        var cancel = new CancellationTokenSource();
+        (_expansionInput, _expansionResult, _expansionCancel) = (input, null, cancel);
+        // A thread of its own: one lookup can block for many seconds and must not hold a shared pool thread.
+        _expansion = Task.Factory.StartNew(() => _expand(input, cancel.Token), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        return false;
+    }
+
+    /// <summary>The finished expansion's files become the drag's; false while it is still running.</summary>
+    private bool TakeExpansion()
+    {
+        if (_expansion is not { IsCompleted: true } done) return false;
+        // Anything left unexpanded, or a failed expansion, means no commands: the files cannot be named canonically.
+        var unresolved = done.IsCompletedSuccessfully ? done.Result.Unresolved : _expansionInput!.Length;
+        _expansionResult = unresolved == 0 ? done.Result.Paths : [];
+        if (unresolved > 0) _sink.OnDropData(new DropDataEvent(DropDataStage.ShortNamesUnresolved, DropReadStatus.Files, 0, _reads, unresolved));
+        _dragPaths = _expansionResult;
+        _expansion = null;
+        return true;
+    }
+
+    /// <summary>A drop's files: as dropped, or expanded if this drag's expansion of exactly these has finished; otherwise
+    /// none, because waiting here would block the UI thread.</summary>
+    private IReadOnlyList<string> Expanded(IReadOnlyList<string> raw)
+    {
+        if (!ShortNames.NeedsExpansion(raw)) return raw;
+        if (_expansionInput is null || !raw.SequenceEqual(_expansionInput)) return [];
+        if (_expansionResult is null && !TakeExpansion()) return [];
+        return _expansionResult!;
     }
 
     private bool CanRead() => _reads == 0 || _time.GetElapsedTime(_lastReadEnd) >= RetryInterval;

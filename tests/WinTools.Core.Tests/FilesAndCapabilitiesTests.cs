@@ -357,6 +357,70 @@ public sealed class PathPolicyTests
     }
 
     [Fact]
+    public void A_path_longer_than_260_characters_is_supported()
+    {
+        var path = @"C:\Users\someone\AppData\Local\Temp\wintools-e2e\png-181700\" + string.Concat(Enumerable.Repeat(@"long path segment 0123456789\", 6))
+            + new string('d', 20) + @"\a long file name for the 260 character test photo.png";
+        Assert.True(path.Length > 260);
+        Assert.True(PathPolicy.IsSupported(path));
+        Assert.NotEmpty(CapabilityResolver.Default.Resolve([path]));
+    }
+
+    // PathPolicy runs on the UI thread for every dropped path. Path.GetFullPath expands a name with '~' by asking the
+    // file system (a network round trip on a UNC path), so an 8.3 alias was refused only when that lookup succeeded,
+    // and a hostile source could stall the overlay with thousands of such paths. Aliases are recognised by shape now.
+    [Theory]
+    [InlineData(@"C:\nowhere\LONGPA~1\photo.png")]
+    [InlineData(@"C:\nowhere\folder\PHOTO~12.PNG")]
+    [InlineData(@"\\wintools-test-host.invalid\share\LONGPA~1\a.png")]
+    [InlineData(@"Z:\A~1\B.JPG")]
+    // Aliases Windows really generated (evaluator, PR #13): hashed, leading '~', underscores, a 3-letter JPEG extension,
+    // folders without an extension.
+    [InlineData(@"C:\p\CO5337~1.PNG")]
+    [InlineData(@"C:\p\8F5E~1.PNG")]
+    [InlineData(@"C:\p\~DRAFT~1.PNG")]
+    [InlineData(@"C:\p\X_Y_Z_~1.PNG")]
+    [InlineData(@"C:\p\PHOTO~1.JPE")]
+    [InlineData(@"C:\LONGNA~1\a.png")]
+    [InlineData(@"C:\C--USE~2\a.png")]
+    public void An_8_3_alias_is_recognised_without_asking_the_file_system(string path)
+    {
+        Assert.Equal(PathVerdict.ShortName, PathPolicy.Explain(path));
+    }
+
+    [Fact]
+    public void An_alias_that_exists_on_disk_is_judged_by_its_shape_not_looked_up()
+    {
+        // Path.GetFullPath would expand an existing alias (a file-system lookup) and the path would compare as not
+        // canonical; PathPolicy must not look it up at all.
+        var dir = Path.Combine(Path.GetTempPath(), "wintools-tests", "a folder with a long name " + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var buffer = new char[32768];
+            var n = GetShortPathNameW(dir, buffer, (uint)buffer.Length);
+            var alias = new string(buffer, 0, (int)n);
+            Assert.True(n > 0 && alias.Contains('~'), $"no 8.3 alias on this volume ({alias})");
+            Assert.Equal(PathVerdict.ShortName, PathPolicy.Explain(Path.Combine(alias, "photo.png")));
+        }
+        finally { Directory.Delete(dir); }
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern uint GetShortPathNameW(string longPath, [System.Runtime.InteropServices.Out] char[] shortPath, uint length);
+
+    [Theory]
+    [InlineData(@"C:\p\my~holiday.png")]
+    [InlineData(@"C:\p\~draft.jpg")]
+    [InlineData(@"C:\p\photo~2.png")]          // lower case: a name a person chose, not an alias (aliases are upper case)
+    [InlineData(@"C:\p\LONG FOLDER~1\a.png")]  // a space cannot be in an alias
+    [InlineData(@"C:\p\ABCDEFGHI~1.PNG")]      // more than 8 characters before the extension
+    public void Long_names_with_a_tilde_are_supported(string path)
+    {
+        Assert.Equal(PathVerdict.Supported, PathPolicy.Explain(path));
+    }
+
+    [Fact]
     public void Lone_surrogates_are_refused()
     {
         // Built at run time: attribute arguments are stored as UTF-8, which cannot carry a lone surrogate.

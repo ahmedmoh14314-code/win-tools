@@ -281,7 +281,7 @@
       ],
       "status": "verified",
       "source": "brief.md §Security model",
-      "evidence": "Malformed input fails cleanly in the worker without affecting the host: truncated and damaged PNG/JPEG, zero-byte, mislabelled, 60,000x60,000 header and oversized input (ConversionJobTests, WorkerProcessTests). No cmd.exe and no string-built command lines: the worker starts via ProcessStartInfo with no arguments (evaluator review 2026-10-21). Path edge cases: PathPolicyTests, long, Unicode and UNC naming tests."
+      "evidence": "Malformed input fails cleanly in the worker without affecting the host: truncated and damaged PNG/JPEG, zero-byte, mislabelled, 60,000x60,000 header and oversized input (ConversionJobTests, WorkerProcessTests). No cmd.exe and no string-built command lines: the worker starts via ProcessStartInfo with no arguments (evaluator review 2026-10-21). Path edge cases: PathPolicyTests, long, Unicode and UNC naming tests. Files beyond MAX_PATH dropped from Explorer arrive as 8.3 short names and are expanded off the UI thread (DropDataLongPathTests; release matrix rows long-png and long-batch-10, 2026-10-24); a lookup that does not finish within 5 s leaves them refused (ADR-0004)."
     },
     {
       "id": "SEC-002",

@@ -43,6 +43,9 @@ public enum DropDataStage
     SessionFallback,
     /// <summary>The drop's read failed and the session has no files: nothing runs.</summary>
     DropUnavailable,
+    /// <summary>Some 8.3 short names could not be expanded (failed, or past the deadline): the drag gets no commands.
+    /// The count is the number of such paths.</summary>
+    ShortNamesUnresolved,
 }
 
 /// <summary>One diagnostic about the drag's data: no paths, only the status, the HRESULT, the read number and a count.</summary>
