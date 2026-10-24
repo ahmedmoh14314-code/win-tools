@@ -93,6 +93,9 @@ internal sealed class JobScheduler
         var job = new ScheduledJob(Guid.NewGuid().ToString("N"), capability, paths);
         _live[job.Id] = job;
         _log.Event("job.queued", new { job = job.Id, op = capability.Id, module = capability.Module, files = paths.Count });
+        // A command that fills the clipboard runs at once, beside the queue: behind a long hash it would overwrite whatever
+        // the user copied meanwhile, minutes later (evaluator, PR #18).
+        if (capability.Produces == CapabilityOutput.Clipboard) { _ = Task.Run(() => RunOneAsync(_modules[capability.Module], job)); return job; }
         if (!queue.Writer.TryWrite(job)) { _live.TryRemove(job.Id, out _); return null; }
         return job;
     }
@@ -109,18 +112,20 @@ internal sealed class JobScheduler
 
     private async Task ConsumeAsync(JobModuleRunner runner, ChannelReader<ScheduledJob> reader)
     {
-        await foreach (var job in reader.ReadAllAsync().ConfigureAwait(false))
+        await foreach (var job in reader.ReadAllAsync().ConfigureAwait(false)) await RunOneAsync(runner, job).ConfigureAwait(false);
+    }
+
+    private async Task RunOneAsync(JobModuleRunner runner, ScheduledJob job)
+    {
+        // Nothing a job throws may end the queue: RunAsync catches, but its catch logs and tells the user, and either can
+        // throw too (evaluator, PR #16). The next drop on this module must still run.
+        try { await RunAsync(runner, job).ConfigureAwait(false); }
+        catch (Exception) { }
+        finally
         {
-            // Nothing a job throws may end the queue: RunAsync catches, but its catch logs and tells the user, and either can
-            // throw too (evaluator, PR #16). The next drop on this module must still run.
-            try { await RunAsync(runner, job).ConfigureAwait(false); }
-            catch (Exception) { }
-            finally
-            {
-                _live.TryRemove(job.Id, out _);
-                job.Complete();
-                job.Dispose();
-            }
+            _live.TryRemove(job.Id, out _);
+            job.Complete();
+            job.Dispose();
         }
     }
 
@@ -146,8 +151,8 @@ internal sealed class JobScheduler
             _log.Event("job.done", new { job = job.Id, op = capability.Id, ok = results.Count(r => r.Success), nothingToDo = results.Count(r => r.Error == ErrorCode.NothingToDo),
                 failed = results.Count(r => !r.Success && r.Error != ErrorCode.NothingToDo), cancelled = results.Count(r => r.Error == ErrorCode.Cancelled),
                 ms = Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 1), jobObject = runner.Client.JobObjectAssigned, workers = runner.Client.LastLaneCount });
-            var items = requests.Zip(results, (q, r) => new JobItem(q.Inputs.Count == 1 ? Path.GetFileName(q.Inputs[0]) : $"{q.Inputs.Count} files", r,
-                q.Inputs.Count == 1 ? SizeOf(q.Inputs[0]) : null, r.OutputPath is { } o ? SizeOf(o) : null)).ToArray();
+            var items = requests.Zip(results, (q, r) => new JobItem(q.Inputs.Count == 1 ? NameOf(q.Inputs[0]) : $"{q.Inputs.Count} items", r,
+                q.Inputs.Count == 1 ? SizeOf(q.Inputs[0]) : null, r.OutputPath is { } o ? SizeOf(o) : null, q.Inputs.Count)).ToArray();
             _feedback.Finished(capability, items);
         }
         catch (Exception ex)
@@ -156,6 +161,9 @@ internal sealed class JobScheduler
             _feedback.Crashed(capability, paths.Count);
         }
     }
+
+    /// <summary>The name shown for a path: a marked folder's own name, not the empty name after its separator (evaluator, PR #18).</summary>
+    private static string NameOf(string path) => Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
 
     /// <summary>A file's size for the summary ("2.4 MB → 610 KB"); null when it cannot be read. Never opens the file.</summary>
     private static long? SizeOf(string path)

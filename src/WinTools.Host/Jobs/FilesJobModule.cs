@@ -37,15 +37,22 @@ internal sealed class FilesJobModule : IJobModule
 /// Runs the General Files module's requests: Copy path in the host (it parses nothing, so it needs no worker), the rest
 /// in the text worker. A job holds requests of one command, so each call goes one way.
 /// </summary>
-internal sealed class FilesExecutor(IJobExecutor worker, Func<string, Task<bool>> copyText) : IJobExecutor
+internal sealed class FilesExecutor(IJobExecutor info, IJobExecutor hash, Func<string, Task<bool>> copyText) : IJobExecutor
 {
-    public bool JobObjectAssigned => worker.JobObjectAssigned;
-    public int LastLaneCount => worker.LastLaneCount;
+    private IJobExecutor? _last; // what ran the last job, for the log; null after Copy path, which starts no worker
+
+    public bool JobObjectAssigned => _last?.JobObjectAssigned ?? true;
+    public int LastLaneCount => _last?.LastLaneCount ?? 0;
 
     public async Task<IReadOnlyList<JobResult>> RunAsync(IReadOnlyList<JobRequest> requests, CancellationToken cancellationToken, Action<int>? onFileDone = null)
     {
         if (requests.Count == 0 || requests[0].CapabilityId != FilesCapabilities.CopyPathId)
-            return await worker.RunAsync(requests, cancellationToken, onFileDone).ConfigureAwait(false);
+        {
+            // File info is quick and gets a short limit; hashing reads whole files, one at a time, with a long one.
+            _last = requests.Count > 0 && requests[0].CapabilityId == FilesCapabilities.Sha256Id ? hash : info;
+            return await _last.RunAsync(requests, cancellationToken, onFileDone).ConfigureAwait(false);
+        }
+        _last = null;
         var results = new List<JobResult>(requests.Count);
         foreach (var r in requests)
         {

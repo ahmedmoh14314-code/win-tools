@@ -91,6 +91,36 @@ public sealed class JobSchedulerTests : IDisposable
     }
 
     [Fact]
+    public async Task A_clipboard_command_never_waits_behind_its_modules_queue()
+    {
+        // Copy path behind a long hash would overwrite the clipboard minutes later (evaluator, PR #18).
+        var gate = new Gate();
+        var scheduler = Scheduler(new Recorder(), ("a", gate));
+        var slow = scheduler.Enqueue(Capability("a.hash", "a"), [@"C:\x\big.iso"])!;
+        await Entered(gate);
+        var copy = scheduler.Enqueue(Capability("a.copy", "a", CapabilityShape.Selection) with { Produces = CapabilityOutput.Clipboard, LongRunning = false }, [@"C:\x\a.png"])!;
+        await Entered(gate);                     // it started while the hash still runs
+        gate.Release(1);
+        await copy.Completion.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(slow.Completion.IsCompleted);
+        gate.Release(0);
+        await slow.Completion.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task A_folder_is_named_by_its_own_name_in_the_summary()
+    {
+        var gate = new Gate();
+        var recorder = new Recorder();
+        var scheduler = Scheduler(recorder, ("a", gate));
+        var job = scheduler.Enqueue(Capability("a.info", "a"), [@"C:\x\holiday\"])!;
+        await Entered(gate);
+        gate.Release(0);
+        await job.Completion.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal("holiday", Assert.Single(Assert.Single(recorder.Finished)).SourceName);
+    }
+
+    [Fact]
     public async Task Cancel_all_can_be_awaited_until_every_job_has_finished()
     {
         var gate = new Gate();

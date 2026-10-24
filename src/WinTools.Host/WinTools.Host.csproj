@@ -47,6 +47,5 @@
     <Copy SourceFiles="@(_SettingsFiles)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" Condition="Exists('%(FullPath)')" />
     <Error Condition="!Exists('$(PublishDir)WinTools.Settings.exe')" Text="The settings window (WinTools.Settings.exe) is missing from the publish folder." />
     <Error Condition="!Exists('$(PublishDir)WinTools.Dialogs.exe')" Text="The dialogs process (WinTools.Dialogs.exe) is missing from the publish folder." />
-    <Error Condition="!Exists('$(OutDir)WinTools.Worker.Text.exe')" Text="The General Files worker (WinTools.Worker.Text.exe) was not built next to the host." />
   </Target>
 </Project>

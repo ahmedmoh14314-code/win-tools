@@ -15,8 +15,9 @@ internal static class Program
 {
     private static readonly TimeSpan JobTimeout = TimeSpan.FromSeconds(60);
 
-    /// <summary>Per-file limit of the General Files worker: hashing a large file on a slow disk takes minutes.</summary>
-    private static readonly TimeSpan FilesJobTimeout = TimeSpan.FromMinutes(10);
+    /// <summary>Per-file limits of the General Files worker: File info reads 4 KB; a hash of a large file on a slow disk or
+    /// a share takes minutes.</summary>
+    private static readonly TimeSpan FilesInfoTimeout = TimeSpan.FromSeconds(30), FilesHashTimeout = TimeSpan.FromMinutes(30);
 
     /// <summary>How long the exit waits for cancelled jobs: the workers' 1 s grace plus temp cleanup.</summary>
     private static readonly TimeSpan ExitGrace = TimeSpan.FromSeconds(3);
@@ -38,12 +39,13 @@ internal static class Program
 
         var workerPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.exe");
         var textWorkerPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.Text.exe");
-        foreach (var required in new[] { workerPath, textWorkerPath })
-            if (!File.Exists(required))
-            {
-                MessageWindow.ShowStartupError($"WinTools cannot start: {Path.GetFileName(required)} is missing from its folder. Reinstall or copy the complete folder.");
-                return 3;
-            }
+        // The image worker is required; without the General Files worker the host still runs, and those commands fail
+        // with a plain reason (the worker client reports a worker that cannot start).
+        if (!File.Exists(workerPath))
+        {
+            MessageWindow.ShowStartupError("WinTools cannot start: WinTools.Worker.exe is missing from its folder. Reinstall or copy the complete folder.");
+            return 3;
+        }
 
         using var log = HostLog.Open(logPath);
         var store = settingsPath is null ? SettingsStore.Default() : new SettingsStore(settingsPath);
@@ -66,7 +68,9 @@ internal static class Program
             toast.ReducedMotionSource = () => Volatile.Read(ref current).ReducedMotion(SystemPreferences.ReducedMotion());
             var images = new JobModuleRunner(ImageJobModule.Instance, new WorkerClient(workerPath, JobTimeout, ImageJobModule.Instance), ImageJobModule.Parameters);
             var files = new JobModuleRunner(FilesJobModule.Instance,
-                new FilesExecutor(new WorkerClient(textWorkerPath, FilesJobTimeout, FilesJobModule.Instance), text => CopyTextAsync(window, text)), FilesJobModule.Parameters);
+                new FilesExecutor(new WorkerClient(textWorkerPath, FilesInfoTimeout, FilesJobModule.Instance),
+                    new WorkerClient(textWorkerPath, FilesHashTimeout, FilesJobModule.Instance, parallelism: 1), // one disk read at a time
+                    text => CopyTextAsync(window, text)), FilesJobModule.Parameters);
             var jobs = new JobScheduler([images, files], log, () => Volatile.Read(ref current), feedback);
             coordinator = new InteractionCoordinator(log, window, jobs, feedback, sounds, settings);
             using (coordinator)
@@ -124,9 +128,11 @@ internal static class Program
         for (var attempt = 0; attempt < 5; attempt++)
         {
             var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            window.Post(() => done.TrySetResult(WinTools.Windows.Shell.ClipboardText.TrySet(window.Handle, text)));
+            var abandoned = 0;
+            // A post that runs after the wait gave up must not copy: the user was already told it failed (evaluator, PR #18).
+            window.Post(() => done.TrySetResult(Volatile.Read(ref abandoned) == 0 && WinTools.Windows.Shell.ClipboardText.TrySet(window.Handle, text)));
             try { if (await done.Task.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false)) return true; }
-            catch (TimeoutException) { return false; } // the UI thread is gone (exiting)
+            catch (TimeoutException) { Volatile.Write(ref abandoned, 1); return false; } // the UI thread is busy or gone (exiting)
             await Task.Delay(60).ConfigureAwait(false);
         }
         return false;

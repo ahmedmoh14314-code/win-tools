@@ -60,9 +60,15 @@ public sealed class FolderInputTests
     [Fact]
     public void The_ring_says_why_when_folders_get_no_commands()
     {
-        Assert.Equal("Not for folders", RadialMenu.EmptyReason([@"C:\photos\holiday\"]));
-        Assert.Equal("Not for folders", RadialMenu.EmptyReason([@"C:\photos\a.png", @"C:\photos\holiday\"]));
-        Assert.Null(RadialMenu.EmptyReason([@"C:\photos\notes.txt"]));  // the general "No actions"
+        // Only when the folders are the reason (V2 PR 1.4: with General Files, folders do get commands in the product).
+        var images = CapabilityResolver.Images(null);
+        Assert.Equal("Not for folders", RadialMenu.EmptyReason(images, [@"C:\photos\holiday\"]));
+        Assert.Equal("Not for folders", RadialMenu.EmptyReason(images, [@"C:\photos\a.png", @"C:\photos\holiday\"]));
+        Assert.Null(RadialMenu.EmptyReason(images, [@"C:\photos\notes.txt"]));  // the general "No actions"
+        var product = CapabilityResolver.For(null);
+        Assert.Null(RadialMenu.EmptyReason(product, [@"C:\photos\holiday\"])); // File info and Copy path are offered
+        string[] tooMany = [@"C:\photos\holiday\", .. Enumerable.Range(0, CapabilityResolver.MaxFiles + 1).Select(i => $@"C:\photos\{i}.png")];
+        Assert.Null(RadialMenu.EmptyReason(product, tooMany)); // empty for its size, not for the folder
     }
 
     [Fact]
