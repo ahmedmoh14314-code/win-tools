@@ -58,7 +58,10 @@ V2 adds modules whose jobs take several inputs (merge PDFs, add to ZIP), produce
 - `WorkerProtocolV2Tests` (6, the real worker process): ignored message types, malformed requests, refused inputs and parameters, and the host skipping non-result lines.
 - `JobSchedulerTests` (7): order within a module, modules side by side, cancelling queued and running jobs, `CancelAll`, request shape and unknown modules.
 - `MarkOfTheWebTests` (10): 5 failed before the change; the 5 others already passed and still do.
-- **Unchanged behaviour:** `MenuGoldenTests` and every earlier test pass. Core 294, Worker 247; build with 0 warnings.
+- **Unchanged behaviour:** `MenuGoldenTests` and every earlier test pass. Core 320, Worker 282 (Debug, which includes the fault-injection tests that Release compiles out); build with 0 warnings.
 
 ## Evaluator review
-Pending.
+One round (2026-10-24). **Blocker, fixed:** CI failed. A Debug-only fault-injection test matched the old crash message; it now counts crashes by `ErrorCode`, in its own commit. Verification since runs Debug as well as Release.
+**Major, fixed:** facts are worker text that reaches the user. A module now believes facts only within `JobFacts` (at most 32; label 1–40 and value up to 200 characters; no control or bidirectional-formatting characters; no null entries or lists), a failure that carries facts or outputs is not believed, and the presenter shows facts only from a success. `ImageModuleBelievabilityTests` builds hostile shapes by hand, which the compatibility shim could not.
+**Minors, fixed:** a throwing job (or its logging and feedback) no longer ends its module's queue; the exit awaits `CancelAll` for up to 3 s, so workers get their grace and temps are cleaned; a source on a volume without named streams (FAT, exFAT) carries no zone instead of being read as internet; a mark that cannot be written on a volume with streams fails the job; a custom zone above 4 is carried as 4.
+**Minors, deferred:** a cancel in the middle of a progress line loses that line (no worker sends progress yet; fixed with PDF's progress lines); the presenter's one set of progress counters, which a second module running alongside would mix (PR 1.4); a line with no type is skipped rather than failed fast.

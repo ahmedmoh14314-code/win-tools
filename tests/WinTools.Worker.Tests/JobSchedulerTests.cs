@@ -67,8 +67,39 @@ public sealed class JobSchedulerTests : IDisposable
     private static CapabilityDescriptor Capability(string id, string module, CapabilityShape shape = CapabilityShape.PerFile) =>
         new(id, id, "tools", module, new InputRule(WinTools.Core.Files.FileKinds.All.Select(k => k.Id).ToHashSet()), shape, CapabilityOutput.Facts, LongRunning: true);
 
-    private JobScheduler Scheduler(Recorder recorder, params (string Name, Gate Gate)[] modules) =>
+    private JobScheduler Scheduler(IJobFeedback recorder, params (string Name, Gate Gate)[] modules) =>
         new([.. modules.Select(m => new JobModuleRunner(new Module(m.Name), m.Gate, _ => null))], _log, () => new AppSettings(), recorder);
+
+    /// <summary>Feedback that fails at every call, as a broken presenter would.</summary>
+    private sealed class Throwing : IJobFeedback
+    {
+        public void Started(CapabilityDescriptor capability, IReadOnlyList<string> paths) => throw new InvalidOperationException("started");
+        public void Progress(CapabilityDescriptor capability, int done, int total) => throw new InvalidOperationException("progress");
+        public void Finished(CapabilityDescriptor capability, IReadOnlyList<JobItem> items) => throw new InvalidOperationException("finished");
+        public void Crashed(CapabilityDescriptor capability, int files) => throw new InvalidOperationException("crashed");
+    }
+
+    [Fact]
+    public async Task A_job_whose_feedback_throws_never_stops_the_queue()
+    {
+        // V1's gate released in a finally, so later drops still ran; one exception must not end a module's queue for good
+        // (evaluator, PR #16).
+        var scheduler = Scheduler(new Throwing(), ("a", new Gate()));
+        var first = scheduler.Enqueue(Capability("a.one", "a"), [@"C:\x\1.png"])!;
+        var second = scheduler.Enqueue(Capability("a.two", "a"), [@"C:\x\2.png"])!;
+        await Task.WhenAll(first.Completion, second.Completion).WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task Cancel_all_can_be_awaited_until_every_job_has_finished()
+    {
+        var gate = new Gate();
+        var scheduler = Scheduler(new Recorder(), ("a", gate));
+        var jobs = new[] { scheduler.Enqueue(Capability("a.one", "a"), [@"C:\x\1.png"])!, scheduler.Enqueue(Capability("a.two", "a"), [@"C:\x\2.png"])! };
+        await Entered(gate);
+        await scheduler.CancelAll().WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.All(jobs, j => Assert.True(j.Completion.IsCompleted));
+    }
 
     private static async Task Entered(Gate gate) => await gate.Entered.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10));
 
@@ -148,7 +179,7 @@ public sealed class JobSchedulerTests : IDisposable
         var scheduler = Scheduler(recorder, ("a", gate));
         var jobs = new[] { scheduler.Enqueue(Capability("a.one", "a"), [@"C:\x\1.png"])!, scheduler.Enqueue(Capability("a.two", "a"), [@"C:\x\2.png"])! };
         await Entered(gate);
-        scheduler.CancelAll();
+        _ = scheduler.CancelAll(); // awaited through the jobs themselves below
         await Task.WhenAll(jobs.Select(j => j.Completion)).WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Single(gate.Calls);
         Assert.All(recorder.Finished.SelectMany(f => f), i => Assert.Equal(ErrorCode.Cancelled, i.Result.Error));

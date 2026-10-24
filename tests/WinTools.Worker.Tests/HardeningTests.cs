@@ -176,7 +176,7 @@ public sealed class PoolHardeningTests : IDisposable
         var env = new Dictionary<string, string> { ["WINTOOLS_WORKER_FAULT"] = "crash-after-temp" };
         var results = await ImageJobsCompat.Images(WorkerExe, TimeSpan.FromSeconds(30), env, parallelism: 1)
             .RunAsync(files.Select((f, i) => new ConversionRequest($"n{i}", "convert.to-jpeg", f)).ToArray(), CancellationToken.None);
-        Assert.Equal(WorkerClient.MaxRestartsPerLane + 1, results.Count(r => r.Message!.StartsWith("The conversion worker stopped", StringComparison.Ordinal)));
+        Assert.Equal(WorkerClient.MaxRestartsPerLane + 1, results.Count(r => r.Error == ErrorCode.WorkerCrashed && !r.Message!.StartsWith("Not run", StringComparison.Ordinal)));
         Assert.All(results.Skip(WorkerClient.MaxRestartsPerLane + 1), r => Assert.StartsWith("Not run", r.Message, StringComparison.Ordinal));
         Assert.DoesNotContain(results, r => r.Success);
     }

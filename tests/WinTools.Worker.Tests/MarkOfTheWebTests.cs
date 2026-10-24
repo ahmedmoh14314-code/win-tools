@@ -76,4 +76,25 @@ public sealed class MarkOfTheWebTests : IDisposable
         Assert.Equal(before.Item1, File.ReadAllBytes(source));
         Assert.Equal(before.Item2, File.ReadAllText(Stream(source)));
     }
+    [Theory]
+    [InlineData(5)]
+    [InlineData(999)]
+    [InlineData(1000)]
+    public void A_zone_beyond_restricted_is_carried_as_restricted(int zone)
+    {
+        // Zones above 4 are custom ones; the docs promise only 3 and 4 are ever written (evaluator, PR #16).
+        var r = Convert(Marked($"custom{zone}.png", zone));
+        Assert.True(r.Success, r.Message);
+        Assert.Equal("[ZoneTransfer]\r\nZoneId=4\r\n", File.ReadAllText(Stream(r.OutputPath!)));
+    }
+
+    [Fact]
+    public void A_mark_that_cannot_be_written_on_a_volume_with_streams_is_an_error()
+    {
+        // The output must never be visible unmarked (evaluator, PR #16: every I/O error was swallowed).
+        var path = _dir.CopySample("quadrants-64x48.png", "held.png");
+        File.WriteAllText(Stream(path), "");
+        using var held = new FileStream(Stream(path), FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        Assert.ThrowsAny<IOException>(() => MarkOfTheWeb.Apply(path, 3));
+    }
 }

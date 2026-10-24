@@ -92,7 +92,7 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
     {
         _done = _total;
         var operation = Op(capability);
-        var facts = items.Where(i => i.Result.Facts.Count > 0).ToArray();
+        var facts = items.Where(i => i.Result.Success && i.Result.Facts.Count > 0).ToArray(); // only a believed success shows facts
         if (capability.Produces == CapabilityOutput.Facts && facts.Length > 0)
         {
             toast.Hide();

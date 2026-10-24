@@ -20,6 +20,26 @@ public sealed record JobOutput(string Path, string Sha256);
 /// <summary>A fact a job reports ("Dimensions", "4032 × 3024 px"). <paramref name="Notice"/> marks one the user should notice.</summary>
 public sealed record JobFact(string Label, string Value, bool Notice = false);
 
+/// <summary>
+/// The limits on facts a worker reports. Facts are worker text that reaches the user (the info panel), so the host
+/// shows them only from a believed success, and a module believes them only within these bounds (evaluator, PR #16).
+/// </summary>
+public static class JobFacts
+{
+    public const int MaxCount = 32, MaxLabelLength = 40, MaxValueLength = 200;
+
+    /// <summary>
+    /// Whether facts can be shown as they are: at least one, at most <see cref="MaxCount"/>, each with a label and a
+    /// value within bounds, and no control or bidirectional-formatting characters that could reorder or hide text.
+    /// </summary>
+    public static bool AreShowable(IReadOnlyList<JobFact>? facts) =>
+        facts is { Count: > 0 and <= MaxCount } && facts.All(f => f is { Label.Length: > 0 and <= MaxLabelLength, Value: not null }
+            && f.Value.Length <= MaxValueLength && Plain(f.Label) && Plain(f.Value));
+
+    private static bool Plain(string text) =>
+        !text.Any(c => char.IsControl(c) || c is >= '\u202A' and <= '\u202E' or >= '\u2066' and <= '\u2069' or '\u200E' or '\u200F' or '\u061C');
+}
+
 /// <summary>A worker's answer to one <see cref="JobRequest"/>.</summary>
 public sealed record JobResult(string Id, bool Success, ErrorCode Error, string? Message,
     IReadOnlyList<JobOutput> Outputs, IReadOnlyList<JobFact> Facts)
