@@ -11,6 +11,7 @@ namespace WinTools.Worker.Tests;
 /// fact found a good copy. The search has a deadline: past it, the best copy found so far is used, and with none found,
 /// the job fails clearly instead of claiming the file is already optimised. Time is a fake clock here.
 /// </summary>
+[Collection(CpuHeavyTests.Name)]
 public sealed class CompressionDeadlineTests
 {
     private static readonly RasterImage Photo = CompressionCorpus.Photo(seed: 41, width: 800, height: 600);

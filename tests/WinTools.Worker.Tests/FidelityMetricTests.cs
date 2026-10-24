@@ -8,6 +8,7 @@ namespace WinTools.Worker.Tests;
 /// may flag an identical image. The release gate itself is checked separately with an independent SSIM
 /// (<see cref="CompressionQualityTests"/>).
 /// </summary>
+[Collection(CpuHeavyTests.Name)]
 public sealed class FidelityMetricTests
 {
     private static readonly RasterImage Photo = CompressionCorpus.Photo(seed: 21, width: 480, height: 360);

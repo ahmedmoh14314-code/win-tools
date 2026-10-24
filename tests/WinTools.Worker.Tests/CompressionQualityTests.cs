@@ -18,6 +18,7 @@ namespace WinTools.Worker.Tests;
 /// The expected savings are not universal promises: they are what the quality floors allow on these corpus files, as
 /// measured (docs/performance/2026-10-23-compression.md), with a margin.
 /// </summary>
+[Collection(CpuHeavyTests.Name)]
 public sealed class CompressionQualityTests : IDisposable
 {
     private readonly TempFolder _dir = new();

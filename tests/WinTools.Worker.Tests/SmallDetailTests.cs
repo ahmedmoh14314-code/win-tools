@@ -22,6 +22,7 @@ namespace WinTools.Worker.Tests;
 /// wide, and small text in lossy WebP sources can change visibly at Balanced and Smallest (ADR-0017 residuals).
 /// </para>
 /// </summary>
+[Collection(CpuHeavyTests.Name)]
 public sealed class SmallDetailTests
 {
     private static readonly Dictionary<CompressLevel, double> RegionFloor = new() { [CompressLevel.High] = 0.970, [CompressLevel.Balanced] = 0.930, [CompressLevel.Small] = 0.880 };
