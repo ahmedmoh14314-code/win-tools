@@ -1,0 +1,147 @@
+# ADR-0017: Compress presets keep a measured fidelity, not a fixed encoder quality
+
+- **Status:** Accepted (implementation); the gate values are calibrated on a generated corpus and await the owner's visual validation
+- **Date:** 2026-10-23
+- **Deciders:** product owner (V2 plan approval, 2026-10-23, with amendments)
+- **Related requirements:** OPS-005
+
+## Context
+**Owner field report (0.1.0 Beta):** Compress often saved only a few percent on real photographs, and it wrote copies nobody needed.
+
+**Cause.** In V1 each preset was one fixed encoder quality: High 90, Balanced 80, Smallest 65. That had four consequences:
+- **No fidelity measure.** Nothing measured how the copy looked, so a noisy JPEG at Balanced dropped to luma SSIM 0.80.
+- **Insignificant copies.** Any output one byte smaller was written, such as phone.jpg at High, which saved 6.6 %.
+- **Lost colour resolution.** A 4:4:4 source always became 4:2:0.
+- **Tests that could not catch it.** The tests used uniform random noise and only checked that the sizes were ordered.
+
+The Stage 0 reproduction is in commit 611ff10, and the plan is `docs/plans/2026-10-23-v2-technical-plan.md`.
+
+**Owner amendments:**
+- SSIM must not be the sole gate.
+- Chroma preservation, colour difference and edges must be investigated too.
+- The 8 % minimum saving and the floors 0.990 / 0.980 / 0.960 are starting points to validate.
+
+## Decision
+**1. A preset is a promise about appearance.** For JPEG and WebP, Compress writes the smallest encoding on a bounded quality ladder whose fidelity passes every gate of the preset. It writes the copy only if that copy saves at least **8 %**. Otherwise it reports "Already optimized" and writes nothing.
+
+PNG stays lossless and is verified pixel for pixel, with the same 8 % minimum.
+
+**2. Fidelity has six axes** (`Fidelity`, in the worker). Each one catches a loss the others miss:
+
+| Axis | What it catches |
+|---|---|
+| Luma SSIM (mean) | overall structural loss |
+| Worst-region luma SSIM (1st percentile of 8×8 windows) | damage concentrated in text, edges or one area, which a clean background averages away |
+| Chroma SSIM (Cb, Cr) | lost colour resolution (4:4:4 → 4:2:0), colour blocking |
+| Mean ΔE (CIE76, CIELAB, D65) | overall colour shift |
+| ΔE 99th percentile | local colour errors (fringes, bleeding) |
+| Edge SSIM (Sobel magnitude) | ringing and blur at edges |
+
+**3. Gates:**
+
+| Preset | Meaning | Luma ≥ | Worst ≥ | Chroma ≥ | ΔE mean ≤ | ΔE99 ≤ | Edge ≥ | Lowest quality |
+|---|---|---|---|---|---|---|---|---|
+| High | no visible difference | 0.990 | 0.970 | 0.993 | 1.0 | 4.0 | 0.975 | 85 |
+| Balanced | differences only on close comparison | 0.980 | 0.930 | 0.985 | 1.5 | 6.0 | 0.950 | 65 |
+| Smallest | visible on close inspection, never damaged | 0.960 | 0.880 | 0.970 | 2.5 | 10.0 | 0.900 | 50 |
+
+**4. Search.**
+- **Ladder:** 95, 93, 90, 88, 85, 82, 80, 75, 70, 65, 60, 55, 50, cut at the preset's lowest quality. It is searched by bisection, with at most 4 encodings per chroma mode.
+- **Chosen candidates always pass.** Pass and fail are only close to monotonic in quality (measured: noisy.jpg scores lower at q95 than at q92), so a non-monotonic step can cost some saving, never quality.
+- **Skipping useless candidates:** a candidate that would not save 8 % is not measured, because a higher quality could not save more.
+- **Chroma modes:** a JPEG whose frame header says 4:4:4 is tried at both 4:4:4 and 4:2:0, and the gates decide. A subsampled source stays subsampled. Lossy WebP is always 4:2:0 (a libwebp property).
+
+**5. Feedback.** Success reads "2.37 MB → 597.7 KB, saved 75%". When nothing is written, it reads "Already optimized: a smaller copy would not save enough or would look different".
+
+**6. Cost and memory.** The fidelity computation streams over rows of 4×4 blocks in parallel bands. It keeps a few rows and a histogram per band, never a plane. At the 48-megapixel limit it allocates about 9 MB and takes about 0.9 s.
+
+## Alternatives considered
+- **Keep fixed qualities (V1), only add the 8 % minimum.** Rejected:
+  - It removes the insignificant copies but none of the quality failures: noisy at 0.80 and the screenshot's text damage.
+  - It still discards 4:4:4.
+- **Luma SSIM as the only gate (the plan's first proposal).** Rejected after measurement:
+  - **Screenshot at q90:** mean SSIM 0.9905, but the worst 1 % of windows is at 0.88, which means ringing glyphs.
+  - **Camera 4:4:4 → 4:2:0 at q97:** luma 0.9985 hides a chroma SSIM of 0.986.
+  - **Camera 4:2:0 at q50:** passes luma for Smallest (0.966) with ΔE99 10.95.
+- **A perceptual metric library (Butteraugli, SSIMULACRA2, VMAF).** Not adopted for now:
+  - Each is a new native dependency, needing a licence and security review (dependencies.md) and a worker-side binary.
+  - The six axes are short, auditable code with no dependency.
+  - Revisit if the owner's visual validation shows the gates are wrong in practice.
+- **Target a file size or a percentage.** Rejected: it promises nothing about appearance, and on noisy images it reproduces the V1 failure.
+- **Encoder-side tricks (mozjpeg trellis, jpegli, WebP sharp YUV).** Out of scope: they are new dependencies. The design keeps the encoder behind `Encode`, so a better encoder can be swapped in later.
+
+## Consequences
+- **Typical photographs get real reductions.** Measured on the corpus:
+
+  | File | High | Balanced | Smallest |
+  |---|---|---|---|
+  | phone | 14 % | 64 % | 74 % |
+  | camera | 14 % (4:4:4 kept) | 68 % | 89 % |
+  | lossy WebP | 24 % | 62 % | 78 % |
+
+- **Files that cannot shrink without visible loss are reported as already optimised**, not degraded:
+  - noisy.jpg at High and Balanced;
+  - moderate.jpg (q75) at High and Balanced;
+  - the lossless screenshot WebP at every preset.
+- **Screenshots compress less than plain luma SSIM would allow** (Balanced 10.8 %, Smallest 27.1 %), because the worst-region gate protects text. The Stage 0 test's 30 % expectation for Balanced came from the luma-only plan. It was changed with this rationale, in the commit that changed the semantics.
+- **Lossless sources are compressed conservatively.** Lossy WebP is always 4:2:0, so a lossless photograph with fine colour detail and the corpus's per-channel noise can fail the High and Balanced chroma and ΔE gates and be reported as already optimised. Smallest's chroma and ΔE99 gates (0.970, 10.0) were set from that measurement: a 400×300 lossless photo then compresses at q85 and saves 97 %. Owner validation is owed on real lossless photos.
+- **Cost.** Per image it is now 0.07–1.0 s at 2 MP and up to 14 s at 48 MP for a 4:4:4 source, against the 60 s job timeout. V1 ran a single encode per file, but its time was not measured, so there is no like-for-like comparison yet. Measurements: `docs/performance/2026-10-23-compression.md`.
+- **The gates are numbers from a generated corpus, not from viewers.** The corpus has no faces, skin tones, real sensor noise or real screenshots. The owner's visual check on real files is the validation still owed, and the thresholds are recorded here so they can move with evidence.
+
+## Evidence / experiments
+- **Stage 0 (611ff10):** `CompressionQualityTests` failed 14 of 38 on main 8836149. The failures were broken floors, insignificant copies, 4:4:4 not kept, and no "saved X%" wording.
+- **Measurements:** `docs/performance/2026-10-23-compression.md`. Every axis was measured across the quality ladder for every corpus file (`CompressionMeasurement.Measure_fidelity_axes`), plus the times and the 48 MP case.
+- **Release gate:** `CompressionQualityTests`, 39 cases, checked with a luma SSIM written independently of the product (`Ssim` in the test project). `FidelityMetricTests` (7) check that each axis sees the damage it exists for. All pass.
+- **Older tests:** three compress tests used fixtures that the new semantics correctly refuse, so their fixtures were replaced in a separate commit and their assertions kept:
+  - uniform noise;
+  - a 64×48 image that is mostly ICC profile;
+  - x·y aliasing art.
+
+## Amendment: worst-tile gates, search deadline, transparency (2026-10-24, evaluator review of PR #12)
+- **Worst tile.** The worst-region gate (1st percentile of windows) cannot see damage in less than 1 % of the image. Before any tile gate, Balanced left a caption covering 0.4 % of a photo at SSIM 0.926, under its floor.
+  - **Measures.** Fidelity pools on 16×16 cells into 32×32 tiles every 16 px; a window belongs to the cell its centre is in, so cells along the right and bottom edges are not starved of windows. It reports the worst tile's mean luma SSIM and mean ΔE, and the worst cell's chroma SSIM. ΔE is sampled on every row, the columns alternating, so a line one pixel thin in either direction is seen.
+  - **How the gates were chosen.** `CompressionCalibration` measures every axis on the whole quality ladder for three sets:
+    - `train`: the regions the gates are tuned on (`SmallDetailTests` and the caption);
+    - `held`: the evaluator's probes on PR #12 (WebP sources, detail under 16 px, 1–2 px lines, regions at the borders). This was a validation set: two candidate gate sets were rejected because of it, so it was used for selection, not only for judging;
+    - `free`: 15 photographs without small detail, on which a gate must not cost the saving.
+
+    Gates were searched to keep `train` within its promise, then judged on `held` and on the saving lost on `free`. Two earlier versions failed that test:
+    - 64×64 tiles diluted 32×14 text;
+    - a gate on the share of samples above ΔE 6 was the cheapest that passed nine JPEG cases. It cost Balanced most of its saving on text-free photos (one went from 52.5 % to 8.3 %), and it did not hold on the held-out set.
+  - **Gates:**
+
+    | Preset | Tile luma SSIM ≥ | Tile mean ΔE ≤ | Cell chroma SSIM ≥ |
+    |---|---|---|---|
+    | High | 0.970 | 4 | 0.92 |
+    | Balanced | 0.910 | 5 | — |
+    | Smallest | 0.880 | 6 | — |
+
+  - **The promise per region.** Text and graphic detail regions in JPEG, at least 12 px on each side, keep the preset's SSIM floor (0.970 / 0.930 / 0.880) and a mean ΔE of at most 4 / 8 / 10.
+    - It is measured in `SmallDetailTests`: 9 tuned and 12 validation cases, all passing through the product's own search.
+    - It is a measured property, not a guarantee for every region. Arbitrary regions of a text-free photo can fall below the floor: at Balanced, 815 of 118,604 12×12 regions of phone.jpg were under 0.93, the worst at 0.807. Balanced's tile gate is 0.910, below its 0.930 floor.
+    - The evaluator's third round tried 28 new JPEG cases inside the scope: one exceeded it, a red-on-blue 28×14 word at Smallest with ΔE 10.81 against 10.
+  - **Balanced's region ΔE is 8, not 6. The owner accepted this trade-off and the exceptions below on 2026-10-24.** Holding 1 px saturated strokes to ΔE 6 cost 154 percentage points of saving across the 15 text-free photographs (one went from 52.5 % to 36.5 %). ΔE 8 costs 15.7 points (at most 6.4 on one photo). "Differences only on close comparison" allows that shift in small strokes. Tightening it is a one-line change once the owner weighs it.
+  - **Outside the promise, measured:** these can change visibly at Balanced and Smallest:
+    - detail under 12 px: red-on-blue text 12×8 px, Smallest SSIM 0.84;
+    - lines 1–2 px wide: a 1 px coloured line, ΔE 11–26;
+    - small text in lossy WebP sources: SSIM 0.81–0.90, and 0.67 for 12×8 text, because libwebp filters small colour detail.
+
+    At High, two WebP cases reach ΔE 5.7 against 4. Protecting these classes with a smaller cell gate cost 74–194 points of saving and still did not protect them. That is the resolution limit of a full-reference check at this grain, and of lossy coding.
+  - **Cost on text-free photographs** (real search): phone Balanced 63.9 %, camera Balanced 67.9 %, photo111 q88 Balanced 50.2 %. moderate Smallest dropped from 18.2 to 9.9 %, and lossy WebP Smallest from 77.9 to 70.2 %. photo112 q88 saves 12.0 % at Balanced because of the older 1st-percentile gate (0.927 against 0.930 at q75), not the tiles.
+  - **Residual:** the last 1–3 columns or rows of an image whose sides are not multiples of 4 are in no SSIM window; ΔE still samples them.
+- **Thin images.** Images under 8 px on a side were compared as one window, so a damaged stretch of a long strip averaged away. They are compared in windows of the short side × 8 px along the long side.
+- **Second chroma mode.** For a 4:4:4 source, the 4:2:0 pass only looks for copies smaller than the one already found, and skips the exhaustive pass when a copy exists.
+- **Search.** Pass and fail are not monotonic enough for plain bisection: on a GDI+ photo, q85 failed the edge gate and q82 passed, and Balanced reported "already optimized". A failure is checked one quality lower before the search turns back, and when nothing has passed, every small-enough quality not yet tried is tried. "Already optimized" is then true of the whole ladder (`CompressionSearchTests`).
+- **Deadline.** The search stops after 25 s and uses the best passing copy found so far. With none, the job fails with the timeout reason and writes nothing; "already optimized" is said only when the search finished. There is no cancellation token inside the worker: the host's cancel and its 60 s timeout kill the worker process, and the deadline keeps a slow search inside that limit.
+- **Transparency.** Fidelity is measured on white, so a change in alpha alone would be invisible to it. A candidate whose alpha differs from the source's is rejected. libwebp keeps lossy WebP's alpha lossless today; `Lossy_webp_keeps_transparency_exactly` guards it.
+- **Wording.** A mixed Compress batch says what was saved and how many files were already optimized. The "less than 8%" message no longer depends on the worker's culture.
+- **Test independence, stated precisely.** The release tests' SSIM (`Ssim` in the test project) is separate code, but it uses the same window size, grid and constants as the product's luma axis. It guards against a bug in the product's code, not against a blind spot of the method; the caption probe measures the region on its own for that reason.
+- **Thin margins.** Some corpus results sit close to their floors (camera High at 0.9908 against 0.990). A change in the encoder or the corpus can move them; the tests then fail and the numbers here are revisited, never the floors lowered silently.
+
+## Evaluator review
+PR #12, three rounds (2026-10-24):
+- **First round:** no blocker. Two majors: damage in under 1 % of the image passed, and timing was measured on one machine only. Answered by the tile gates and the search deadline.
+- **Second round:** the 64×64 tiles still diluted small colour text (a major). The first 32×32 attempt used gates fitted to nine cases: they failed held-out probes and cut savings on text-free photos (a major).
+- **Third round:** no blocker or major. The gates were re-chosen on a calibration set, judged on a validation set and on text-free photos, and the promise was stated with its measured exceptions.
+
+The relaxations (Balanced region ΔE 8, and the exceptions listed above) were approved by the owner on 2026-10-24.

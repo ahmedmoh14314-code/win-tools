@@ -317,8 +317,16 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             _log.Event("drop", new { accepted = false, reason = "commandsChanged", files = paths.Count });
             return false;
         }
+        // Never throw here: this runs inside OLE's Drop. A command no module runs is refused like a changed one, with the
+        // Nothing sound: a drop that runs nothing never reads as accepted (evaluator, PR #15).
+        if (!_jobs.Runs(chosen.Module))
+        {
+            _sounds.Play(UiSound.Nothing);
+            _log.Event("drop", new { accepted = false, reason = "noModule", op = chosen.Id, module = chosen.Module, files = paths.Count });
+            return false;
+        }
         _log.Event("drop", new { accepted = true, op = chosen.Id, openMs, files = paths.Count, sounds = SoundCounts(), frames });
-        if (_jobs.Enqueue(chosen, paths) is null) _log.Event("job.refused", new { op = chosen.Id, module = chosen.Module }); // no runner for that module
+        if (_jobs.Enqueue(chosen, paths) is null) _log.Event("job.refused", new { op = chosen.Id, module = chosen.Module });
         return true;
     }
 

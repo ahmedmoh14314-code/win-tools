@@ -86,6 +86,9 @@ internal sealed class JobScheduler
         }
     }
 
+    /// <summary>Whether a module of this name is registered: a drop for any other is refused before it is accepted.</summary>
+    public bool Runs(string module) => _queues.ContainsKey(module);
+
     /// <summary>Queues a job for the capability's module; null when no module of that name is registered.</summary>
     public ScheduledJob? Enqueue(CapabilityDescriptor capability, IReadOnlyList<string> paths)
     {
