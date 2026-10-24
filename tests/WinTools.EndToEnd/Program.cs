@@ -9,16 +9,21 @@ using WinTools.Core.Settings;
 using WinTools.EndToEnd;
 
 // Explorer end-to-end harness for the product host (local and interactive only; it drives the real mouse and keyboard).
-// Usage: WinTools.EndToEnd <png|jpg|bmp|tif|webp|batch|escape|outside|unsupported|category|fast|edge|worker-crash|file|folder>
+// Usage: WinTools.EndToEnd <png|jpg|bmp|tif|webp|photo|batch|escape|outside|unsupported|category|fast|edge|worker-crash|alt|file|folder>
 //          [--op <operation id>] [--target jpeg|png|webp|bmp|tiff] [--batch N] [--cycles N] [--fast-ms N] [--results file.jsonl]
 //          [--animations on|off|system]   (default on: the menu's animations run, the heavier path for latency)
 //          [--host <WinTools.Host.exe>]   (default: the host next to the harness; e.g. an installed copy)
 //          [--select ctrl-a|ctrl-click|shift-range] [--hold none|ctrl|shift] [--settle-ms N]   (batch selection;
 //          defaults ctrl-a, none, 250 as before; the release matrix uses 0: drag at once after selecting)
+//          [--path-style plain|unicode|long]   (unicode: Arabic, emoji and spaces in the folder and file names; long: the
+//          source's full path is longer than 260 characters, its folder just under 248 so Explorer can open it)
 // "alt": a drag with Alt held, then the trigger: nothing may open or run, and the refusal toast must appear.
 // "file" and "folder" (V2 PR 1.4, UX-009): a text file and a folder, each with File info by default (--op files.sha256
 // for a file): the info panel must appear, nothing may be written. Copy path is not run here: it would overwrite the
 // user's clipboard (unit-tested in FilesModuleTests; manual protocol in docs/testing/release-matrix.md).
+// "photo": a 960x720 photograph-like JPEG (tests/samples/New-PhotoSample.ps1), compressed (default compress.balanced):
+// the copy must be valid and save at least 8 %, the rule Compress promises (ADR-0017). With --expect already-optimized
+// the honest outcome is the other one: no file, a "Nothing to change" toast, the job reported as NothingToDo.
 // Each scenario: fresh folder with copies of the committed samples, fresh host with its own log and default settings,
 // one Explorer window on that folder. Before every injection the window is re-verified; a release happens only over our
 // overlay or over the folder's own background, otherwise the drag is cancelled with Escape. After every cycle the folder
@@ -33,7 +38,12 @@ using WinTools.EndToEnd;
 // sound the host logged must follow the rules: one level sound per level change, never more ticks than sector changes.
 
 var scenario = args.Length > 0 ? args[0] : "png";
-var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; string? opArg = null; var batchSize = 12; var animations = "On"; string? hostArg = null; var selectMode = "ctrl-a"; var holdKey = "none"; var settleMs = 250;
+if (Desktop.ButtonsSwapped)
+{
+    Console.Error.WriteLine("The mouse buttons are swapped in Windows settings; injected clicks would be right-clicks. Not running.");
+    return 6;
+}
+var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; string? opArg = null; var batchSize = 12; var animations = "On"; string? hostArg = null; var selectMode = "ctrl-a"; var holdKey = "none"; var settleMs = 250; var pathStyle = "plain"; var expectNothing = false;
 for (var i = 1; i < args.Length; i++)
 {
     switch (args[i])
@@ -48,6 +58,8 @@ for (var i = 1; i < args.Length; i++)
         case "--select": selectMode = args[++i] is "ctrl-a" or "ctrl-click" or "shift-range" ? args[i] : throw new ArgumentException($"--select {args[i]}"); break;
         case "--hold": holdKey = args[++i] is "none" or "ctrl" or "shift" ? args[i] : throw new ArgumentException($"--hold {args[i]}"); break;
         case "--settle-ms": settleMs = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
+        case "--expect": expectNothing = args[++i] switch { "copy" => false, "already-optimized" => true, var x => throw new ArgumentException($"--expect {x}") }; break;
+        case "--path-style": pathStyle = args[++i] is "plain" or "unicode" or "long" ? args[i] : throw new ArgumentException($"--path-style {args[i]}"); break;
         case "--animations": animations = args[++i] switch { "on" => "On", "off" => "Off", "system" => "System", var a => throw new ArgumentException($"--animations {a}") }; break;
         default: Console.Error.WriteLine($"Unknown option {args[i]}"); return 64;
     }
@@ -59,6 +71,7 @@ var (sample, sourceName, defaultTarget) = scenario switch
     "bmp" => ("quadrants-64x48.bmp", "photo.bmp", ImageFormat.WebP),
     "tif" => ("quadrants-64x48.tif", "photo.tif", ImageFormat.Jpeg),
     "webp" => ("quadrants-64x48.webp", "photo.webp", ImageFormat.Png),
+    "photo" => ("photo-960x720.jpg", "photo.jpg", ImageFormat.Jpeg),
     "unsupported" or "file" => ("", "notes.txt", ImageFormat.Unknown),
     "folder" => ("", "holiday photos", ImageFormat.Unknown),
     _ => ("quadrants-64x48.png", "photo.png", ImageFormat.Jpeg),
@@ -66,6 +79,7 @@ var (sample, sourceName, defaultTarget) = scenario switch
 // The host runs with default settings, so the harness sees the same menu.
 var catalog = ImageCapabilities.Operations(new AppSettings().CustomResizeId());
 var target = targetArg is null ? defaultTarget : Enum.Parse<ImageFormat>(targetArg, ignoreCase: true);
+if (scenario == "photo") opArg ??= "compress.balanced";
 if (opArg is null && scenario is "file" or "folder") opArg = FilesCapabilities.InfoId;
 var op = opArg is not null ? catalog.FirstOrDefault(o => o.Id == opArg) : target == ImageFormat.Unknown ? null : OperationCatalog.Convert(target);
 // Every module, as the host resolves them: the ring positions the harness aims at must be the host's.
@@ -76,10 +90,21 @@ var facts = op is { WritesFile: false } || capability?.Produces == CapabilityOut
 var sourceFormat = FormatHint.FromPath(sourceName);
 var outputFormat = op is null || !op.WritesFile ? ImageFormat.Unknown : op.OutputFormat(sourceFormat);
 string? OutputNameFor(string path) => outputFormat == ImageFormat.Unknown ? null : Path.GetFileName(OutputNaming.Candidates(path, outputFormat, op!.NameSuffix).First());
-var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "webp" or "batch" or "edge";
+var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "batch" or "edge";
 var expectOutput = producing && outputFormat != ImageFormat.Unknown;
 var stamp = DateTime.Now.ToString("HHmmss", System.Globalization.CultureInfo.InvariantCulture);
-var folder = Path.Combine(Path.GetTempPath(), "wintools-e2e", $"{scenario}-{stamp}");
+var folder = Path.Combine(Path.GetTempPath(), "wintools-e2e", pathStyle == "unicode" ? $"{scenario} مجلد 😀 {stamp}" : $"{scenario}-{stamp}");
+if (pathStyle == "long")
+{
+    // Nest until the folder is just under 248 characters (the longest folder Explorer opens); the file name then takes
+    // the source's full path past 260, which the product must handle (\\?\ paths).
+    while (folder.Length < 220) folder = Path.Combine(folder, "long path segment 0123456789");
+    // Pad to 246 when there is room; a temp path that already lands at 245-248 needs no pad (evaluator, PR #14: the pad
+    // went negative for some profile-name lengths).
+    if (folder.Length <= 244) folder = Path.Combine(folder, new string('d', 246 - folder.Length - 1));
+}
+if (pathStyle != "plain")
+    sourceName = (pathStyle == "unicode" ? "صورة 😀 " : "a long file name for the 260 character test ") + sourceName;
 Directory.CreateDirectory(folder);
 var source = Path.Combine(folder, sourceName);
 var isFolder = scenario == "folder";
@@ -104,7 +129,7 @@ var batchSources = new List<string> { source };
 if (scenario == "batch")
     for (var b = 2; b <= batchSize; b++)
     {
-        var copy = Path.Combine(folder, $"photo {b:00} صورة.png");
+        var copy = Path.Combine(folder, pathStyle == "long" ? $"a long file name for the 260 character test {b:000}.png" : $"photo {b:00} صورة.png");
         File.Copy(source, copy);
         batchSources.Add(copy);
     }
@@ -185,7 +210,17 @@ static bool SoundsHeld(IEnumerable<JsonElement> events) => events.Where(e => Dat
     return null;
 }
 
-using (var explorer = ExplorerWindow.Open(folder))
+ExplorerWindow opened;
+try { opened = ExplorerWindow.Open(folder); }
+catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException or System.ComponentModel.Win32Exception
+    or System.Windows.Automation.ElementNotAvailableException)
+{
+    // Never leave the harness's host running behind a failed start.
+    if (!host.HasExited) { host.Kill(); host.WaitForExit(5000); }
+    Console.Error.WriteLine(ex.Message);
+    return 3;
+}
+using (var explorer = opened)
 {
     var explorerScale = Math.Max(Desktop.GetDpiForWindow(explorer.Hwnd), 96u) / 96.0;
     int Px(int v) => (int)Math.Round(v * explorerScale);
@@ -231,6 +266,9 @@ using (var explorer = ExplorerWindow.Open(folder))
 
             var heldVk = holdKey switch { "ctrl" => Desktop.VkControl, "shift" => Desktop.VkShift, _ => 0 };
             (int X, int Y)? lastClick = null; var lastClickAt = 0L;
+            // A click at the cursor; returns the time of its button-up, the moment the selection input ends.
+            static long Click() { Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); var at = Stopwatch.GetTimestamp(); Thread.Sleep(60); return at; }
+            double? pressGapMs = null; string? selectionText = null; var candidateCount = 0;
             if (scenario == "batch")
             {
                 // Select the harness folder's files (guarded), then drag one of the selected items. With --hold the modifier
@@ -239,43 +277,89 @@ using (var explorer = ExplorerWindow.Open(folder))
                 Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp();
                 Thread.Sleep((int)Desktop.GetDoubleClickTime() + 200);
                 if (!explorer.EnsureForeground(cx, cy)) { Record(new { cycle, abort = "foreground lost before selecting" }); exitCode = 4; break; }
+                // Where to press is worked out BEFORE the last selection input: walking the UI Automation tree takes time, and
+                // "--settle-ms 0" must mean a press right after selecting, as a quick user does (evaluator, PR #14). Positions
+                // do not change with the selection; the gap from the last selection input to the press is recorded.
+                var names = batchSources.Select(f => Path.GetFileName(f)!).ToArray();
+                List<(int X, int Y)> Candidates() => explorer.RealisedItemCentres(names)
+                    .Where(v => Desktop.Inside(explorer.Hwnd, v.X, v.Y, Px(8)) && explorer.HitsItem(v.X, v.Y, names)).ToList();
+                List<(int X, int Y)> visible = [];
+                var selectedAt = 0L;
                 switch (selectMode)
                 {
                     case "ctrl-a":
+                        visible = Candidates();
                         Desktop.KeyDown(Desktop.VkControl); Desktop.Tap('A');
+                        selectedAt = Stopwatch.GetTimestamp();
                         if (holdKey != "ctrl") Desktop.KeyUp(Desktop.VkControl);
                         break;
                     case "ctrl-click":
                         // The first item is already selected by the plain click; add the others one by one with Ctrl held.
+                        visible = Candidates();
                         Desktop.KeyDown(Desktop.VkControl);
                         foreach (var other in batchSources.Where(f => Path.GetFileName(f) != grabName))
                         {
-                            if (explorer.ItemCentre(Path.GetFileName(other)) is not { } oc || !Desktop.Inside(explorer.Hwnd, oc.X, oc.Y, Px(8)))
+                            // The item itself must be under the point: a realised item can lie under the status bar or past the
+                            // list, where the click selects nothing (evaluator, PR #14: the likely cause of a 9-of-10 selection).
+                            var otherName = Path.GetFileName(other)!;
+                            if (explorer.ItemCentre(otherName) is not { } oc || !Desktop.Inside(explorer.Hwnd, oc.X, oc.Y, Px(8))
+                                || !explorer.HitsItem(oc.X, oc.Y, [otherName]))
                             {
                                 Desktop.KeyUp(Desktop.VkControl);
-                                Record(new { cycle, abort = "item to Ctrl-click not visible", item = Path.GetFileName(other) });
+                                Record(new { cycle, abort = "item to Ctrl-click not visible", item = otherName });
                                 exitCode = 4; break;
                             }
                             Desktop.MoveTo(oc.X, oc.Y); Thread.Sleep(30);
-                            Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); Thread.Sleep(60);
-                            (lastClick, lastClickAt) = (oc, Stopwatch.GetTimestamp());
+                            (lastClick, lastClickAt) = (oc, Click());
                         }
                         if (exitCode == 4) break;
+                        selectedAt = lastClickAt;
                         if (holdKey != "ctrl") Desktop.KeyUp(Desktop.VkControl);
                         break;
                     case "shift-range":
-                        // The whole list as one range, as a user makes it: click the first item, Shift-click the last.
-                        if (explorer.EndItemCentre(last: false) is not { } first || !Desktop.Inside(explorer.Hwnd, first.X, first.Y, Px(8))
-                            || explorer.EndItemCentre(last: true) is not { } end || !Desktop.Inside(explorer.Hwnd, end.X, end.Y, Px(8)))
+                        // The whole list as one range, as a user makes it: click the first item, Shift-click the last. In a list
+                        // longer than the view, the user scrolls with the wheel in between (the wheel leaves the selection alone).
+                        // Explorer's list ignores injected Home and End, so a keyboard range is not used. Shift is released
+                        // before the press, because a Shift-press re-ranges from a different anchor (ADR-0003).
+                        var allNames = batchSources.Select(f => Path.GetFileName(f)!).ToArray();
+                        if (explorer.EndItemCentre(last: false) is not { } first || !explorer.HitsItem(first.X, first.Y, allNames))
                         {
-                            Record(new { cycle, abort = "first or last item not visible for the Shift range" }); exitCode = 4; break;
+                            Record(new { cycle, abort = "first item not visible" }); exitCode = 4; break;
                         }
+                        // The folder holds only these files, named so that Explorer's name order is ordinal order.
+                        var lastName = allNames.Order(StringComparer.Ordinal).Last();
+                        bool IsLast((string Name, (int X, int Y) Centre)? item) =>
+                            item is { } i && (i.Name == lastName || i.Name == Path.GetFileNameWithoutExtension(lastName)) && explorer.HitsItem(i.Centre.X, i.Centre.Y, allNames);
+                        (int X, int Y)? end = explorer.EndItem(last: true) is var e0 && IsLast(e0) ? e0!.Value.Centre : null;
+                        if (end is null && holdKey == "shift") { Record(new { cycle, abort = "Shift held needs the whole range on screen (Explorer re-ranges a Shift-press)" }); exitCode = 4; break; }
+                        if (end is null)
+                        {
+                            Desktop.MoveTo(first.X, first.Y); Thread.Sleep(30);
+                            Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); Thread.Sleep(60);
+                            for (var turn = 0; turn < 60 && end is null; turn++)
+                            {
+                                Desktop.Wheel(-3); Thread.Sleep(60);
+                                if (explorer.EndItem(last: true) is var e && IsLast(e)) end = e!.Value.Centre;
+                            }
+                            if (end is not { } scrolledEnd) { Record(new { cycle, abort = "last item never scrolled into view" }); exitCode = 4; break; }
+                            visible = Candidates();
+                            Thread.Sleep((int)Desktop.GetDoubleClickTime());
+                            if (!explorer.EnsureForeground(scrolledEnd.X, scrolledEnd.Y)) { Record(new { cycle, abort = "foreground lost while scrolling" }); exitCode = 4; break; }
+                            Desktop.KeyDown(Desktop.VkShift);
+                            Desktop.MoveTo(scrolledEnd.X, scrolledEnd.Y); Thread.Sleep(30);
+                            var shiftUpAt = Click();
+                            Desktop.KeyUp(Desktop.VkShift);
+                            (lastClick, lastClickAt) = (scrolledEnd, shiftUpAt);
+                            selectedAt = lastClickAt;
+                            break;
+                        }
+                        visible = Candidates();
                         Desktop.MoveTo(first.X, first.Y); Thread.Sleep(30);
                         Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); Thread.Sleep(60);
                         Desktop.KeyDown(Desktop.VkShift);
-                        Desktop.MoveTo(end.X, end.Y); Thread.Sleep(30);
-                        Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); Thread.Sleep(60);
-                        (lastClick, lastClickAt) = (end, Stopwatch.GetTimestamp());
+                        Desktop.MoveTo(end.Value.X, end.Value.Y); Thread.Sleep(30);
+                        (lastClick, lastClickAt) = (end, Click());
+                        selectedAt = lastClickAt;
                         if (holdKey != "shift") Desktop.KeyUp(Desktop.VkShift);
                         break;
                 }
@@ -285,18 +369,26 @@ using (var explorer = ExplorerWindow.Open(folder))
                 // Drag from a selected item that is visible now. With Shift held, Explorer treats the press as a Shift-click and
                 // re-ranges the selection from its anchor, so press on the range's end, as a user keeping Shift down would.
                 // Never press where the last click landed within the double-click time: Explorer would open the file.
-                var visible = batchSources.Select(f => explorer.ItemCentre(Path.GetFileName(f)))
-                    .Where(p => p is { } v && Desktop.Inside(explorer.Hwnd, v.X, v.Y, Px(8))).Select(p => p!.Value).ToList();
                 if (visible.Count == 0) { if (heldVk != 0) Desktop.KeyUp(heldVk); Record(new { cycle, abort = "no selected item visible to drag" }); exitCode = 4; break; }
-                var vis = selectMode == "shift-range" && lastClick is { } rangeEnd ? rangeEnd
+                candidateCount = visible.Count;
+                var vis = selectMode == "shift-range" && holdKey == "shift" && lastClick is { } rangeEnd ? rangeEnd
+                    // Shift released: any selected item will do, so take the middle one (the range's end may sit at the very
+                    // bottom of the view, partly hidden, where a press starts no drag).
+                    : selectMode == "shift-range" ? visible.OrderBy(v => v.Y).ElementAt(visible.Count / 2)
                     : visible.FirstOrDefault(v => lastClick is not { } lc || Math.Abs(v.X - lc.X) + Math.Abs(v.Y - lc.Y) > Px(8), visible[0]);
                 var sinceClick = Stopwatch.GetElapsedTime(lastClickAt).TotalMilliseconds;
                 if (lastClick is { } l && Math.Abs(vis.X - l.X) + Math.Abs(vis.Y - l.Y) <= Px(8) && sinceClick < Desktop.GetDoubleClickTime() + 50)
                     Thread.Sleep((int)(Desktop.GetDoubleClickTime() + 50 - sinceClick));
                 (cx, cy) = vis;
+                Desktop.MoveTo(cx, cy);
+                pressGapMs = Math.Round(Stopwatch.GetElapsedTime(selectedAt).TotalMilliseconds, 1);
+                Desktop.LeftDown(); Thread.Sleep(80);
             }
-            Desktop.MoveTo(cx, cy); Thread.Sleep(60);
-            Desktop.LeftDown(); Thread.Sleep(80);
+            else
+            {
+                Desktop.MoveTo(cx, cy); Thread.Sleep(60);
+                Desktop.LeftDown(); Thread.Sleep(80);
+            }
             Desktop.GlideTo(cx + Px(40), cy + Px(30));
             if (scenario == "edge")
             {
@@ -466,9 +558,15 @@ using (var explorer = ExplorerWindow.Open(folder))
                 var bev = HostEventsSinceLastCycle();
                 var baccepted = bev.Count(e => Ev(e) == "drop" && Is(e, "accepted", true));
                 var bsounds = SoundsHeld(bev);
-                var bok = allValid && intact && present.SequenceEqual(expectedSet) && baccepted == 1 && btoast && bfocus && bsounds;
+                selectionText = explorer.StatusText(); // diagnostics, read after the drop so it cannot delay the press
+                // "At once" is a claim the record must prove: with --settle-ms 0 the press follows the last selection input
+                // (its button-up, or the Ctrl+A tap) within 150 ms: the 60 ms pause after a click, the move to the item and the
+                // input queue. A press on the item just clicked would need a double-click wait; the matrix rows never do that.
+                var atOnce = settleMs > 0 || pressGapMs is <= 150;
+                var bok = allValid && intact && present.SequenceEqual(expectedSet) && baccepted == 1 && btoast && bfocus && bsounds && atOnce;
                 if (bok) passed++; else exitCode = 1;
-                Record(new { scenario, cycle, op = op?.Id, files = batchSources.Count, outputs = wanted.Count(File.Exists), allValid, sourcesIntact = intact, cleanFolder = present.SequenceEqual(expectedSet), hostAccepted = baccepted,
+                var dropped = bev.Where(e => Ev(e) == "drop" && Is(e, "accepted", true)).Select(e => Data(e).TryGetProperty("files", out var fc) ? fc.GetInt32() : -1).FirstOrDefault(-1);
+                Record(new { scenario, cycle, op = op?.Id, select = selectMode, hold = holdKey, settleMs, pathStyle, files = batchSources.Count, pressAt = $"{cx},{cy}", pressGapMs, atOnce, candidates = candidateCount, selection = selectionText, dropped, outputs = wanted.Count(File.Exists), allValid, sourcesIntact = intact, cleanFolder = present.SequenceEqual(expectedSet), hostAccepted = baccepted,
                     toastShown = btoast, focusKept = bfocus, soundsHeld = bsounds, ok = bok });
                 foreach (var w in wanted) if (File.Exists(w)) File.Delete(w);
                 Thread.Sleep((int)Desktop.GetDoubleClickTime() + 300);
@@ -483,6 +581,8 @@ using (var explorer = ExplorerWindow.Open(folder))
             bool? toastShown = null, focusKept = null;
             while (Stopwatch.GetElapsedTime(deadline) < waitFor)
             {
+                // Already optimized: the job ends without a file; stop waiting so the toast is still up when it is checked.
+                if (expectNothing && HostLines().Skip(hostLogLines).Any(l => l.Contains("\"ev\":\"job.done\"", StringComparison.Ordinal))) break;
                 var produced = Directory.GetFiles(folder).Where(f => !string.Equals(f, source, StringComparison.OrdinalIgnoreCase)).ToArray();
                 if (produced.Length > 0 && !produced.Any(f => Path.GetFileName(f).StartsWith("~wintools-", StringComparison.Ordinal))) { output = produced.Single(); break; }
                 if (facts && Desktop.VisibleWindowsOf(host.Id, "WinTools.InfoPanel").Count > 0)
@@ -495,12 +595,14 @@ using (var explorer = ExplorerWindow.Open(folder))
                 }
                 Thread.Sleep(100);
             }
-            if (output is not null) (toastShown, focusKept) = WaitForSurface("WinTools.Toast", explorer.Hwnd, TimeSpan.FromSeconds(3));
+            if (output is not null || expectNothing) (toastShown, focusKept) = WaitForSurface("WinTools.Toast", explorer.Hwnd, TimeSpan.FromSeconds(3));
             Thread.Sleep(300);
             var files = Directory.GetFileSystemEntries(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray(); // the "folder" scenario's source is a folder
             var sourceIntact = (isFolder ? Directory.Exists(source) : File.Exists(source)) && HashOf(source) == sourceHash;
             var outputValid = output is not null && File.ReadAllBytes(output) is var bytes && FileSignature.Detect(bytes) == outputFormat && ContainerCheck.IsComplete(bytes, outputFormat, out _)
                 && (!strip || bytes.AsSpan().IndexOf(metadataMarker) < 0); // the comment is gone
+            double? saved = op is { Kind: OperationKind.Compress } && output is not null ? Math.Round(1 - (double)new FileInfo(output).Length / new FileInfo(source).Length, 4) : null;
+            if (saved is < 0.08) outputValid = false; // Compress writes a copy only when it saves at least 8 % (ADR-0017)
             var ev = HostEventsSinceLastCycle();
             var enters = ev.Count(e => Ev(e) == "drag.enter");
             var drops = ev.Where(e => Ev(e) == "drop").ToArray();
@@ -524,8 +626,11 @@ using (var explorer = ExplorerWindow.Open(folder))
             var feedbackOk = output is null || (toastShown == true && focusKept == true);
             var ok = sourceIntact && cleanFolder && soundsHeld && feedbackOk && scenario switch
             {
-                "png" or "jpg" or "bmp" or "tif" or "webp" or "file" or "folder" when facts => output is null && infoShown && focusKept == true && accepted == 1,
-                "png" or "jpg" or "bmp" or "tif" or "webp" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
+                "photo" when expectNothing => output is null && accepted == 1 && toastShown == true && focusKept == true
+                    && ev.Any(e => Ev(e) == "toast" && Data(e).TryGetProperty("kind", out var tk) && tk.GetString() == "Nothing")
+                    && ev.Any(e => Ev(e) == "job.result" && Data(e).TryGetProperty("error", out var er) && er.GetString() == "NothingToDo"),
+                "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "file" or "folder" when facts => output is null && infoShown && focusKept == true && accepted == 1,
+                "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 // Corner: the trigger really was off-centre and deep in a sector, nothing opened before the centre was
                 // reached, then exactly the wanted category opened and the wanted command ran.
                 "edge" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1
@@ -550,7 +655,7 @@ using (var explorer = ExplorerWindow.Open(folder))
             };
             if (ok) passed++; else exitCode = 1;
             Record(new { scenario, cycle, op = op?.Id, releasedOver, releaseAfterMs, hostEnters = enters, hostDrops = drops.Length, hostAccepted = accepted, openMs, ruleHeld, endedOnOverlay, infoShown,
-                toastShown, focusKept, soundsHeld, refusedLogged, overlayShown,
+                toastShown, focusKept, soundsHeld, refusedLogged, overlayShown, saved, pathStyle, sourcePathLength = source.Length,
                 startOffset, opensBeforeCentre, levelPushed, categorySeen, menuOpens, menuBacks,
                 triggerAt = $"{at.X},{at.Y}", releaseAt = $"{release.X},{release.Y}", output = output is null ? null : Path.GetFileName(output), outputValid, sourceIntact, cleanFolder, files, ok });
             if (output is not null) File.Delete(output); // the harness's own result file, so the next cycle starts clean
@@ -558,10 +663,9 @@ using (var explorer = ExplorerWindow.Open(folder))
         }
         catch
         {
-            // Never leave a synthetic drag behind: cancel it, release everything, stop the host, then fail loudly.
-            Desktop.KeyUp(Desktop.VkControl); Desktop.KeyUp(Desktop.VkShift); Desktop.KeyUp(Desktop.VkAlt); // before Escape
-            Desktop.Tap(Desktop.VkEscape); Desktop.KeyUp(Desktop.VkSpace); Desktop.LeftUp();
-            if (!host.HasExited) host.Kill();
+            // Never leave a synthetic drag behind: cancel it, release everything (each on its own), stop the host, fail loudly.
+            try { Desktop.ReleaseAll(); }
+            finally { if (!host.HasExited) host.Kill(); }
             throw;
         }
     }
@@ -577,8 +681,7 @@ var spaceDownAtEnd = Desktop.IsDown(Desktop.VkSpace);
 var modifiersDownAtEnd = Desktop.IsDown(Desktop.VkControl) || Desktop.IsDown(Desktop.VkShift) || Desktop.IsDown(Desktop.VkAlt);
 if (leftDownAtEnd || spaceDownAtEnd || modifiersDownAtEnd)
 {
-    Desktop.KeyUp(Desktop.VkControl); Desktop.KeyUp(Desktop.VkShift); Desktop.KeyUp(Desktop.VkAlt); // before Escape
-    Desktop.Tap(Desktop.VkEscape); Desktop.KeyUp(Desktop.VkSpace); Desktop.LeftUp();
+    Desktop.ReleaseAll();
     exitCode = 5;
 }
 Record(new { scenario, summary = true, cycles, passed, hostAliveAtEnd = hostAlive, leftDownAtEnd, spaceDownAtEnd, modifiersDownAtEnd, hostPrivateMb, hostWorkingSetMb, hostLog = Path.GetFullPath(hostLog), folder });

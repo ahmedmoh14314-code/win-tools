@@ -1,3 +1,4 @@
+using System.Globalization;
 using WinTools.Core.Capabilities;
 using WinTools.Core.Files;
 using WinTools.Core.Jobs;
@@ -13,7 +14,9 @@ namespace WinTools.Worker.Imaging;
 /// <item>Only the first frame is converted. Metadata (EXIF, GPS, ICC) is not copied.</item>
 /// <item>Conversion: JPEG quality 0.9 (WIC default), WebP lossy 90. Resize/rotate keep quality: JPEG 0.95, WebP lossy 95 or
 /// lossless if the source was lossless.</item>
-/// <item>Compress keeps the format and is refused (nothing to do) when the result would not be smaller.</item>
+/// <item>Compress keeps the format. Lossy presets keep a measured fidelity (<see cref="LossyCompression"/>, ADR-0017);
+/// PNG is lossless only. A copy that would not save at least <see cref="LossyCompression.MinimumSaving"/> is not written
+/// (nothing to do: already optimised).</item>
 /// </list>
 /// </summary>
 internal static class ImagePipeline
@@ -59,8 +62,8 @@ internal static class ImagePipeline
                 break;
             case OperationKind.Compress:
                 bytes = Compress(image, output, op.Compress, input);
-                if (bytes.LongLength >= input.LongLength)
-                    throw new ImagingException(ErrorCode.NothingToDo, "This setting would not make the file smaller; no copy was written.");
+                if (bytes.LongLength > (long)Math.Floor(input.LongLength * (1 - LossyCompression.MinimumSaving)))
+                    throw new ImagingException(ErrorCode.NothingToDo, string.Create(CultureInfo.InvariantCulture, $"Already optimized: this setting would save less than {LossyCompression.MinimumSaving * 100:0}%; no copy was written."));
                 break;
             default:
                 throw new ImagingException(ErrorCode.UnsupportedOperation, $"Operation {op.Id} is not supported.");
@@ -126,16 +129,15 @@ internal static class ImagePipeline
             image.HasTransparency(), orientation, meta.Exif, meta.Gps, meta.Xmp, meta.Icc || image.IccProfile is not null, meta.Text, BitDepth.MoreThan8(input, format), meta.Other);
     }
 
-    /// <summary>JPEG and WebP: lossy at High 90 / Balanced 80 / Smallest 65. PNG: lossless only, verified pixel for pixel.</summary>
+    /// <summary>JPEG and WebP: the smallest copy that keeps the preset's measured fidelity. PNG: lossless only, verified
+    /// pixel for pixel.</summary>
     private static byte[] Compress(RasterImage image, ImageFormat format, CompressLevel level, byte[] input)
     {
-        var quality = level switch { CompressLevel.High => 90, CompressLevel.Small => 65, _ => 80 };
         switch (format)
         {
-            case ImageFormat.Jpeg when level != CompressLevel.Lossless:
-                return WicCodec.Encode(image, format, quality / 100f);
-            case ImageFormat.WebP when level != CompressLevel.Lossless:
-                return SkiaCodec.EncodeWebP(image, quality, lossless: false);
+            case ImageFormat.Jpeg or ImageFormat.WebP when level != CompressLevel.Lossless:
+                return LossyCompression.Smallest(image, format, level, input)?.Bytes
+                    ?? throw new ImagingException(ErrorCode.NothingToDo, "Already optimized: no smaller copy keeps this preset's quality; no copy was written.");
             case ImageFormat.Png when level == CompressLevel.Lossless:
                 var png = SkiaCodec.EncodePngSmallest(image, input);
                 var back = Decode(png, ImageFormat.Png).Image;
