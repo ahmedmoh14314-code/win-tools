@@ -77,7 +77,7 @@ public sealed class CompressionQualityTests : IDisposable
     [InlineData("phone.jpg", "balanced", 0.50)]
     [InlineData("phone.jpg", "small", 0.65)]
     [InlineData("camera.jpg", "high", 0.10)]  // 4:4:4 kept: q95 is the lowest at SSIM ≥ 0.99 (13.6 %)
-    [InlineData("camera.jpg", "balanced", 0.60)] // 62.8 % once small colour text is protected per 32×32 tile (SmallDetailTests); 67.9 % before
+    [InlineData("camera.jpg", "balanced", 0.65)]
     [InlineData("camera.jpg", "small", 0.85)]
     [InlineData("photo-lossy.webp", "high", 0.15)]
     [InlineData("photo-lossy.webp", "balanced", 0.55)]
