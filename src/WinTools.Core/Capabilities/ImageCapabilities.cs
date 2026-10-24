@@ -11,6 +11,16 @@ public static class ImageCapabilities
 {
     public const string Module = "images";
 
+    /// <summary>The image module's categories, in V1's order.</summary>
+    public static IReadOnlyList<CapabilityCategory> Categories { get; } =
+    [
+        new("convert", "Convert", "convert", 10),
+        new("compress", "Compress", "compress", 20),
+        new("resize", "Resize", "resize", 30),
+        new("rotate", "Rotate", "rotate", 40),
+        new("tools", "Tools", "tools", 90),
+    ];
+
     /// <summary>The image capabilities, with the settings' exact resize when it is not a preset.</summary>
     public static IReadOnlyList<CapabilityDescriptor> Catalog(string? customResizeId) => Operations(customResizeId).Select(Describe).ToArray();
 

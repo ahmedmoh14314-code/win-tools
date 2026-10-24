@@ -8,10 +8,10 @@ namespace WinTools.Core.Interaction;
 /// <param name="Armed">The hot sector is a command that a drop would run now.</param>
 /// <param name="Hub">Text for the centre: the open category, or empty at the top level.</param>
 /// <param name="FirstSweep">Width of sector 0 (Back on a category's ring), or 0 when all sectors are equal.</param>
-/// <param name="Categories">On the categories' ring, the category of each sector (for its icon); otherwise null.</param>
-/// <param name="Open">On a category's ring, that category; otherwise null.</param>
+/// <param name="Categories">On the categories' ring, the icon key of each sector; otherwise null.</param>
+/// <param name="Open">On a category's ring, that category's icon key; otherwise null.</param>
 public sealed record MenuView(IReadOnlyList<string> Labels, double Start, int Hot, bool Armed, string Hub, double FirstSweep = 0,
-    IReadOnlyList<MenuCategory>? Categories = null, MenuCategory? Open = null);
+    IReadOnlyList<string>? Categories = null, string? Open = null);
 
 /// <summary>
 /// Navigation of the two-level radial menu during a drag, driven only by pointer offsets from the centre of the ring
@@ -40,7 +40,7 @@ public sealed class MenuNavigator
     private readonly IReadOnlyList<MenuGroup> _groups;
     private readonly string[] _groupLabels;
     private readonly string[][] _levelLabels; // per category: Back, then its commands (cached so equal views compare equal)
-    private readonly MenuCategory[] _categories;
+    private readonly string[] _categories;
     private int _dead, _ring, _open;
     private int _level = -1, _hot = -1;
     private bool _hubVisited;
@@ -51,7 +51,7 @@ public sealed class MenuNavigator
         _groups = groups;
         _groupLabels = groups.Select(g => g.Label).ToArray();
         _levelLabels = groups.Select(g => new[] { BackLabel }.Concat(g.Commands.Select(c => c.Label)).ToArray()).ToArray();
-        _categories = groups.Select(g => g.Category).ToArray();
+        _categories = groups.Select(g => g.Category.Icon).ToArray();
         SetDpi(dpi);
     }
 
@@ -122,7 +122,7 @@ public sealed class MenuNavigator
 
     public MenuView View(TimeSpan now) => _level < 0
         ? new MenuView(_groupLabels, 0, _hot, false, "", 0, _categories)
-        : new MenuView(_levelLabels[_level], Start, _hot, Armed(now) is not null, _groups[_level].Label, FirstSweep, null, _groups[_level].Category);
+        : new MenuView(_levelLabels[_level], Start, _hot, Armed(now) is not null, _groups[_level].Label, FirstSweep, null, _groups[_level].Category.Icon);
 
     private void SetDpi(uint dpi)
     {

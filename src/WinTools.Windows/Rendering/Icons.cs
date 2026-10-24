@@ -11,12 +11,13 @@ internal enum Glyph { Convert, Compress, Resize, Rotate, Tools, Back, Check, Ale
 /// </summary>
 internal static class Icons
 {
-    public static Glyph For(MenuCategory category) => category switch
+    /// <summary>The glyph for a category's icon key (module data); an unknown key gets the generic tools glyph.</summary>
+    public static Glyph For(string? icon) => icon switch
     {
-        MenuCategory.Convert => Glyph.Convert,
-        MenuCategory.Compress => Glyph.Compress,
-        MenuCategory.Resize => Glyph.Resize,
-        MenuCategory.Rotate => Glyph.Rotate,
+        "convert" => Glyph.Convert,
+        "compress" => Glyph.Compress,
+        "resize" => Glyph.Resize,
+        "rotate" => Glyph.Rotate,
         _ => Glyph.Tools,
     };
 

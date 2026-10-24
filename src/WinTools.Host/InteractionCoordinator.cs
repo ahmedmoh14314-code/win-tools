@@ -224,9 +224,16 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     private bool BuildMenu(IReadOnlyList<string> paths, int startDx, int startDy, TimeSpan shownAt)
     {
         if (_navigator is not null && (_navigator.Groups.Count > 0 || paths.Count == 0)) return false;
-        _navigator = new MenuNavigator(RadialMenu.Build(_sessionResolver.Resolve(paths)), _dpi);
+        _navigator = new MenuNavigator(RadialMenu.Build(_sessionResolver, paths), _dpi);
         _navigator.Shown(startDx, startDy, shownAt, _dpi);
         return true;
+    }
+
+    /// <summary>The open category's place on the ring (the navigation sounds key on it).</summary>
+    private static int IndexOf(IReadOnlyList<MenuGroup> groups, MenuGroup open)
+    {
+        for (var i = 0; i < groups.Count; i++) if (ReferenceEquals(groups[i], open)) return i;
+        return -1;
     }
 
     void IOverlayEvents.DropData(DropDataEvent report) => _log.Event(report.Stage switch
@@ -266,7 +273,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         }
         var view = nav.View(now);
         _overlay.SetView(view);
-        if (_navigationSounds.OnView(nav.Open is { } open ? (int)open.Category : -1, view.Hot, now) is { } sound) _sounds.Play(sound);
+        if (_navigationSounds.OnView(nav.Open is { } open ? IndexOf(nav.Groups, open) : -1, view.Hot, now) is { } sound) _sounds.Play(sound);
         return nav.Hot is not null;
     }
 

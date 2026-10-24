@@ -226,7 +226,7 @@ public sealed class RingLabelsTests
         var resolver = CapabilityResolver.For(new AppSettings().CustomResizeId());
         foreach (var name in new[] { "a.png", "a.jpg", "a.webp", "a.bmp", "a.tif" })
         {
-            var menu = RadialMenu.Build(resolver.Resolve([$@"C:\images\{name}"]));
+            var menu = RadialMenu.Build(resolver, [$@"C:\images\{name}"]);
             var rings = new List<(int Count, double Start, double First)> { (menu.Count, 0, 0) };
             for (var g = 0; g < menu.Count; g++)
                 rings.Add((menu[g].Commands.Count + 1, MenuNavigator.LevelStart(g, menu.Count, menu[g].Commands.Count), MenuNavigator.BackSweep(menu.Count, menu[g].Commands.Count)));

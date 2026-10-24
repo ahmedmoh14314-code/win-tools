@@ -7,7 +7,7 @@ namespace WinTools.Core.Tests;
 public sealed class RadialMenuTests
 {
     private static IReadOnlyList<MenuGroup> MenuFor(params string[] paths) =>
-        RadialMenu.Build(CapabilityResolver.For(new AppSettings().CustomResizeId()).Resolve(paths));
+        RadialMenu.Build(CapabilityResolver.For(new AppSettings().CustomResizeId()), paths);
 
     [Fact]
     public void Jpeg_gets_all_five_categories_in_fixed_order()
@@ -22,7 +22,7 @@ public sealed class RadialMenuTests
     [Fact]
     public void Exact_resize_from_the_settings_is_last_in_resize_and_never_duplicates_a_preset()
     {
-        var resize = MenuFor(@"C:\p\photo.png").Single(g => g.Category == MenuCategory.Resize).Commands.Select(c => c.Id).ToArray();
+        var resize = MenuFor(@"C:\p\photo.png").Single(g => g.Category.Id == "resize").Commands.Select(c => c.Id).ToArray();
         Assert.Equal("resize.box-1600x1600", resize[^1]);
         Assert.Equal(7, resize.Length);
 
@@ -37,14 +37,14 @@ public sealed class RadialMenuTests
         var bmp = MenuFor(@"C:\p\scan.bmp");
         Assert.Equal(["Convert", "Resize", "Rotate", "Tools"], bmp.Select(g => g.Label)); // no compression, no metadata
         Assert.Equal(["Image info"], bmp[^1].Commands.Select(c => c.Label));
-        Assert.Equal(["Lossless"], MenuFor(@"C:\p\a.png").Single(g => g.Category == MenuCategory.Compress).Commands.Select(c => c.Label));
+        Assert.Equal(["Lossless"], MenuFor(@"C:\p\a.png").Single(g => g.Category.Id == "compress").Commands.Select(c => c.Label));
     }
 
     [Fact]
     public void A_mixed_batch_gets_the_intersection()
     {
         var menu = MenuFor(@"C:\p\a.jpg", @"C:\p\b.png");
-        Assert.DoesNotContain(menu, g => g.Category == MenuCategory.Compress); // JPEG levels vs PNG lossless: nothing common
+        Assert.DoesNotContain(menu, g => g.Category.Id == "compress"); // JPEG levels vs PNG lossless: nothing common
         Assert.Equal(["To WebP", "To BMP", "To TIFF"], menu[0].Commands.Select(c => c.Label));
     }
 
@@ -59,20 +59,20 @@ public sealed class RadialMenuTests
     public void A_new_operation_appears_without_any_menu_change()
     {
         var mirror = new Operation("rotate.mirror", "Mirror", OperationKind.Rotate);
-        var menu = RadialMenu.Build(new CapabilityResolver([.. OperationCatalog.All.Select(ImageCapabilities.Describe), ImageCapabilities.Describe(mirror)]).Resolve([@"C:\p\photo.webp"]));
-        Assert.Equal(["Left", "Right", "180°", "Mirror"], menu.Single(g => g.Category == MenuCategory.Rotate).Commands.Select(c => c.Label));
+        var menu = RadialMenu.Build(new CapabilityResolver([.. OperationCatalog.All.Select(ImageCapabilities.Describe), ImageCapabilities.Describe(mirror)]), [@"C:\p\photo.webp"]);
+        Assert.Equal(["Left", "Right", "180°", "Mirror"], menu.Single(g => g.Category.Id == "rotate").Commands.Select(c => c.Label));
     }
 
     [Theory]
-    [InlineData(OperationKind.Convert, MenuCategory.Convert)]
-    [InlineData(OperationKind.Compress, MenuCategory.Compress)]
-    [InlineData(OperationKind.Resize, MenuCategory.Resize)]
-    [InlineData(OperationKind.Rotate, MenuCategory.Rotate)]
-    [InlineData(OperationKind.StripMetadata, MenuCategory.Tools)]
-    [InlineData(OperationKind.Info, MenuCategory.Tools)]
-    public void Each_operation_kind_has_its_category(OperationKind kind, MenuCategory expected)
+    [InlineData(OperationKind.Convert, "convert")]
+    [InlineData(OperationKind.Compress, "compress")]
+    [InlineData(OperationKind.Resize, "resize")]
+    [InlineData(OperationKind.Rotate, "rotate")]
+    [InlineData(OperationKind.StripMetadata, "tools")]
+    [InlineData(OperationKind.Info, "tools")]
+    public void Each_operation_kind_has_its_category(OperationKind kind, string expected)
     {
-        Assert.Equal(expected, RadialMenu.CategoryOf(ImageCapabilities.CategoryOf(kind)));
+        Assert.Equal(expected, ImageCapabilities.CategoryOf(kind));
     }
 
     [Theory]
@@ -81,8 +81,8 @@ public sealed class RadialMenuTests
     public void Exact_size_that_differs_from_a_preset_only_in_behaviour_gets_a_distinct_label(int w, int h, bool noUpscaleOff, bool keepAspect)
     {
         var settings = new AppSettings { ResizeWidth = w, ResizeHeight = h, NoUpscale = !noUpscaleOff, KeepAspectRatio = keepAspect };
-        var resize = RadialMenu.Build(CapabilityResolver.For(settings.CustomResizeId()).Resolve([@"C:\p\a.png"]))
-            .Single(g => g.Category == MenuCategory.Resize).Commands;
+        var resize = RadialMenu.Build(CapabilityResolver.For(settings.CustomResizeId()), [@"C:\p\a.png"])
+            .Single(g => g.Category.Id == "resize").Commands;
         Assert.Equal(resize.Count, resize.Select(c => c.Label).Distinct().Count());
     }
 }
@@ -93,7 +93,7 @@ public sealed class MenuNavigatorTests
     private static TimeSpan Ms(double ms) => TimeSpan.FromMilliseconds(ms);
 
     private static IReadOnlyList<MenuGroup> MenuFor(params string[] paths) =>
-        RadialMenu.Build(CapabilityResolver.For(new AppSettings().CustomResizeId()).Resolve(paths));
+        RadialMenu.Build(CapabilityResolver.For(new AppSettings().CustomResizeId()), paths);
 
     private static (int, int) At(double angle, double radius96, uint dpi = 96)
     {
@@ -140,7 +140,7 @@ public sealed class MenuNavigatorTests
     {
         var n = new MenuNavigator(MenuFor(@"C:\p\photo.jpg"), 96);
         OpenCategory(n, 0, Ms(100));
-        Assert.Equal(MenuCategory.Convert, n.Open!.Category);
+        Assert.Equal("convert", n.Open!.Category.Id);
         var view = n.View(Ms(100));
         Assert.Equal(["Back", "To PNG", "To WebP", "To BMP", "To TIFF"], view.Labels);
         Assert.Equal("Convert", view.Hub);
@@ -171,13 +171,13 @@ public sealed class MenuNavigatorTests
         var back = RingGeometry.SectorCentre(0, view.Labels.Count, view.Start, view.FirstSweep);
         Move(n, At(back, 50), Ms(300));
         Assert.Null(n.Armed(Ms(400)));               // on Back, not deep: nothing runs, still in Resize
-        Assert.Equal(MenuCategory.Resize, n.Open!.Category);
+        Assert.Equal("resize", n.Open!.Category.Id);
         var (bx, by) = At(back, 90);
         Assert.True(n.Move(bx, by, Ms(350)));
         n.Shown(0, 0, Ms(350), 96);
         Assert.Null(n.Open);
         OpenCategory(n, 3, Ms(500));                   // and another category opens from there
-        Assert.Equal(MenuCategory.Rotate, n.Open!.Category);
+        Assert.Equal("rotate", n.Open!.Category.Id);
     }
 
     [Fact]
