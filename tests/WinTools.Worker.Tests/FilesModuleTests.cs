@@ -41,7 +41,7 @@ public sealed class FilesModuleTests
     {
         var copied = new List<string>();
         var worker = new NoWorker();
-        var executor = new FilesExecutor(worker, text => { copied.Add(text); return Task.FromResult(true); });
+        var executor = new FilesExecutor(worker, worker, text => { copied.Add(text); return Task.FromResult(true); });
         var request = new JobRequest("c1", FilesCapabilities.CopyPathId, [@"C:\p\a.png", @"C:\p\holiday\"]);
         var r = Assert.Single(await executor.RunAsync([request], CancellationToken.None));
         Assert.True(r.Success);
@@ -52,18 +52,24 @@ public sealed class FilesModuleTests
     [Fact]
     public async Task A_busy_clipboard_is_a_failure_with_its_own_reason()
     {
-        var executor = new FilesExecutor(new NoWorker(), _ => Task.FromResult(false));
+        var executor = new FilesExecutor(new NoWorker(), new NoWorker(), _ => Task.FromResult(false));
         var r = Assert.Single(await executor.RunAsync([new JobRequest("c1", FilesCapabilities.CopyPathId, [@"C:\p\a.png"])], CancellationToken.None));
         Assert.Equal(ErrorCode.ClipboardUnavailable, r.Error);
-        Assert.True(FilesJobModule.Instance.IsBelievable(new JobRequest("c1", FilesCapabilities.CopyPathId, [@"C:\p\a.png"]), r));
+        Assert.False(r.Success);
     }
 
     [Fact]
-    public async Task Other_commands_go_to_the_worker()
+    public async Task Info_and_hash_go_to_their_own_workers()
     {
-        var worker = new NoWorker();
-        await new FilesExecutor(worker, _ => Task.FromResult(true)).RunAsync([Hash], CancellationToken.None);
-        Assert.Equal(1, worker.Calls);
+        // File info gets a short limit, hashing a long one with one file at a time (evaluator, PR #18).
+        var (info, hash) = (new NoWorker(), new NoWorker());
+        var executor = new FilesExecutor(info, hash, _ => Task.FromResult(true));
+        await executor.RunAsync([Hash], CancellationToken.None);
+        Assert.Equal((0, 1), (info.Calls, hash.Calls));
+        await executor.RunAsync([Info], CancellationToken.None);
+        Assert.Equal((1, 1), (info.Calls, hash.Calls));
+        await executor.RunAsync([new JobRequest("c1", FilesCapabilities.CopyPathId, [@"C:\p\a.png"])], CancellationToken.None);
+        Assert.Equal(0, executor.LastLaneCount); // Copy path started no worker, and the log says so
     }
 
     private sealed class NoWorker : IJobExecutor

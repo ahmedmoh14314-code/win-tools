@@ -31,19 +31,14 @@ public sealed class TextWorkerTests : IDisposable
     }
 
     [Fact]
-    public void Info_names_the_real_type_and_flags_a_program_named_like_a_document()
+    public void Info_names_the_real_type()
     {
+        // A program named like a document: A_real_program_header_is_still_recognised (a bare "MZ" is not one).
         var png = _dir.CopySample("quadrants-64x48.png", "a.png");
         var info = Run(FilesCapabilities.InfoId, png);
         Assert.True(info.Success, info.Message);
         Assert.Equal("PNG image", Fact(info, "Type"));
         Assert.True(JobFacts.AreShowable(info.Facts));
-
-        var fake = _dir.Write("invoice.pdf", [(byte)'M', (byte)'Z', 0x90, 0, 3, 0, 0, 0]);
-        var flagged = Run(FilesCapabilities.InfoId, fake);
-        var type = flagged.Facts.Single(f => f.Label == "Type");
-        Assert.Equal("Windows program, but named .pdf", type.Value);
-        Assert.True(type.Notice);
     }
 
     [Fact]
@@ -53,6 +48,54 @@ public sealed class TextWorkerTests : IDisposable
         Assert.False(Run(FilesCapabilities.InfoId, notes).Facts.Single(f => f.Label == "Type").Notice);
         var blob = _dir.Write("data.bin", [0, 1, 2, 3, 0xFE, 0x00]);
         Assert.Equal("Unknown (no known signature)", Fact(Run(FilesCapabilities.InfoId, blob), "Type"));
+    }
+
+    [Theory]
+    [InlineData("MZ notes from the meeting\r\n", "notes.txt")]          // "MZ" without a PE header
+    [InlineData("BMW,320i,2019\r\nAudi,A4,2020\r\n", "cars.csv")]     // "BM" without a BMP header
+    [InlineData("ID3 tags explained\r\n", "id3.txt")]                   // "ID3" without a tag header
+    public void Text_that_starts_like_a_signature_is_still_text(string text, string name)
+    {
+        var path = _dir.Write(name, Encoding.UTF8.GetBytes(text));
+        var type = Run(FilesCapabilities.InfoId, path).Facts.Single(f => f.Label == "Type");
+        Assert.Equal("Text", type.Value);
+        Assert.False(type.Notice);
+    }
+
+    [Fact]
+    public void A_real_program_header_is_still_recognised()
+    {
+        var pe = new byte[0x100];
+        pe[0] = (byte)'M'; pe[1] = (byte)'Z';
+        BitConverter.GetBytes(0x80).CopyTo(pe, 0x3C);
+        "PE\0\0"u8.CopyTo(pe.AsSpan(0x80));
+        var type = Run(FilesCapabilities.InfoId, _dir.Write("invoice.pdf", pe)).Facts.Single(f => f.Label == "Type");
+        Assert.Equal("Windows program, but named .pdf", type.Value);
+        Assert.True(type.Notice);
+    }
+
+    [Fact]
+    public void An_online_only_file_is_never_read()
+    {
+        // Reading a cloud placeholder downloads it (evaluator, PR #18). The offline attribute stands in for one here.
+        var path = _dir.Write("cloud.txt", "abc"u8.ToArray());
+        File.SetAttributes(path, FileAttributes.Offline);
+        try
+        {
+            Assert.Equal("Online only (not downloaded)", Fact(Run(FilesCapabilities.InfoId, path), "Type"));
+            Assert.Equal(ErrorCode.OnlineOnly, Run(FilesCapabilities.Sha256Id, path).Error);
+        }
+        finally { File.SetAttributes(path, FileAttributes.Normal); }
+    }
+
+    [Fact]
+    public void A_folder_of_exactly_the_limit_is_counted_not_called_more()
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(_dir.Path, "many"));
+        for (var i = 0; i < FileJobs.MaxEntries; i++) File.WriteAllBytes(Path.Combine(folder.FullName, $"{i}.t"), []);
+        Assert.Equal("10,000 files", FileJobs.Contents(folder));
+        File.WriteAllBytes(Path.Combine(folder.FullName, "one more.t"), []);
+        Assert.Equal("More than 10,000 items", FileJobs.Contents(folder));
     }
 
     [Fact]

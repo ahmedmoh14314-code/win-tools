@@ -36,26 +36,53 @@ internal static class FileJobs
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException) { return JobResult.Fail(request.Id, ErrorCode.SourceNotReadable, $"The file could not be read ({ex.GetType().Name})."); }
     }
 
+    /// <summary>A cloud placeholder whose content is not here: reading it would download it (evaluator, PR #18).</summary>
+    private const FileAttributes RecallOnOpen = (FileAttributes)0x00040000, RecallOnDataAccess = (FileAttributes)0x00400000;
+
+    private static bool OnlineOnly(FileInfo f) => (f.Attributes & (FileAttributes.Offline | RecallOnOpen | RecallOnDataAccess)) != 0;
+
+    /// <summary>The file a path names: for a symbolic link, its final target (the link itself has no size or content).</summary>
+    private static FileInfo Target(string path)
+    {
+        var file = new FileInfo(path);
+        return file.LinkTarget is not null && file.ResolveLinkTarget(returnFinalTarget: true) is FileInfo target ? target : file;
+    }
+
     private static JobResult Info(string id, string path)
     {
         var folder = Path.EndsInDirectorySeparator(path) ? path[..^1] : path;
         if (Directory.Exists(folder)) return JobResult.WithFacts(id, FolderFacts(new DirectoryInfo(folder)));
-        var file = new FileInfo(path);
-        if (!file.Exists) throw new FileNotFoundException();
+        var named = new FileInfo(path);
+        var file = Target(path);
+        if (!named.Exists || !file.Exists) throw new FileNotFoundException();
+        var link = !ReferenceEquals(named, file) && named.LinkTarget is not null;
+        if (OnlineOnly(file))
+        {
+            // Nothing is read: the facts come from the file system alone, which never downloads the content.
+            var online = new List<JobFact>
+            {
+                new("Type", "Online only (not downloaded)"),
+                new("Size", Size(file.Length)),
+                new("Modified", When(file.LastWriteTime)),
+                new("Created", When(file.CreationTime)),
+            };
+            if (Attributes(named.Attributes) is { } a) online.Add(new("Attributes", a));
+            return JobResult.WithFacts(id, online);
+        }
         var head = new byte[ContentType.HeaderLength];
         int read;
         using (var s = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
             read = s.ReadAtLeast(head, head.Length, throwOnEndOfStream: false);
         var type = ContentType.Detect(head.AsSpan(0, read), file.Length);
-        var mismatch = ContentType.Mismatch(type, file.Extension);
+        var mismatch = ContentType.Mismatch(type, named.Extension);
         var facts = new List<JobFact>
         {
-            new("Type", mismatch ? $"{type.Name}, but named {file.Extension.ToLowerInvariant()}" : type.Name, Notice: mismatch),
+            new("Type", (mismatch ? $"{type.Name}, but named {named.Extension.ToLowerInvariant()}" : type.Name) + (link ? " (through a link)" : ""), Notice: mismatch),
             new("Size", Size(file.Length)),
             new("Modified", When(file.LastWriteTime)),
             new("Created", When(file.CreationTime)),
         };
-        if (Attributes(file.Attributes) is { } attributes) facts.Add(new("Attributes", attributes));
+        if (Attributes(named.Attributes) is { } attributes) facts.Add(new("Attributes", attributes));
         return JobResult.WithFacts(id, facts);
     }
 
@@ -78,9 +105,10 @@ internal static class FileJobs
         int files = 0, folders = 0;
         foreach (var entry in folder.EnumerateFileSystemInfos("*", options))
         {
-            if (entry.Attributes.HasFlag(FileAttributes.Directory)) folders++; else files++;
-            if (files + folders >= MaxEntries || DateTime.UtcNow > deadline)
+            // The deadline is checked between entries: one slow call (a network or cloud folder) can still overrun it.
+            if (files + folders == MaxEntries || DateTime.UtcNow > deadline)
                 return string.Create(CultureInfo.InvariantCulture, $"More than {files + folders:N0} items");
+            if (entry.Attributes.HasFlag(FileAttributes.Directory)) folders++; else files++;
         }
         if (files + folders == 0) return "Nothing (empty)";
         return string.Join(", ", new[] { Count(files, "file", "files"), Count(folders, "folder", "folders") }.Where(s => s is not null));
@@ -91,13 +119,14 @@ internal static class FileJobs
     private static JobResult Hash(string id, string path)
     {
         if (Path.EndsInDirectorySeparator(path) || Directory.Exists(path)) return JobResult.Fail(id, ErrorCode.IsAFolder, "It is a folder.");
-        var before = new FileInfo(path);
-        if (!before.Exists) throw new FileNotFoundException();
+        var before = Target(path);
+        if (!new FileInfo(path).Exists || !before.Exists) throw new FileNotFoundException();
+        if (OnlineOnly(before)) return JobResult.Fail(id, ErrorCode.OnlineOnly, "The file is online only; hashing it would download it.");
         var (length, written) = (before.Length, before.LastWriteTimeUtc);
         byte[] hash;
         using (var s = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1 << 20, FileOptions.SequentialScan))
             hash = SHA256.HashData(s);
-        var after = new FileInfo(path);
+        var after = Target(path);
         var facts = new List<JobFact> { new("SHA-256", Convert.ToHexStringLower(hash)), new("Size", Size(length)) };
         // A file written while it was read has no single hash: say so instead of passing one off as the file's.
         if (!after.Exists || after.Length != length || after.LastWriteTimeUtc != written)

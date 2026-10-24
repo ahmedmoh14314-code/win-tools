@@ -27,7 +27,8 @@ public sealed partial class UiSurfaceTests
     /// <summary>Every ring the menu can show, for single files of each format and mixed selections.</summary>
     private static IEnumerable<MenuView> AllViews()
     {
-        foreach (var names in new[] { new[] { "a.png" }, ["a.jpg"], ["a.webp"], ["a.bmp"], ["a.tif"], ["a.png", "b.jpg"], ["a.png", "b.jpg", "c.webp"] })
+        // With General Files (V2 PR 1.4): a file no module reads (one category) and a folder.
+        foreach (var names in new[] { new[] { "a.png" }, ["a.jpg"], ["a.webp"], ["a.bmp"], ["a.tif"], ["a.png", "b.jpg"], ["a.png", "b.jpg", "c.webp"], ["notes.txt"], ["holiday\\"] })
         {
             var menu = MenuFor(names);
             var nav = new MenuNavigator(menu, 96);

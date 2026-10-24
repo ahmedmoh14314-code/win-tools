@@ -12,7 +12,7 @@ public sealed record FeedbackMessage(FeedbackKind Kind, string Title, string Det
 
 /// <summary>One request of a finished job: what it was about (a file name), the worker's result and the sizes before
 /// and after (bytes).</summary>
-public sealed record JobItem(string SourceName, JobResult Result, long? SourceBytes = null, long? OutputBytes = null);
+public sealed record JobItem(string SourceName, JobResult Result, long? SourceBytes = null, long? OutputBytes = null, int Inputs = 1);
 
 /// <summary>
 /// The words shown to the user when a batch ends. Short, plain and actionable: the outcome first, the reason in the
@@ -60,9 +60,9 @@ public static class FeedbackText
     /// <summary>
     /// What a command that fills the clipboard says (Copy path): what it copied, for how many items, or why it could not.
     /// </summary>
-    public static FeedbackMessage Copied(FeedbackWords words, JobItem item, int count) => item.Result.Success
-        ? new(FeedbackKind.Success, count == 1 ? words.Done : $"{words.Count(count)} copied", item.SourceName)
-        : new(FeedbackKind.Failure, $"Could not {words.Verb} {item.SourceName}", Reason(item.Result.Error));
+    public static FeedbackMessage Copied(FeedbackWords words, JobItem item) => item.Result.Success
+        ? new(FeedbackKind.Success, item.Inputs == 1 ? words.Done : $"{words.Count(item.Inputs)} copied", item.SourceName)
+        : new(FeedbackKind.Failure, $"Could not {words.Verb} {(item.Inputs == 1 ? $"the {words.Noun}" : words.Count(item.Inputs))}", Reason(item.Result.Error));
 
     /// <summary>What the operation did, as a short past-tense phrase ("Converted to WebP").</summary>
     public static string Done(Operation op) => op.Kind switch
@@ -121,11 +121,12 @@ public static class FeedbackText
         ErrorCode.OutputNameInvalid or ErrorCode.NoFreeOutputName => "No free name for the new file in that folder.",
         ErrorCode.DiskFull => "The disk is full.",
         ErrorCode.WorkerTimeout => "It took too long and was stopped.",
-        ErrorCode.WorkerCrashed or ErrorCode.WorkerProtocolError => "The converter stopped unexpectedly. The original is unchanged.",
+        ErrorCode.WorkerCrashed or ErrorCode.WorkerProtocolError => "The worker stopped unexpectedly. The original is unchanged.",
         ErrorCode.Cancelled => "The job was cancelled.",
         ErrorCode.InvalidRequest => "The file's path is not supported.",
         ErrorCode.IsAFolder => "It is a folder; this command works on files.",
         ErrorCode.ClipboardUnavailable => "Another program is using the clipboard. Try again.",
+        ErrorCode.OnlineOnly => "The file is stored online only. Open it once so Windows downloads it, then try again.",
         _ => "Something went wrong. The original is unchanged.",
     };
 

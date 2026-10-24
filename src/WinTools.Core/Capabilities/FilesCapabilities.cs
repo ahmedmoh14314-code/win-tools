@@ -27,7 +27,7 @@ public static class FilesCapabilities
         new(Sha256Id, "SHA-256", "tools", Module, new InputRule(AnyFile), CapabilityShape.PerFile, CapabilityOutput.Facts, LongRunning: true,
             Feedback: new("Hashing", "hash", "Hashed", "Nothing needed doing", "file", "files")),
         new(CopyPathId, "Copy path", "tools", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Clipboard, LongRunning: false,
-            Feedback: new("Copying", "copy the path of", "Path copied", "Nothing needed doing", "path", "paths")),
+            Feedback: new("Copying", "copy", "Path copied", "Nothing needed doing", "path", "paths")),
     ];
 
     /// <summary>What Copy path puts on the clipboard: one path per line, a folder without the drop target's mark.</summary>

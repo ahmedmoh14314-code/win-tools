@@ -151,6 +151,7 @@ public sealed class StructureAndContentTests : IDisposable
         var host = typeof(WinTools.Host.Jobs.WorkerClient).Assembly.GetReferencedAssemblies().Select(a => a.Name).ToArray();
         Assert.DoesNotContain("SkiaSharp", host);
         Assert.DoesNotContain("WinTools.Worker", host);
+        Assert.DoesNotContain("WinTools.Worker.Text", host); // the General Files worker too: a separate process only
     }
 }
 

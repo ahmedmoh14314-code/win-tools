@@ -80,15 +80,48 @@ public sealed class InfoPanel : IDisposable
 internal static class InfoPanelRenderer
 {
     public const int MaxSections = 3;
-    private const double Width96 = 324, Margin96 = 14, Pad96 = 16, Header96 = 40, Row96 = 22, SectionGap96 = 12, Footer96 = 26;
+    private const double Width96 = 324, Margin96 = 14, Pad96 = 16, Header96 = 40, Row96 = 22, Line96 = 16, SectionGap96 = 12, Footer96 = 26;
+    private const double ValueLeft96 = 124, NoticeIndent96 = 13;
+
+    /// <summary>A value wraps onto at most this many lines; beyond, the last line ends in an ellipsis.</summary>
+    public const int MaxValueLines = 3;
 
     public static int Px(double v96, uint dpi) => (int)Math.Round(v96 * dpi / 96.0);
 
-    private static double CardHeight96(IReadOnlyList<InfoSection> sections, int more) =>
-        sections.Sum(s => Header96 + s.Rows.Count * Row96) + (sections.Count - 1) * SectionGap96 + Pad96 - 4 + (more > 0 ? Footer96 : 0) + 6;
+    public static int TextPx(uint dpi) => Px(12, dpi);
+
+    /// <summary>Width of the value column, in pixels (a notice is indented by its dot).</summary>
+    public static int ValueWidth(bool notice, uint dpi) => Px(Width96 - ValueLeft96 - Pad96 - (notice ? NoticeIndent96 : 0), dpi);
+
+    /// <summary>
+    /// A value in lines that fit the column (evaluator, PR #18: a SHA-256 or a mismatch notice was cut to an ellipsis).
+    /// Breaks after a space or comma where it can, inside a word (a hash) where it must.
+    /// </summary>
+    public static IReadOnlyList<string> ValueLines(string value, bool notice, uint dpi)
+    {
+        var (width, px, weight) = (ValueWidth(notice, dpi), TextPx(dpi), notice ? 600 : 400);
+        var lines = new List<string>();
+        var rest = value;
+        while (rest.Length > 0 && lines.Count < MaxValueLines)
+        {
+            if (lines.Count == MaxValueLines - 1 || Fonts.Width(rest, px, weight) <= width) { lines.Add(rest); break; } // the last line ellipsises
+            var n = rest.Length - 1;
+            while (n > 1 && Fonts.Width(rest[..n], px, weight) > width) n--;
+            var space = rest.LastIndexOfAny([' ', ','], n - 1, n);
+            if (space > 0) n = space + 1;
+            lines.Add(rest[..n].TrimEnd());
+            rest = rest[n..].TrimStart();
+        }
+        return lines;
+    }
+
+    private static double RowHeight96(InfoRow row, uint dpi) => Row96 + (ValueLines(row.Value, row.Notice, dpi).Count - 1) * Line96;
+
+    private static double CardHeight96(IReadOnlyList<InfoSection> sections, int more, uint dpi) =>
+        sections.Sum(s => Header96 + s.Rows.Sum(r => RowHeight96(r, dpi))) + (sections.Count - 1) * SectionGap96 + Pad96 - 4 + (more > 0 ? Footer96 : 0) + 6;
 
     public static (int W, int H) WindowSize(IReadOnlyList<InfoSection> sections, int more, uint dpi) =>
-        (Px(Width96 + 2 * Margin96, dpi), Px(CardHeight96(sections, more) + 2 * Margin96, dpi));
+        (Px(Width96 + 2 * Margin96, dpi), Px(CardHeight96(sections, more, dpi) + 2 * Margin96, dpi));
 
     public static void Draw(Painter p, int w, int h, IReadOnlyList<InfoSection> sections, int more)
     {
@@ -102,10 +135,10 @@ internal static class InfoPanelRenderer
         var pad = p.S(Pad96);
         var left = x + pad;
         var right = x + cw - pad;
-        var valueLeft = x + p.S(124);
+        var valueLeft = x + p.S(ValueLeft96);
         var cy = y + p.S(6);
         var titlePx = Px(13.5, p.Dpi);
-        var textPx = Px(12, p.Dpi);
+        var textPx = TextPx(p.Dpi);
         for (var s = 0; s < sections.Count; s++)
         {
             var section = sections[s];
@@ -132,13 +165,15 @@ internal static class InfoPanelRenderer
                 var top = cy;
                 var bottom = cy + p.S(Row96);
                 p.Text(row.Label, left, top, valueLeft - p.S(8), bottom, Palette.TextSecondary, textPx, 400, TextAlign.Left);
-                if (row.Notice)
+                var lines = ValueLines(row.Value, row.Notice, p.Dpi);
+                if (row.Notice) p.FillCircle(valueLeft + p.S(3.5), (top + bottom) / 2, p.S(3.5), Palette.Warning);
+                var textLeft = row.Notice ? valueLeft + p.S(NoticeIndent96) : valueLeft;
+                for (var i = 0; i < lines.Count; i++)
                 {
-                    p.FillCircle(valueLeft + p.S(3.5), (top + bottom) / 2, p.S(3.5), Palette.Warning);
-                    p.Text(row.Value, valueLeft + p.S(13), top, right, bottom, Palette.Warning, textPx, 600, TextAlign.Left);
+                    var lineTop = top + p.S(i * Line96);
+                    p.Text(lines[i], textLeft, lineTop, right, lineTop + p.S(Row96), row.Notice ? Palette.Warning : Palette.Text, textPx, row.Notice ? 600 : 400, TextAlign.Left);
                 }
-                else p.Text(row.Value, valueLeft, top, right, bottom, Palette.Text, textPx, 400, TextAlign.Left);
-                cy = bottom;
+                cy = bottom + p.S((lines.Count - 1) * Line96);
             }
         }
         if (more > 0)

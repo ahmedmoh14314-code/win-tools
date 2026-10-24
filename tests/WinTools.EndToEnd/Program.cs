@@ -112,7 +112,7 @@ var batchHashes = batchSources.ToDictionary(f => f, HashOf);
 // The drop target marks a folder with a trailing separator (ADR-0019); the menu is built from the paths as marked.
 var menu = RadialMenu.Build(resolver, [.. batchSources.Select(f => isFolder ? f + Path.DirectorySeparatorChar : f)]);
 var groupIndex = capability is null ? -1 : menu.ToList().FindIndex(g => g.Commands.Any(c => c.Id == capability.Id));
-var commandIndex = groupIndex < 0 ? -1 : menu[groupIndex].Commands.ToList().FindIndex(c => c.Id == op!.Id);
+var commandIndex = groupIndex < 0 ? -1 : menu[groupIndex].Commands.ToList().FindIndex(c => c.Id == capability!.Id);
 if ((producing || facts) && capability is not null && groupIndex < 0) { Console.Error.WriteLine($"{capability.Id} is not offered for {sourceName}"); return 4; }
 
 var hostLog = Path.Combine(folder, "..", $"host-{scenario}-{stamp}.jsonl");
@@ -497,7 +497,7 @@ using (var explorer = ExplorerWindow.Open(folder))
             }
             if (output is not null) (toastShown, focusKept) = WaitForSurface("WinTools.Toast", explorer.Hwnd, TimeSpan.FromSeconds(3));
             Thread.Sleep(300);
-            var files = Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
+            var files = Directory.GetFileSystemEntries(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray(); // the "folder" scenario's source is a folder
             var sourceIntact = (isFolder ? Directory.Exists(source) : File.Exists(source)) && HashOf(source) == sourceHash;
             var outputValid = output is not null && File.ReadAllBytes(output) is var bytes && FileSignature.Detect(bytes) == outputFormat && ContainerCheck.IsComplete(bytes, outputFormat, out _)
                 && (!strip || bytes.AsSpan().IndexOf(metadataMarker) < 0); // the comment is gone
