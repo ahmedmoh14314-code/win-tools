@@ -97,19 +97,24 @@ internal sealed class JobScheduler
         return job;
     }
 
-    /// <summary>Cancels every queued and running job (the host is exiting).</summary>
-    public void CancelAll()
+    /// <summary>Cancels every queued and running job (the host is exiting); the task ends when all of them have finished,
+    /// so the exit can give running workers their grace and clean their temps.</summary>
+    public Task CancelAll()
     {
         var jobs = _live.Values.ToArray();
         foreach (var job in jobs) job.MarkCancelled(); // first, so no queued job starts while the running one unwinds
         foreach (var job in jobs) job.Cancel();
+        return Task.WhenAll(jobs.Select(j => j.Completion));
     }
 
     private async Task ConsumeAsync(JobModuleRunner runner, ChannelReader<ScheduledJob> reader)
     {
         await foreach (var job in reader.ReadAllAsync().ConfigureAwait(false))
         {
+            // Nothing a job throws may end the queue: RunAsync catches, but its catch logs and tells the user, and either can
+            // throw too (evaluator, PR #16). The next drop on this module must still run.
             try { await RunAsync(runner, job).ConfigureAwait(false); }
+            catch (Exception) { }
             finally
             {
                 _live.TryRemove(job.Id, out _);

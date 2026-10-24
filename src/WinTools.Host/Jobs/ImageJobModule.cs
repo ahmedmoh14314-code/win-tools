@@ -38,7 +38,7 @@ internal sealed class ImageJobModule : IJobModule
     /// <summary>
     /// A success claim is believed only if:
     /// <list type="bullet">
-    /// <item>"Image info" reports facts and no file;</item>
+    /// <item>"Image info" reports facts within <see cref="JobFacts"/>' bounds and no file;</item>
     /// <item>otherwise there is exactly one output, and its SHA-256 equals the hash of the output the worker validated,
     /// so a pre-existing or replaced file is not believed;</item>
     /// <item>its real format is one this operation can produce (the conversion target, or the source's own format for
@@ -48,9 +48,10 @@ internal sealed class ImageJobModule : IJobModule
     /// </summary>
     public bool IsBelievable(JobRequest request, JobResult result)
     {
-        if (!result.Success) return result.Outputs.Count == 0 && result.Error != ErrorCode.None;
+        if (result.Outputs is null || result.Facts is null) return false; // a worker can send any shape
+        if (!result.Success) return result.Outputs.Count == 0 && result.Facts.Count == 0 && result.Error != ErrorCode.None;
         if (OperationCatalog.Find(request.CapabilityId) is not { } op || request.Inputs.Count != 1) return false;
-        if (!op.WritesFile) return result.Outputs.Count == 0 && result.Facts.Count > 0; // "Image info": facts, no file
+        if (!op.WritesFile) return result.Outputs.Count == 0 && JobFacts.AreShowable(result.Facts); // "Image info": facts, no file
         if (result.Outputs is not [{ Sha256: { Length: 64 } claimed } output] || result.Facts.Count > 0) return false;
         var source = request.Inputs[0];
         try
