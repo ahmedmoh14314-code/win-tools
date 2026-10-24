@@ -9,4 +9,7 @@ public sealed record CapabilityCategory(string Id, string Label, string Icon, in
 {
     /// <summary>Where a capability goes whose category no module declared.</summary>
     public static CapabilityCategory Other { get; } = new("other", "Other", "tools", 1000);
+
+    /// <summary>The top-level ring's last sector when there are more categories than fit (RadialMenu.RingCapacity).</summary>
+    public static CapabilityCategory More { get; } = new("more", "More…", "more", int.MaxValue);
 }

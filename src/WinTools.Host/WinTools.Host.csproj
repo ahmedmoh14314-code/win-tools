@@ -16,6 +16,7 @@
     <!-- The settings window (WPF) is a separate program: built first and copied next to the host by CopySettingsApp, but
          never referenced, so the host's runtimeconfig does not name the WPF framework and WPF never loads into it. -->
     <ProjectReference Include="..\WinTools.Settings\WinTools.Settings.csproj" ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\WinTools.Dialogs\WinTools.Dialogs.csproj" ReferenceOutputAssembly="false" Private="false" />
     <InternalsVisibleTo Include="WinTools.Worker.Tests" />
     <InternalsVisibleTo Include="WinTools.Soak" />
   </ItemGroup>
@@ -24,11 +25,17 @@
     <MSBuild Projects="..\WinTools.Settings\WinTools.Settings.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
       <Output TaskParameter="TargetOutputs" ItemName="_SettingsTarget" />
     </MSBuild>
+    <MSBuild Projects="..\WinTools.Dialogs\WinTools.Dialogs.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" ItemName="_DialogsTarget" />
+    </MSBuild>
     <PropertyGroup>
       <_SettingsDir>%(_SettingsTarget.RootDir)%(_SettingsTarget.Directory)</_SettingsDir>
+      <_DialogsDir>%(_DialogsTarget.RootDir)%(_DialogsTarget.Directory)</_DialogsDir>
     </PropertyGroup>
     <ItemGroup>
       <_SettingsFiles Include="$(_SettingsDir)WinTools.Settings.exe;$(_SettingsDir)WinTools.Settings.dll;$(_SettingsDir)WinTools.Settings.runtimeconfig.json;$(_SettingsDir)WinTools.Settings.deps.json;$(_SettingsDir)WinTools.Settings.pdb" />
+      <!-- The dialogs process (V2 PR 1.3) ships the same way, next to the host. -->
+      <_SettingsFiles Include="$(_DialogsDir)WinTools.Dialogs.exe;$(_DialogsDir)WinTools.Dialogs.dll;$(_DialogsDir)WinTools.Dialogs.runtimeconfig.json;$(_DialogsDir)WinTools.Dialogs.deps.json;$(_DialogsDir)WinTools.Dialogs.pdb" />
     </ItemGroup>
   </Target>
   <Target Name="CopySettingsApp" AfterTargets="Build" DependsOnTargets="ResolveSettingsAppFiles">
@@ -37,5 +44,6 @@
   <Target Name="PublishSettingsApp" AfterTargets="Publish" DependsOnTargets="ResolveSettingsAppFiles">
     <Copy SourceFiles="@(_SettingsFiles)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" Condition="Exists('%(FullPath)')" />
     <Error Condition="!Exists('$(PublishDir)WinTools.Settings.exe')" Text="The settings window (WinTools.Settings.exe) is missing from the publish folder." />
+    <Error Condition="!Exists('$(PublishDir)WinTools.Dialogs.exe')" Text="The dialogs process (WinTools.Dialogs.exe) is missing from the publish folder." />
   </Target>
 </Project>

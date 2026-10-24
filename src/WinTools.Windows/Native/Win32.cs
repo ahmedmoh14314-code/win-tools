@@ -48,6 +48,8 @@ internal static class Msg
 
 internal static partial class User32
 {
+    /// <summary>Lets the given process (a dialog the host just started) bring its window to the foreground.</summary>
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool AllowSetForegroundWindow(uint processId);
     private const string Lib = "user32.dll";
 
     public const uint WS_POPUP = 0x80000000;

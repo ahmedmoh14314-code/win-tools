@@ -19,12 +19,41 @@ public static class RadialMenu
     public static IReadOnlyList<MenuGroup> Build(IReadOnlyList<CapabilityDescriptor> allowed, IReadOnlyList<CapabilityCategory> categories)
     {
         var known = categories.ToDictionary(c => c.Id, StringComparer.Ordinal);
-        return allowed
+        var groups = allowed
             .GroupBy(c => known.TryGetValue(c.Category, out var category) ? category : CapabilityCategory.Other)
             .OrderBy(g => g.Key.Order).ThenBy(g => g.Key.Id, StringComparer.Ordinal)
             .Select(g => new MenuGroup(g.Key, g.Key.Label, g.ToArray()))
-            .ToArray();
+            .ToList();
+        if (groups.Count > RingCapacity) // the last sector holds every category that does not fit
+        {
+            var rest = groups.Skip(RingCapacity - 1).SelectMany(g => g.Commands).ToArray();
+            groups = [.. groups.Take(RingCapacity - 1), new MenuGroup(CapabilityCategory.More, CapabilityCategory.More.Label, rest)];
+        }
+        return [.. groups.Select(Fit)];
     }
+
+    /// <summary>The most sectors one ring shows: more would make each too narrow to aim at during a drag.</summary>
+    public const int RingCapacity = 8;
+
+    public const string MoreId = "menu.more";
+
+    /// <summary>A category ring is Back plus its commands; beyond that, the last command sector is "More…".</summary>
+    private static MenuGroup Fit(MenuGroup group)
+    {
+        if (group.Commands.Count <= RingCapacity - 1) return group;
+        var shown = group.Commands.Take(RingCapacity - 2).ToArray();
+        var rest = group.Commands.Skip(RingCapacity - 2).ToArray();
+        var more = new CapabilityDescriptor(MoreId, "More…", group.Category.Id, "menu", new InputRule(_ => true),
+            CapabilityShape.Selection, CapabilityOutput.Facts, LongRunning: false, Payload: rest);
+        return group with { Commands = [.. shown, more] };
+    }
+
+    /// <summary>Whether a command is the "More…" sector, which opens its overflow in a list instead of running.</summary>
+    public static bool IsMore(CapabilityDescriptor command) => command.Id == MoreId && command.Payload is IReadOnlyList<CapabilityDescriptor>;
+
+    /// <summary>The commands a "More…" sector holds, in menu order.</summary>
+    public static IReadOnlyList<CapabilityDescriptor> Overflow(CapabilityDescriptor more) =>
+        IsMore(more) ? (IReadOnlyList<CapabilityDescriptor>)more.Payload! : throw new ArgumentException($"{more.Id} is not a More… sector.", nameof(more));
 
     /// <summary>The menu for what a resolver allows, with that resolver's categories.</summary>
     public static IReadOnlyList<MenuGroup> Build(CapabilityResolver resolver, IReadOnlyList<string> paths) => Build(resolver.Resolve(paths), resolver.Categories);

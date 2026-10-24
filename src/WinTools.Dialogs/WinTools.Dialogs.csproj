@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Dialogs: ordinary WPF windows in their own short-lived process, like the settings window (ADR-0001, ADR-0016,
+       V2 plan §5). The host starts it for one dialog, writes the request on stdin and reads the answer on stdout. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\WinTools.Host\Assets\WinTools.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="System.IO" />
+    <ProjectReference Include="..\WinTools.Core\WinTools.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using WinTools.Core.Capabilities;
+using WinTools.Core.Jobs;
 using WinTools.Core.Feedback;
 using WinTools.Core.Files;
 using WinTools.Core.Interaction;
@@ -317,16 +318,33 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             _log.Event("drop", new { accepted = false, reason, hot = hot?.Id, openMs, files = paths.Count, at = $"{dx},{dy}", sounds = SoundCounts(), frames });
             return false;
         }
-        // Re-resolve from the drop's own data object; run only if it still offers the command that was armed.
-        if (!_sessionResolver.Resolve(paths).Any(o => o.Id == chosen.Id))
+        // Re-resolve from the drop's own data object; run only if it still offers the command that was armed (for
+        // "More…", every command it holds).
+        var offered = _sessionResolver.Resolve(paths).Select(o => o.Id).ToHashSet(StringComparer.Ordinal);
+        if (RadialMenu.IsMore(chosen) ? !RadialMenu.Overflow(chosen).All(o => offered.Contains(o.Id)) : !offered.Contains(chosen.Id))
         {
             _sounds.Play(UiSound.Nothing);
             _log.Event("drop", new { accepted = false, reason = "commandsChanged", files = paths.Count });
             return false;
         }
         _log.Event("drop", new { accepted = true, op = chosen.Id, openMs, files = paths.Count, sounds = SoundCounts(), frames });
-        if (_jobs.Enqueue(chosen, paths) is null) _log.Event("job.refused", new { op = chosen.Id, module = chosen.Module }); // no runner for that module
+        if (RadialMenu.IsMore(chosen)) _ = PickAndRunAsync(RadialMenu.Overflow(chosen), paths, _centre.X + dx, _centre.Y + dy);
+        else Run(chosen, paths);
         return true;
+    }
+
+    private void Run(CapabilityDescriptor capability, IReadOnlyList<string> paths)
+    {
+        if (_jobs.Enqueue(capability, paths) is null) _log.Event("job.refused", new { op = capability.Id, module = capability.Module }); // no runner for that module
+    }
+
+    /// <summary>"More…": the commands that did not fit the ring, in a list (the dialogs process); the pick runs on the dropped files.</summary>
+    private async Task PickAndRunAsync(IReadOnlyList<CapabilityDescriptor> commands, IReadOnlyList<string> paths, int x, int y)
+    {
+        var request = new PickRequest("More commands", [.. commands.Select(c => new PickItem(c.Id, c.Label))], x, y);
+        var chosen = await DialogsClient.Default.PickAsync(request).ConfigureAwait(false);
+        _log.Event("more.pick", new { offered = commands.Count, chosen });
+        if (commands.FirstOrDefault(c => c.Id == chosen) is { } capability) Run(capability, paths);
     }
 
     public void Dispose()
