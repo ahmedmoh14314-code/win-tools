@@ -137,6 +137,15 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         log.Event("toast", new { kind = "triggerRefused", shown = true });
     }
 
+    /// <summary>A dialog the user asked for could not be shown (its program is missing or failed to start). Any thread.</summary>
+    public void DialogUnavailable() => ui.Post(() =>
+    {
+        ShowToast(new ToastContent(FeedbackKind.Failure, "Could not open the list of commands",
+            "WinTools.Dialogs.exe is missing from this copy or could not start. Nothing was run; reinstall to fix it."));
+        sounds.Play(UiSound.Failure);
+        log.Event("toast", new { kind = "dialogUnavailable" });
+    });
+
     public void Crashed(CapabilityDescriptor capability, int files) => ui.Post(() =>
     {
         _done = _total;

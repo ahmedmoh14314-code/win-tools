@@ -8,7 +8,7 @@ namespace WinTools.Core.Capabilities;
 /// size, and every path passes <see cref="PathPolicy"/>. Unrecognised files, refused paths and empty or oversized
 /// selections get no commands, never placeholders.
 /// </summary>
-public sealed class CapabilityResolver(IReadOnlyList<CapabilityDescriptor> catalog)
+public sealed class CapabilityResolver(IReadOnlyList<CapabilityDescriptor> catalog, IReadOnlyList<CapabilityCategory>? categories = null)
 {
     /// <summary>Upper bound on files per drop; larger selections get no commands.</summary>
     public const int MaxFiles = 1000;
@@ -16,9 +16,12 @@ public sealed class CapabilityResolver(IReadOnlyList<CapabilityDescriptor> catal
     public static CapabilityResolver Default { get; } = For(customResizeId: null);
 
     /// <summary>The resolver over every module's catalog, with the settings' exact resize.</summary>
-    public static CapabilityResolver For(string? customResizeId) => new(ImageCapabilities.Catalog(customResizeId));
+    public static CapabilityResolver For(string? customResizeId) => new(ImageCapabilities.Catalog(customResizeId), ImageCapabilities.Categories);
 
     public IReadOnlyList<CapabilityDescriptor> Catalog => catalog;
+
+    /// <summary>Every module's categories, merged by id (the first declaration of an id wins).</summary>
+    public IReadOnlyList<CapabilityCategory> Categories { get; } = (categories ?? ImageCapabilities.Categories).DistinctBy(c => c.Id).ToArray();
 
     public IReadOnlyList<CapabilityDescriptor> Resolve(IReadOnlyList<string> paths)
     {

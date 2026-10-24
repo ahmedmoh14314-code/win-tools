@@ -23,13 +23,13 @@ $props = @('-c', 'Release', '-r', 'win-x64', '--self-contained', 'true',
     '-p:IncludeSourceRevisionInInformationalVersion=false', '-p:Product=WinTools',
     '-p:DebugType=none', '-p:DebugSymbols=false', '-p:GenerateDocumentationFile=false')
 # Host first; then the worker and the settings window, each with its own runtimeconfig for the bundled runtime.
-foreach ($project in 'WinTools.Host', 'WinTools.Worker', 'WinTools.Settings') {
+foreach ($project in 'WinTools.Host', 'WinTools.Worker', 'WinTools.Settings', 'WinTools.Dialogs') {
     & dotnet publish (Join-Path $root "src\$project") @props -o $payload
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish $project failed" }
 }
 
 # The payload must run without an installed .NET and must not carry debug or developer files.
-foreach ($exe in 'WinTools.Host', 'WinTools.Worker', 'WinTools.Settings') {
+foreach ($exe in 'WinTools.Host', 'WinTools.Worker', 'WinTools.Settings', 'WinTools.Dialogs') {
     $config = Get-Content -Raw (Join-Path $payload "$exe.runtimeconfig.json") | ConvertFrom-Json
     if (-not $config.runtimeOptions.includedFrameworks) { throw "$exe is not self-contained" }
 }

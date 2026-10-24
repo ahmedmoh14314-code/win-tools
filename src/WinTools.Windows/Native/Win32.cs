@@ -48,6 +48,8 @@ internal static class Msg
 
 internal static partial class User32
 {
+    /// <summary>Lets the given process (a dialog the host just started) bring its window to the foreground.</summary>
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool AllowSetForegroundWindow(uint processId);
     private const string Lib = "user32.dll";
 
     public const uint WS_POPUP = 0x80000000;
@@ -139,6 +141,8 @@ internal static partial class Kernel32
     [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     public static partial uint GetLongPathNameW(string shortPath, [Out] char[] longPath, uint length);
     public const uint SEM_FAILCRITICALERRORS = 0x0001, SEM_NOOPENFILEERRORBOX = 0x8000;
+    public const uint INVALID_FILE_ATTRIBUTES = 0xFFFFFFFF, FILE_ATTRIBUTE_DIRECTORY = 0x10;
+    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)] public static partial uint GetFileAttributesW(string fileName);
     [LibraryImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool SetThreadErrorMode(uint newMode, out uint oldMode);
     [LibraryImport("kernel32.dll")] public static unsafe partial int MultiByteToWideChar(uint codePage, uint flags, byte* multiByte, int multiByteLength, char* wide, int wideLength);
 }

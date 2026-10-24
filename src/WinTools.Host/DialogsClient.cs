@@ -1,0 +1,79 @@
+using System.Diagnostics;
+using System.Text;
+using WinTools.Core.Jobs;
+
+namespace WinTools.Host;
+
+/// <summary>How a dialog ended: an offered id was picked, the user cancelled, or the dialog could not be shown at all.</summary>
+internal enum PickEnd { Picked, Cancelled, Unavailable }
+
+/// <summary>A dialog's outcome; <see cref="Id"/> is set only for <see cref="PickEnd.Picked"/>.</summary>
+internal readonly record struct PickOutcome(PickEnd End, string? Id = null);
+
+/// <summary>
+/// Starts the dialogs process (WinTools.Dialogs.exe) for one dialog and waits for its answer (V2 PR 1.3). The request
+/// goes on its stdin and the answer comes on its stdout, one JSON line each; it never receives file paths, which stay
+/// in the host. A dialog that does not answer within <see cref="Patience"/> is closed and counts as cancelled. The
+/// process joins the host's kill-on-close job, so it never outlives the host, and is ended once it has answered.
+/// </summary>
+internal sealed class DialogsClient(string dialogsExe)
+{
+    /// <summary>How long a dialog may stay open before the host gives up on it.</summary>
+    public static readonly TimeSpan Patience = TimeSpan.FromMinutes(10);
+
+    /// <summary>How long a dialog that answered may take to exit before it is ended.</summary>
+    private static readonly TimeSpan ExitGrace = TimeSpan.FromSeconds(2);
+
+    public static DialogsClient Default { get; } = new(Path.Combine(AppContext.BaseDirectory, "WinTools.Dialogs.exe"));
+
+    public async Task<PickOutcome> PickAsync(PickRequest request, CancellationToken cancellationToken = default)
+    {
+        if (!File.Exists(dialogsExe)) return new(PickEnd.Unavailable);
+        var psi = new ProcessStartInfo(dialogsExe)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            StandardInputEncoding = new UTF8Encoding(false),
+            StandardOutputEncoding = Encoding.UTF8,
+            WorkingDirectory = Path.GetDirectoryName(dialogsExe)!,
+        };
+        Process process;
+        try { process = Process.Start(psi) ?? throw new InvalidOperationException("Process.Start returned null."); }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { return new(PickEnd.Unavailable); }
+        using (process)
+        {
+            WinTools.Windows.WorkerJobObject.TryAssign(process); // ends with the host, like the workers
+            _ = WinTools.Windows.Native.User32.AllowSetForegroundWindow((uint)process.Id); // effective only if the host may set the foreground itself (ADR-0019)
+            using var patience = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            patience.CancelAfter(Patience);
+            try
+            {
+                await process.StandardInput.WriteLineAsync(WorkerProtocol.Serialize(request).AsMemory(), patience.Token).ConfigureAwait(false);
+                process.StandardInput.Close();
+                var line = await process.StandardOutput.ReadLineAsync(patience.Token).ConfigureAwait(false);
+                if (line is null) return new(PickEnd.Unavailable); // it ended without answering: it could not show the dialog
+                return WorkerProtocol.Deserialize<PickResult>(line)?.ChosenFrom(request) is { } id ? new(PickEnd.Picked, id) : new(PickEnd.Cancelled);
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or IOException) { return new(PickEnd.Cancelled); }
+            finally { await EndAsync(process).ConfigureAwait(false); }
+        }
+    }
+
+    /// <summary>Lets an answered dialog exit on its own for a moment, then ends it. Never throws.</summary>
+    private static async Task EndAsync(Process process)
+    {
+        try
+        {
+            using var grace = new CancellationTokenSource(ExitGrace);
+            await process.WaitForExitAsync(grace.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            try { process.Kill(); }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { } // exited meanwhile, or access denied
+        }
+        catch (InvalidOperationException) { }
+    }
+}

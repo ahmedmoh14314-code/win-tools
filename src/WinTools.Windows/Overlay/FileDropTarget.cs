@@ -61,7 +61,7 @@ public sealed class FileDropTarget : IDropTarget
     {
         _sink = sink;
         _time = time ?? TimeProvider.System;
-        _expand = expand ?? ShortNames.ExpandAll;
+        _expand = expand ?? Inspect;
     }
 
     /// <summary>For tests: the expansion this drag is waiting for, if any.</summary>
@@ -164,10 +164,22 @@ public sealed class FileDropTarget : IDropTarget
         _gaveUp = false;
     }
 
+    /// <summary>Whether a read's paths need the file system before the menu can be built: 8.3 names to expand, or names
+    /// without an extension that may be folders. Both are looked up on a task, never here.</summary>
+    private static bool NeedsInspection(IReadOnlyList<string> raw) => ShortNames.NeedsExpansion(raw) || FolderMarks.MayHide(raw);
+
+    /// <summary>One budget and one error-mode scope for both lookups (evaluator, PR #17: the folder lookups had neither).</summary>
+    private static ShortNames.Expansion Inspect(string[] paths, CancellationToken cancel) => ShortNames.WithoutErrorBoxes(() =>
+    {
+        var start = System.Diagnostics.Stopwatch.GetTimestamp();
+        var expanded = ShortNames.ExpandAll(paths, start, cancel);
+        return expanded with { Paths = FolderMarks.Mark(expanded.Paths, start, cancel) };
+    });
+
     /// <summary>Takes a read's files: true when they are known now, false when their expansion has started.</summary>
     private bool Accept(IReadOnlyList<string> raw)
     {
-        if (!ShortNames.NeedsExpansion(raw)) { _dragPaths = raw; return true; }
+        if (!NeedsInspection(raw)) { _dragPaths = raw; return true; }
         if (_expansionResult is not null && raw.SequenceEqual(_expansionInput!)) { _dragPaths = _expansionResult; return true; }
         _expansionCancel?.Cancel();
         var input = raw.ToArray();
@@ -195,7 +207,7 @@ public sealed class FileDropTarget : IDropTarget
     /// none, because waiting here would block the UI thread.</summary>
     private IReadOnlyList<string> Expanded(IReadOnlyList<string> raw)
     {
-        if (!ShortNames.NeedsExpansion(raw)) return raw;
+        if (!NeedsInspection(raw)) return raw;
         if (_expansionInput is null || !raw.SequenceEqual(_expansionInput)) return [];
         if (_expansionResult is null && !TakeExpansion()) return [];
         return _expansionResult!;

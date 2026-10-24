@@ -8,10 +8,11 @@ namespace WinTools.Core.Interaction;
 /// <param name="Armed">The hot sector is a command that a drop would run now.</param>
 /// <param name="Hub">Text for the centre: the open category, or empty at the top level.</param>
 /// <param name="FirstSweep">Width of sector 0 (Back on a category's ring), or 0 when all sectors are equal.</param>
-/// <param name="Categories">On the categories' ring, the category of each sector (for its icon); otherwise null.</param>
-/// <param name="Open">On a category's ring, that category; otherwise null.</param>
+/// <param name="Categories">On the categories' ring, the icon key of each sector; otherwise null.</param>
+/// <param name="Open">On a category's ring, that category's icon key; otherwise null.</param>
+/// <param name="EmptyText">For a ring with no commands, what it says instead of "No actions" (RadialMenu.EmptyReason).</param>
 public sealed record MenuView(IReadOnlyList<string> Labels, double Start, int Hot, bool Armed, string Hub, double FirstSweep = 0,
-    IReadOnlyList<MenuCategory>? Categories = null, MenuCategory? Open = null);
+    IReadOnlyList<string>? Categories = null, string? Open = null, string? EmptyText = null);
 
 /// <summary>
 /// Navigation of the two-level radial menu during a drag, driven only by pointer offsets from the centre of the ring
@@ -40,18 +41,21 @@ public sealed class MenuNavigator
     private readonly IReadOnlyList<MenuGroup> _groups;
     private readonly string[] _groupLabels;
     private readonly string[][] _levelLabels; // per category: Back, then its commands (cached so equal views compare equal)
-    private readonly MenuCategory[] _categories;
+    private readonly string[] _categories;
     private int _dead, _ring, _open;
     private int _level = -1, _hot = -1;
     private bool _hubVisited;
     private TimeSpan _shownAt;
 
-    public MenuNavigator(IReadOnlyList<MenuGroup> groups, uint dpi)
+    private readonly string? _emptyText;
+
+    public MenuNavigator(IReadOnlyList<MenuGroup> groups, uint dpi, string? emptyText = null)
     {
         _groups = groups;
+        _emptyText = groups.Count == 0 ? emptyText : null;
         _groupLabels = groups.Select(g => g.Label).ToArray();
         _levelLabels = groups.Select(g => new[] { BackLabel }.Concat(g.Commands.Select(c => c.Label)).ToArray()).ToArray();
-        _categories = groups.Select(g => g.Category).ToArray();
+        _categories = groups.Select(g => g.Category.Icon).ToArray();
         SetDpi(dpi);
     }
 
@@ -64,10 +68,22 @@ public sealed class MenuNavigator
     public CapabilityDescriptor? Hot => _level >= 0 && _hot >= 1 ? _groups[_level].Commands[_hot - 1] : null;
 
     /// <summary>
-    /// Width of Back on a category's ring: an equal share, but never narrower than a category sector, so the reverse of
-    /// any stroke that opened the category (which stayed inside that sector) points into Back.
+    /// The narrowest a command sector may get: V1's narrowest, tested by hand (a BMP's Resize: 7 commands beside a 90° Back, 4 categories, 38.6°).
     /// </summary>
-    public static double BackSweep(int groupCount, int commandCount) => Math.Max(2 * Math.PI / (commandCount + 1), 2 * Math.PI / groupCount);
+    public const double MinCommandSweep = 38.5 * Math.PI / 180;
+
+    /// <summary>
+    /// Width of Back on a category's ring: an equal share, widened to a category sector's width so the reverse of any
+    /// stroke that opened the category (which stayed inside that sector) points into Back, but never so far that a
+    /// command gets narrower than <see cref="MinCommandSweep"/>. With one category there is no other sector to come back
+    /// from: Back takes an equal share (evaluator, PR #17: it took the whole circle).
+    /// </summary>
+    public static double BackSweep(int groupCount, int commandCount)
+    {
+        var equal = 2 * Math.PI / (commandCount + 1);
+        var category = groupCount > 1 ? 2 * Math.PI / groupCount : 0;
+        return Math.Max(equal, Math.Min(category, 2 * Math.PI - commandCount * MinCommandSweep));
+    }
 
     /// <summary>
     /// Where sector 0 (Back) of category <paramref name="group"/>'s ring begins: Back is centred on the direction
@@ -121,8 +137,8 @@ public sealed class MenuNavigator
     public TimeSpan ShownFor(TimeSpan now) => now - _shownAt;
 
     public MenuView View(TimeSpan now) => _level < 0
-        ? new MenuView(_groupLabels, 0, _hot, false, "", 0, _categories)
-        : new MenuView(_levelLabels[_level], Start, _hot, Armed(now) is not null, _groups[_level].Label, FirstSweep, null, _groups[_level].Category);
+        ? new MenuView(_groupLabels, 0, _hot, false, "", 0, _categories, EmptyText: _emptyText)
+        : new MenuView(_levelLabels[_level], Start, _hot, Armed(now) is not null, _groups[_level].Label, FirstSweep, null, _groups[_level].Category.Icon);
 
     private void SetDpi(uint dpi)
     {

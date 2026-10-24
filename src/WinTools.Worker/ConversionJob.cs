@@ -41,6 +41,8 @@ internal static class ConversionJob
         string? temp = null;
         try
         {
+            // A folder named like a file ("holiday.png") is a folder all the same: say so, never a vague read error (UX-009).
+            if (Directory.Exists(source)) return ConversionResult.Fail(id, ErrorCode.IsAFolder, "The source is a folder, not a file.");
             var input = ReadSource(source);
             var zone = MarkOfTheWeb.ZoneToCarry(source);
             FaultInjection.At("after-read", source);

@@ -59,9 +59,9 @@ public sealed class MenuGoldenTests
             foreach (var selection in Selections)
             {
                 text.Append("# ").AppendLine(selection.Length == 0 ? "(empty)" : string.Join(" + ", selection.Select(p => p.Length > 80 ? p[..40] + $"…({p.Length} chars)" : p)));
-                foreach (var group in RadialMenu.Build(resolver.Resolve(selection)))
+                foreach (var group in RadialMenu.Build(resolver, selection))
                 {
-                    text.Append("  [").Append(group.Category).Append("] ").AppendLine(group.Label);
+                    text.Append("  [").Append(group.Category.Label).Append("] ").AppendLine(group.Label); // V1 printed the enum name, which was the label
                     foreach (var op in group.Commands.Select(ImageCapabilities.OperationOf))
                         text.Append("    ").Append(op.Id).Append(" | ").Append(op.Label).Append(" | writes ").Append(op.WritesFile)
                             .Append(" | suffix ").Append(op.NameSuffix ?? "-").Append(" | out ")

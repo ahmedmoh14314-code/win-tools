@@ -121,7 +121,7 @@ if (scenario == "batch")
         batchSources.Add(copy);
     }
 var batchHashes = batchSources.ToDictionary(f => f, f => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(f))));
-var menu = RadialMenu.Build(new CapabilityResolver(catalog.Select(ImageCapabilities.Describe).ToArray()).Resolve(batchSources));
+var menu = RadialMenu.Build(new CapabilityResolver(catalog.Select(ImageCapabilities.Describe).ToArray()), batchSources);
 var groupIndex = op is null ? -1 : menu.ToList().FindIndex(g => g.Commands.Any(c => c.Id == op.Id));
 var commandIndex = groupIndex < 0 ? -1 : menu[groupIndex].Commands.ToList().FindIndex(c => c.Id == op!.Id);
 if (producing && op is not null && groupIndex < 0) { Console.Error.WriteLine($"{op.Id} is not offered for {sourceName}"); return 4; }

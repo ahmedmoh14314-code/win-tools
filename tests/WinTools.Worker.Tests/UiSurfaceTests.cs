@@ -21,7 +21,7 @@ public sealed partial class UiSurfaceTests
     private static IReadOnlyList<MenuGroup> MenuFor(params string[] names)
     {
         var resolver = CapabilityResolver.For(new AppSettings().CustomResizeId());
-        return RadialMenu.Build(resolver.Resolve(names.Select(n => $@"C:\images\{n}").ToArray()));
+        return RadialMenu.Build(resolver, names.Select(n => $@"C:\images\{n}").ToArray());
     }
 
     /// <summary>Every ring the menu can show, for single files of each format and mixed selections.</summary>
@@ -37,7 +37,7 @@ public sealed partial class UiSurfaceTests
                 var count = menu[g].Commands.Count;
                 var labels = new[] { MenuNavigator.BackLabel }.Concat(menu[g].Commands.Select(c => c.Label)).ToArray();
                 yield return new MenuView(labels, MenuNavigator.LevelStart(g, menu.Count, count), 1, true, menu[g].Label,
-                    MenuNavigator.BackSweep(menu.Count, count), null, menu[g].Category);
+                    MenuNavigator.BackSweep(menu.Count, count), null, menu[g].Category.Icon);
             }
         }
         yield return new MenuView([], 0, -1, false, "");
