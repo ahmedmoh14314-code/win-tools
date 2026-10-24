@@ -41,12 +41,37 @@ public sealed class SmallDetailTests
         ["black on white word 24x12, 4:2:0", 1600, 1200, 701, 821, 24, 12, 0x101010, 0xFFFFFF, 1, false, 93],
     ];
 
+    /// <summary>The evaluator's cases on PR #12 that fall inside the promise, held out from the calibration (seed in the name).</summary>
+    public static IEnumerable<object[]> HeldOutCases() =>
+    [
+        ["green/magenta 20x12, 4:4:4 (seed 71)", 1600, 1200, 703, 823, 20, 12, 0x20D020, 0xC020C0, 1, true, 97],
+        ["cyan straight on the photo 40x14, 4:4:4 (seed 71)", 1600, 1200, 700, 820, 40, 14, 0x00E0FF, -1, 1, true, 97],
+        ["red straight on the photo 40x14, 4:2:0 (seed 71)", 1600, 1200, 700, 820, 40, 14, 0xFF2020, -1, 1, false, 93],
+        ["red/blue 32x14 at the top-left corner, 4:4:4 (seed 71)", 1600, 1200, 0, 0, 32, 14, 0xE01E1E, 0x1E3CC8, 1, true, 97],
+        ["red/blue 32x14 flush right, 1603x1203, 4:4:4 (seed 71)", 1603, 1203, 1603 - 32, 600, 32, 14, 0xE01E1E, 0x1E3CC8, 1, true, 97],
+        ["red/blue 32x14 bottom-right, 1603x1203, 4:4:4 (seed 71)", 1603, 1203, 1603 - 32, 1203 - 14, 32, 14, 0xE01E1E, 0x1E3CC8, 1, true, 97],
+        ["red/blue 32x14, other photo (seed 81)", 1600, 1200, 701, 821, 32, 14, 0xE01E1E, 0x1E3CC8, 1, true, 97],
+        ["red/blue 32x14 shifted by 8 (seed 91)", 1600, 1200, 709, 829, 32, 14, 0xE01E1E, 0x1E3CC8, 1, true, 97],
+        ["red/blue 32x14, q92 4:4:4 source (seed 71)", 1600, 1200, 701, 821, 32, 14, 0xE01E1E, 0x1E3CC8, 1, true, 92],
+        ["blue/red 32x14, 4:4:4 (seed 71)", 1600, 1200, 701, 821, 32, 14, 0x1E3CC8, 0xE01E1E, 1, true, 97],
+        ["red/green 32x14, 4:4:4 (seed 71)", 1600, 1200, 701, 821, 32, 14, 0xC83C3C, 0x3C9C3C, 1, true, 97],
+        ["yellow/blue 2 px strokes 48x16, 4:2:0 (seed 71)", 1600, 1200, 700, 820, 48, 16, 0xF0E000, 0x2020A0, 2, false, 93],
+    ];
+
+    [Theory]
+    [MemberData(nameof(HeldOutCases))]
+    public void Held_out_text_keeps_each_presets_promise(string name, int width, int height, int x, int y, int w, int h, int fg, int bg, int stroke, bool fullChroma, int quality) =>
+        Check(name, width, height, x, y, w, h, fg, bg, stroke, fullChroma, quality, seed: int.Parse(name[(name.LastIndexOf("seed ", StringComparison.Ordinal) + 5)..^1], System.Globalization.CultureInfo.InvariantCulture));
+
     [Theory]
     [MemberData(nameof(Cases))]
-    public void Small_text_keeps_each_presets_promise(string name, int width, int height, int x, int y, int w, int h, int fg, int bg, int stroke, bool fullChroma, int quality)
+    public void Small_text_keeps_each_presets_promise(string name, int width, int height, int x, int y, int w, int h, int fg, int bg, int stroke, bool fullChroma, int quality) =>
+        Check(name, width, height, x, y, w, h, fg, bg, stroke, fullChroma, quality, seed: 71);
+
+    private static void Check(string name, int width, int height, int x, int y, int w, int h, int fg, int bg, int stroke, bool fullChroma, int quality, int seed)
     {
         static (byte R, byte G, byte B) C(int v) => ((byte)(v >> 16), (byte)(v >> 8), (byte)v);
-        var photo = WithText(CompressionCorpus.Photo(seed: 71, width: width, height: height), x, y, w, h, C(fg), bg < 0 ? null : C(bg), stroke, seed: 72);
+        var photo = WithText(CompressionCorpus.Photo(seed: seed, width: width, height: height), x, y, w, h, C(fg), bg < 0 ? null : C(bg), stroke, seed: seed + 1);
         var source = WicCodec.Encode(photo, ImageFormat.Jpeg, quality / 100f, fullChroma);
         var original = ImagePipeline.Decode(source, ImageFormat.Jpeg).Image;
         var problems = new List<string>();

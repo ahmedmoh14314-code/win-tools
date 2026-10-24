@@ -210,40 +210,5 @@ public sealed class CompressionMeasurement(ITestOutputHelper output) : IDisposab
         }
     }
 
-    /// <summary>The tile measures against the truth of small text regions (SmallDetailTests) and on the corpus, per quality.</summary>
-    [MeasurementFact]
-    public void Measure_small_detail_tiles()
-    {
-        static string M(FidelityReport f) => $"luma {f.LumaSsim:0.0000} worst {f.WorstLumaSsim:0.0000} chroma {f.ChromaSsim:0.0000} dE99 {f.DeltaE99:0.00} | tile {f.WorstTileLumaSsim:0.0000} tChroma {f.WorstTileChromaSsim:0.0000} tDE {f.WorstTileDeltaE:0.00} o4 {f.WorstTileOver4:0.000} o6 {f.WorstTileOver6:0.000} o10 {f.WorstTileOver10:0.000}";
-        static (byte, byte, byte) C(int v) => ((byte)(v >> 16), (byte)(v >> 8), (byte)v);
-        foreach (var c in SmallDetailTests.Cases())
-        {
-            var (name, width, height, x, y, w, h, fg, bg, stroke, full, quality) = ((string)c[0], (int)c[1], (int)c[2], (int)c[3], (int)c[4], (int)c[5], (int)c[6], (int)c[7], (int)c[8], (int)c[9], (bool)c[10], (int)c[11]);
-            var photo = SmallDetailTests.WithText(CompressionCorpus.Photo(seed: 71, width: width, height: height), x, y, w, h, C(fg), bg < 0 ? null : C(bg), stroke, seed: 72);
-            var source = WicCodec.Encode(photo, WinTools.Core.Files.ImageFormat.Jpeg, quality / 100f, full);
-            var original = ImagePipeline.Decode(source, WinTools.Core.Files.ImageFormat.Jpeg).Image;
-            foreach (var mode in full ? new[] { true, false } : [false])
-                foreach (var q in new[] { 95, 93, 90, 88, 85, 82, 80, 75, 70, 65, 60, 55, 50 })
-                {
-                    var bytes = WicCodec.Encode(original, WinTools.Core.Files.ImageFormat.Jpeg, q / 100f, mode);
-                    var decoded = ImagePipeline.Decode(bytes, WinTools.Core.Files.ImageFormat.Jpeg).Image;
-                    var text = Ssim.Luma(SmallDetailTests.Crop(original, x, y, w, h), SmallDetailTests.Crop(decoded, x, y, w, h));
-                    var de = SmallDetailTests.MeanDeltaE(SmallDetailTests.Crop(original, x, y, w, h), SmallDetailTests.Crop(decoded, x, y, w, h));
-                    output.WriteLine($"P {name} | {(mode ? 444 : 420)} q{q} saved {100.0 * (source.Length - bytes.Length) / source.Length:0.0}% | TEXT ssim {text:0.0000} dE {de:0.00} | {M(Fidelity.Compare(original, decoded))}");
-                }
-        }
-        foreach (var s in CompressionCorpus.All().Where(x => x.Format is WinTools.Core.Files.ImageFormat.Jpeg or WinTools.Core.Files.ImageFormat.WebP))
-        {
-            var original = ImagePipeline.Decode(s.Bytes, s.Format).Image;
-            var full = WinTools.Core.Files.Metadata.IsFullChromaJpeg(s.Bytes);
-            foreach (var mode in full ? new[] { true, false } : [false])
-                foreach (var q in new[] { 95, 93, 90, 88, 85, 82, 80, 75, 70, 65, 60, 55, 50 })
-                {
-                    var bytes = s.Format == WinTools.Core.Files.ImageFormat.Jpeg ? WicCodec.Encode(original, s.Format, q / 100f, mode) : SkiaCodec.EncodeWebP(original, q, lossless: false);
-                    output.WriteLine($"C {s.Name} | {(mode ? 444 : 420)} q{q} saved {100.0 * (s.Bytes.Length - bytes.Length) / s.Bytes.Length:0.0}% | {M(Fidelity.Compare(original, ImagePipeline.Decode(bytes, s.Format).Image))}");
-                }
-        }
-    }
-
     public void Dispose() => _dir.Dispose();
 }

@@ -27,8 +27,8 @@ The files are encoded the way real ones are, at the qualities listed in the tabl
 ### After: ADR-0017 gates
 | File | High | Balanced | Smallest |
 |---|---|---|---|
-| phone.jpg | −14.4 %, 0.9920 (q88) | −54.7 %, 0.9854 (was −63.9 % before the 32×32 tiles) | −73.5 %, 0.9732 (q50) |
-| camera.jpg | −13.6 %, 0.9908 (q95, **4:4:4 kept**) | −62.8 %, 0.9825 (was −67.9 %) | −86.9 %, 0.9676 (was −88.7 %) |
+| phone.jpg | −14.4 %, 0.9920 (q88) | −63.9 %, 0.9811 (q70) | −73.5 %, 0.9732 (q50) |
+| camera.jpg | −13.6 %, 0.9908 (q95, **4:4:4 kept**) | −67.9 %, 0.9812 (q88, 4:4:4) | −86.9 %, 0.9676 (was −88.7 % before the tile gates) |
 | moderate.jpg | already optimised | already optimised | −9.9 %, 0.9857 (was −18.2 %) |
 | noisy.jpg | already optimised | already optimised | −9.4 %, 0.9623 (q88) |
 | screenshot.jpg | already optimised | −10.8 %, 0.9962 (q93) | −27.1 %, 0.9910 (q88) |
@@ -39,22 +39,10 @@ The files are encoded the way real ones are, at the qualities listed in the tabl
 
 Every written copy meets its preset's luma floor (0.990, 0.980 or 0.960) and saves at least 8 %. The product's own gates also hold on the other axes.
 
-### Worst-tile gates (2026-10-24, evaluator finding on PR #12)
-The 1st percentile of 8×8 windows cannot see damage in less than 1 % of the image. Probe: a 160×48 caption (0.4 % of a
-1600×1200 phone-style photo). Its own SSIM against the worst 64×64 tile, per JPEG quality:
-
-| q | saved | 1st percentile | worst tile | caption SSIM |
-|---|---|---|---|---|
-| 88 | 14.6 % | 0.9770 | 0.9799 | 0.9758 |
-| 80 | 54.5 % | 0.9470 | 0.9580 | 0.9509 |
-| 75 | 59.7 % | 0.9365 | 0.9450 | 0.9330 |
-| 70 | 63.8 % | 0.9310 | 0.9394 | 0.9260 |
-| 50 | 73.3 % | 0.9075 | 0.9063 | 0.8941 |
-
-Before the tile gates, Balanced chose q70: the 1st percentile passed (0.931 ≥ 0.930) while the caption fell to 0.926. The
-worst tile follows the caption closely (about 0.01 above it), so the gates are High 0.975, Balanced 0.950 and Smallest
-0.900, with worst-tile mean ΔE at most 3, 5 and 7. They change no choice on the corpus files. Lossy WebP's worst tile is
-not monotonic in quality (0.924 at q50, 0.890 at q55 and q60); the search below handles that.
+### Worst-tile gates (2026-10-24, evaluator findings on PR #12)
+The tile gates, the way they were chosen (a tuned set, a held-out set and text-free photographs) and their measured cost
+are in the ADR-0017 amendment; the data comes from `CompressionCalibration` (`Measure_calibration_set`,
+`Measure_presets_on_the_calibration_set`).
 
 ### The search is not plain bisection (2026-10-24, found by the release matrix)
 On the harness's GDI+ photograph, Balanced reported "Already optimized" although q82 passed every gate: bisection
@@ -117,7 +105,7 @@ No job came near its timeout on this machine. On a slower processor the deadline
 
 ## Fidelity cost
 - **2 MP:** about 35 ms per comparison, in parallel bands. The first single-threaded version took about 250 ms.
-- **48 MP:** 1.06 s per comparison and 32.5 MB allocated with the 16×16 cell sums (9.4 MB before any tiles; a first version that gave every band sums for the whole image allocated 100.9 MB). Each band keeps only the cell rows it touches; the two images being compared are each a whole buffer.
+- **48 MP:** 0.94 s per comparison and 23.7 MB allocated with the 16×16 cell sums (9.4 MB before any tiles; a first version that gave every band sums for the whole image allocated 100.9 MB). Each band keeps only the cell rows it touches; the two images being compared are each a whole buffer.
 
 ## Not yet measured
 - Real photographs, faces, skin tones and real screenshots. The gates await the owner's visual validation (ADR-0017 Consequences).
