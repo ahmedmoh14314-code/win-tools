@@ -105,12 +105,21 @@ internal static class LossyCompression
 
     /// <summary>
     /// The search over ladder indexes (0 is the highest quality, larger indexes encode smaller): the largest index that
-    /// is small enough and passes. Bisection, because a candidate that is too big leaves only lower qualities, and pass
-    /// or fail is close to monotonic in quality. <paramref name="finished"/> is false when the deadline cut it short.
+    /// is small enough and passes. <paramref name="finished"/> is false when the deadline cut it short.
+    /// <list type="bullet">
+    /// <item>Bisection, because a candidate that is too big leaves only lower qualities, and pass or fail is mostly
+    /// monotonic in quality.</item>
+    /// <item>Mostly is not always (a GDI+ photo failed the edge gate at q85 and passed it at q82), so a failure is
+    /// checked one step lower before the search turns back.</item>
+    /// <item>When nothing has passed, every small-enough quality the bisection skipped is tried before the answer is
+    /// "already optimized": that is a claim about the ladder, not about the path taken.</item>
+    /// </list>
     /// </summary>
     internal static int? Choose(int count, Func<int, bool> smallEnough, Func<int, bool> passes, Func<bool> outOfTime, out bool finished)
     {
         int? best = null;
+        var tried = new bool[count];
+        bool Try(int i) { tried[i] = true; return passes(i); }
         int lo = 0, hi = count - 1;
         finished = false;
         while (lo <= hi)
@@ -118,9 +127,21 @@ internal static class LossyCompression
             if (outOfTime()) return best;
             var mid = (lo + hi) / 2;
             if (!smallEnough(mid)) { lo = mid + 1; continue; } // too big: only a lower quality can help
-            if (passes(mid)) { best = mid; lo = mid + 1; }
-            else hi = mid - 1;
+            if (Try(mid)) { best = mid; lo = mid + 1; continue; }
+            if (mid + 1 < count && !tried[mid + 1] && smallEnough(mid + 1))
+            {
+                if (outOfTime()) return best;
+                if (Try(mid + 1)) { best = mid + 1; lo = mid + 2; continue; }
+            }
+            hi = mid - 1;
         }
+        if (best is null)
+            for (var i = count - 1; i >= 0; i--) // lowest quality first: the first pass is the smallest copy
+            {
+                if (tried[i] || !smallEnough(i)) continue;
+                if (outOfTime()) return null;
+                if (Try(i)) { best = i; break; }
+            }
         finished = true;
         return best;
     }

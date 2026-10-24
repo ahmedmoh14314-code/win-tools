@@ -32,7 +32,7 @@ The files are encoded the way real ones are, at the qualities listed in the tabl
 | moderate.jpg | already optimised | already optimised | −18.2 %, 0.9797 (q50) |
 | noisy.jpg | already optimised | already optimised | −9.4 %, 0.9623 (q88) |
 | screenshot.jpg | already optimised | −10.8 %, 0.9962 (q93) | −27.1 %, 0.9910 (q88) |
-| photo-lossy.webp | −23.9 %, 0.9914 | −61.7 %, 0.9813 | −72.3 %, 0.9745 (was −77.9 % before the tile gates, see below) |
+| photo-lossy.webp | −23.9 %, 0.9914 | −61.7 %, 0.9813 | −77.9 %, 0.9702 |
 | screenshot-lossless.webp | already optimised | already optimised | already optimised |
 | unoptimized.png (lossless) | | | −99.6 %, identical pixels |
 | optimized.png (lossless) | | | already optimised |
@@ -53,9 +53,15 @@ The 1st percentile of 8×8 windows cannot see damage in less than 1 % of the ima
 
 Before the tile gates, Balanced chose q70: the 1st percentile passed (0.931 ≥ 0.930) while the caption fell to 0.926. The
 worst tile follows the caption closely (about 0.01 above it), so the gates are High 0.975, Balanced 0.950 and Smallest
-0.900, with worst-tile mean ΔE at most 3, 5 and 7. On the corpus files they change one choice: lossy WebP at Smallest.
-There libwebp's worst tile is not monotonic in quality (0.924 at q50, 0.890 at q55 and q60), so the bisection settles at
-q65, which saves 72.3 % instead of 77.9 %.
+0.900, with worst-tile mean ΔE at most 3, 5 and 7. They change no choice on the corpus files. Lossy WebP's worst tile is
+not monotonic in quality (0.924 at q50, 0.890 at q55 and q60); the search below handles that.
+
+### The search is not plain bisection (2026-10-24, found by the release matrix)
+On the harness's GDI+ photograph, Balanced reported "Already optimized" although q82 passed every gate: bisection
+tested q85 first, which failed the edge gate (0.9465 against 0.950), and never looked lower. A failure is now checked one
+quality lower before the search turns back, and when nothing has passed, every small-enough quality that bisection
+skipped is tried before the answer is "already optimized" (`CompressionSearchTests`). The sample now gets q82 at
+Balanced. Lossy WebP at Smallest went from q65 (72.3 %) in the plain bisection to q50 (77.9 %).
 
 ## Why each axis is needed
 These numbers come from the product's `Fidelity` (`CompressionMeasurement.Measure_fidelity_axes`).
@@ -90,7 +96,8 @@ V1 ran one encode per file and had no fidelity check; its time was not measured 
 | 4:2:0 q93 | 5.2 s | 6.8 s | 7.0 s |
 | 4:4:4 q97 | 11.1 s | 11.5 s | 13.9 s |
 
-Re-measured 2026-10-24 with the tile gates on an otherwise idle machine: 4:2:0 2.6, 4.4 and 4.6 s; 4:4:4 6.8, 7.4 and 9.6 s.
+Re-measured 2026-10-24 with the tile gates and the final search, on an otherwise idle machine: 4:2:0 2.7, 5.5 and
+4.5 s; 4:4:4 11.4, 12.1 and 9.7 s.
 The spread between the two runs is itself a reason for the search deadline below.
 
 **Deadline.** The search stops after 25 s and uses the best copy found so far, which has passed every gate. With none
