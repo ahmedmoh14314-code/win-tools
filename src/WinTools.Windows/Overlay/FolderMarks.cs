@@ -21,7 +21,7 @@ internal static class FolderMarks
 
     /// <summary>A name no module's kind claims: no extension, or one nobody knows ("Photos 2024.10", "v1.2").</summary>
     private static bool Candidate(string path) =>
-        !Path.EndsInDirectorySeparator(path) && FileKinds.IdentifyByName(path) is null && PathPolicy.Explain(path) == PathVerdict.Supported;
+        !Path.EndsInDirectorySeparator(path) && FileKinds.ByExtensionOf(path) is null && PathPolicy.Explain(path) == PathVerdict.Supported;
 
     /// <summary>Marks on the calling thread, which must run under <see cref="ShortNames.WithoutErrorBoxes"/>; the
     /// deadline counts from <paramref name="start"/>, the start of the whole inspection (Stopwatch ticks).</summary>

@@ -7,7 +7,7 @@ namespace WinTools.Core.Tests;
 
 public sealed class CapabilityResolverTests
 {
-    private static readonly CapabilityResolver R = CapabilityResolver.Default;
+    private static readonly CapabilityResolver R = CapabilityResolver.Images(customResizeId: null); // the image module alone
     private static string[] Ids(IEnumerable<CapabilityDescriptor> ops) => ops.Where(o => o.Category == "convert").Select(o => o.Id).ToArray();
 
     [Theory]

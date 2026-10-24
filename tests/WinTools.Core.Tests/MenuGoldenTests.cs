@@ -47,7 +47,7 @@ public sealed class MenuGoldenTests
         return op.OutputFormat(source).ToString();
     }
 
-    private static CapabilityResolver Resolver(string? customResizeId) => CapabilityResolver.For(customResizeId);
+    private static CapabilityResolver Resolver(string? customResizeId) => CapabilityResolver.Images(customResizeId); // V1's menu: the image module
 
     internal static string Render()
     {

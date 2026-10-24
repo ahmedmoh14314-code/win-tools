@@ -7,7 +7,7 @@ namespace WinTools.Core.Tests;
 public sealed class RadialMenuTests
 {
     private static IReadOnlyList<MenuGroup> MenuFor(params string[] paths) =>
-        RadialMenu.Build(CapabilityResolver.For(new AppSettings().CustomResizeId()), paths);
+        RadialMenu.Build(CapabilityResolver.Images(new AppSettings().CustomResizeId()), paths);
 
     [Fact]
     public void Jpeg_gets_all_five_categories_in_fixed_order()
@@ -81,7 +81,7 @@ public sealed class RadialMenuTests
     public void Exact_size_that_differs_from_a_preset_only_in_behaviour_gets_a_distinct_label(int w, int h, bool noUpscaleOff, bool keepAspect)
     {
         var settings = new AppSettings { ResizeWidth = w, ResizeHeight = h, NoUpscale = !noUpscaleOff, KeepAspectRatio = keepAspect };
-        var resize = RadialMenu.Build(CapabilityResolver.For(settings.CustomResizeId()), [@"C:\p\a.png"])
+        var resize = RadialMenu.Build(CapabilityResolver.Images(settings.CustomResizeId()), [@"C:\p\a.png"])
             .Single(g => g.Category.Id == "resize").Commands;
         Assert.Equal(resize.Count, resize.Select(c => c.Label).Distinct().Count());
     }
@@ -93,7 +93,7 @@ public sealed class MenuNavigatorTests
     private static TimeSpan Ms(double ms) => TimeSpan.FromMilliseconds(ms);
 
     private static IReadOnlyList<MenuGroup> MenuFor(params string[] paths) =>
-        RadialMenu.Build(CapabilityResolver.For(new AppSettings().CustomResizeId()), paths);
+        RadialMenu.Build(CapabilityResolver.Images(new AppSettings().CustomResizeId()), paths);
 
     private static (int, int) At(double angle, double radius96, uint dpi = 96)
     {

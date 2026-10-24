@@ -44,8 +44,8 @@ public sealed class FolderInputTests
     [Fact]
     public void Image_commands_are_never_offered_for_a_folder()
     {
-        Assert.Empty(CapabilityResolver.Default.Resolve([@"C:\photos\holiday.png\"]));
-        Assert.Empty(CapabilityResolver.Default.Resolve([@"C:\photos\a.png", @"C:\photos\holiday\"]));
+        Assert.Empty(CapabilityResolver.Images(null).Resolve([@"C:\photos\holiday.png\"]));
+        Assert.Empty(CapabilityResolver.Images(null).Resolve([@"C:\photos\a.png", @"C:\photos\holiday\"]));
     }
 
     [Fact]

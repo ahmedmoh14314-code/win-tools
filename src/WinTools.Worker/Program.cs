@@ -17,15 +17,7 @@ internal static class Program
         WinTools.Worker.Imaging.DecoderDiagnostics.Enable(); // before any codec loads
         using var input = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false), false, 4096);
         using var output = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
-        while (input.ReadLine() is { } line)
-        {
-            var message = WorkerProtocol.Deserialize<WorkerMessage>(line);
-            if (message is { Type: not WorkerMessage.RequestType }) continue; // a type this worker does not handle (ADR-0018)
-            var result = message?.Request is { Id: not null, CapabilityId: not null, Inputs: not null } request
-                ? ImageJobs.Run(request)
-                : JobResult.Fail("invalid", ErrorCode.WorkerProtocolError, "Malformed request line.");
-            output.WriteLine(WorkerProtocol.Serialize(WorkerMessage.ForResult(result)));
-        }
+        WorkerLoop.Run(input, output, request => ImageJobs.Run(request));
         return 0;
     }
 

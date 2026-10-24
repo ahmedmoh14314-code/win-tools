@@ -20,8 +20,14 @@ public sealed record JobItem(string SourceName, JobResult Result, long? SourceBy
 /// </summary>
 public static class FeedbackText
 {
-    public static FeedbackMessage For(Operation operation, IReadOnlyList<JobItem> items)
+    public static FeedbackMessage For(Operation operation, IReadOnlyList<JobItem> items) => For(WordsOf(operation), items);
+
+    /// <summary>The image module's words for an operation.</summary>
+    public static FeedbackWords WordsOf(Operation op) => new(Working(op), Verb(op), Done(op), NothingReason(op), "image", "images");
+
+    public static FeedbackMessage For(FeedbackWords words, IReadOnlyList<JobItem> items)
     {
+        string Images(int n) => words.Count(n);
         var ok = items.Where(i => i.Result.Success).ToArray();
         var unchanged = items.Where(i => i.Result.Error == ErrorCode.NothingToDo).ToArray();
         var failed = items.Where(i => !i.Result.Success && i.Result.Error != ErrorCode.NothingToDo).ToArray();
@@ -30,19 +36,19 @@ public static class FeedbackText
         {
             var item = items[0];
             if (item.Result.Success)
-                return new(FeedbackKind.Success, $"{OutputName(item)} created", Join(Done(operation), Sizes(item)));
+                return new(FeedbackKind.Success, $"{OutputName(item)} created", Join(words.Done, Sizes(item)));
             if (item.Result.Error == ErrorCode.NothingToDo)
-                return new(FeedbackKind.Nothing, "Nothing to change", NothingReason(operation));
-            return new(FeedbackKind.Failure, $"Could not {Verb(operation)} {item.SourceName}", Reason(item.Result.Error));
+                return new(FeedbackKind.Nothing, "Nothing to change", words.NothingReason);
+            return new(FeedbackKind.Failure, $"Could not {words.Verb} {item.SourceName}", Reason(item.Result.Error));
         }
 
         var n = items.Count;
         if (failed.Length == 0 && unchanged.Length == 0)
-            return new(FeedbackKind.Success, $"{Images(n)} completed", Join(Done(operation), TotalSizes(ok)));
+            return new(FeedbackKind.Success, $"{Images(n)} completed", Join(words.Done, TotalSizes(ok)));
         if (ok.Length == 0 && failed.Length == 0)
-            return new(FeedbackKind.Nothing, "Nothing to change", $"{NothingReason(operation)} ({Images(n)})");
+            return new(FeedbackKind.Nothing, "Nothing to change", $"{words.NothingReason} ({Images(n)})");
         if (ok.Length == 0 && unchanged.Length == 0)
-            return new(FeedbackKind.Failure, $"Could not {Verb(operation)} {Images(n)}", MostCommonReason(failed));
+            return new(FeedbackKind.Failure, $"Could not {words.Verb} {Images(n)}", MostCommonReason(failed));
 
         var parts = new List<string>();
         if (failed.Length > 0) parts.Add($"{failed.Length} failed: {MostCommonReason(failed).TrimEnd('.')}");
@@ -50,6 +56,13 @@ public static class FeedbackText
         var kind = failed.Length > 0 ? FeedbackKind.Partial : FeedbackKind.Success;
         return new(kind, $"{Images(ok.Length)} of {n} completed", string.Join(" · ", parts));
     }
+
+    /// <summary>
+    /// What a command that fills the clipboard says (Copy path): what it copied, for how many items, or why it could not.
+    /// </summary>
+    public static FeedbackMessage Copied(FeedbackWords words, JobItem item, int count) => item.Result.Success
+        ? new(FeedbackKind.Success, count == 1 ? words.Done : $"{words.Count(count)} copied", item.SourceName)
+        : new(FeedbackKind.Failure, $"Could not {words.Verb} {item.SourceName}", Reason(item.Result.Error));
 
     /// <summary>What the operation did, as a short past-tense phrase ("Converted to WebP").</summary>
     public static string Done(Operation op) => op.Kind switch
@@ -70,6 +83,17 @@ public static class FeedbackText
         OperationKind.Rotate => "rotate",
         OperationKind.StripMetadata => "remove metadata from",
         _ => "read",
+    };
+
+    /// <summary>What the operation is doing, for the progress toast ("Converting").</summary>
+    public static string Working(Operation op) => op.Kind switch
+    {
+        OperationKind.Convert => "Converting",
+        OperationKind.Compress => "Compressing",
+        OperationKind.Resize => "Resizing",
+        OperationKind.Rotate => "Rotating",
+        OperationKind.StripMetadata => "Removing metadata from",
+        _ => "Reading",
     };
 
     private static string NothingReason(Operation op) => op.Kind switch
@@ -101,6 +125,7 @@ public static class FeedbackText
         ErrorCode.Cancelled => "The job was cancelled.",
         ErrorCode.InvalidRequest => "The file's path is not supported.",
         ErrorCode.IsAFolder => "It is a folder; this command works on files.",
+        ErrorCode.ClipboardUnavailable => "Another program is using the clipboard. Try again.",
         _ => "Something went wrong. The original is unchanged.",
     };
 
@@ -108,8 +133,6 @@ public static class FeedbackText
         Reason(failed.GroupBy(f => f.Result.Error).OrderByDescending(g => g.Count()).First().Key);
 
     private static string OutputName(JobItem item) => item.Result.OutputPath is { } p ? Path.GetFileName(p) : item.SourceName;
-
-    private static string Images(int n) => n == 1 ? "1 image" : $"{n} images";
 
     private static string? Sizes(JobItem item) =>
         item is { SourceBytes: { } a, OutputBytes: { } b } ? $"{Size(a)} → {Size(b)}{Change(a, b)}" : null;

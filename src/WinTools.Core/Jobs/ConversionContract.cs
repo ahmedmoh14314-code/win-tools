@@ -46,6 +46,8 @@ public enum ErrorCode
     Internal,
     /// <summary>A folder reached a command that reads files (one named like a file, "holiday.png").</summary>
     IsAFolder,
+    /// <summary>Another program held the clipboard (Copy path, V2 PR 1.4).</summary>
+    ClipboardUnavailable,
 }
 
 /// <summary>The worker's answer. Success carries the final output path; failure carries a code and a short message.</summary>

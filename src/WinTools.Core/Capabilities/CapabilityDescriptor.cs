@@ -27,9 +27,13 @@ public sealed record InputRule(IReadOnlySet<string> Kinds, int MinCount = 1, int
 /// <param name="Category">The menu category's id ("convert", "compress", ...).</param>
 /// <param name="Module">The module that owns the command ("images").</param>
 /// <param name="LongRunning">The job shows progress rather than finishing at once.</param>
+/// <param name="Feedback">What the user is told about it; null gives words made from the label.</param>
 public sealed record CapabilityDescriptor(string Id, string Label, string Category, string Module, InputRule Input,
-    CapabilityShape Shape, CapabilityOutput Produces, bool LongRunning, object? Payload = null)
+    CapabilityShape Shape, CapabilityOutput Produces, bool LongRunning, object? Payload = null, Feedback.FeedbackWords? Feedback = null)
 {
+    /// <summary>The words of the toasts about this command (the module's, so the presenter knows no module).</summary>
+    public Feedback.FeedbackWords Words => Feedback ?? WinTools.Core.Feedback.FeedbackWords.From(Label);
+
     /// <summary>Whether this command applies to every file of a selection of these kinds.</summary>
     public bool AppliesTo(IReadOnlyCollection<FileKind> kinds, int count) =>
         count >= Input.MinCount && count <= Input.MaxCount && kinds.All(Input.Accepts);

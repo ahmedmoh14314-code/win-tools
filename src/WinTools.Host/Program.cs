@@ -15,6 +15,9 @@ internal static class Program
 {
     private static readonly TimeSpan JobTimeout = TimeSpan.FromSeconds(60);
 
+    /// <summary>Per-file limit of the General Files worker: hashing a large file on a slow disk takes minutes.</summary>
+    private static readonly TimeSpan FilesJobTimeout = TimeSpan.FromMinutes(10);
+
     /// <summary>How long the exit waits for cancelled jobs: the workers' 1 s grace plus temp cleanup.</summary>
     private static readonly TimeSpan ExitGrace = TimeSpan.FromSeconds(3);
 
@@ -34,11 +37,13 @@ internal static class Program
         if (!firstInstance) return 2;
 
         var workerPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.exe");
-        if (!File.Exists(workerPath))
-        {
-            MessageWindow.ShowStartupError("WinTools cannot start: WinTools.Worker.exe is missing from its folder. Reinstall or copy the complete folder.");
-            return 3;
-        }
+        var textWorkerPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.Text.exe");
+        foreach (var required in new[] { workerPath, textWorkerPath })
+            if (!File.Exists(required))
+            {
+                MessageWindow.ShowStartupError($"WinTools cannot start: {Path.GetFileName(required)} is missing from its folder. Reinstall or copy the complete folder.");
+                return 3;
+            }
 
         using var log = HostLog.Open(logPath);
         var store = settingsPath is null ? SettingsStore.Default() : new SettingsStore(settingsPath);
@@ -60,7 +65,9 @@ internal static class Program
             var current = settings;
             toast.ReducedMotionSource = () => Volatile.Read(ref current).ReducedMotion(SystemPreferences.ReducedMotion());
             var images = new JobModuleRunner(ImageJobModule.Instance, new WorkerClient(workerPath, JobTimeout, ImageJobModule.Instance), ImageJobModule.Parameters);
-            var jobs = new JobScheduler([images], log, () => Volatile.Read(ref current), feedback);
+            var files = new JobModuleRunner(FilesJobModule.Instance,
+                new FilesExecutor(new WorkerClient(textWorkerPath, FilesJobTimeout, FilesJobModule.Instance), text => CopyTextAsync(window, text)), FilesJobModule.Parameters);
+            var jobs = new JobScheduler([images, files], log, () => Volatile.Read(ref current), feedback);
             coordinator = new InteractionCoordinator(log, window, jobs, feedback, sounds, settings);
             using (coordinator)
             {
@@ -106,7 +113,24 @@ internal static class Program
         return 0;
     }
 
-    private static string Tooltip(AppSettings s) => $"WinTools: drag images, press {s.TriggerKey}";
+    private static string Tooltip(AppSettings s) => $"WinTools: drag files, press {s.TriggerKey}";
+
+    /// <summary>
+    /// Copy path's clipboard write (V2 PR 1.4). It runs on the UI thread, which owns the window the clipboard needs, and
+    /// is tried a few times while another program holds the clipboard; the waiting happens here, never on the UI thread.
+    /// </summary>
+    private static async Task<bool> CopyTextAsync(MessageWindow window, string text)
+    {
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            window.Post(() => done.TrySetResult(WinTools.Windows.Shell.ClipboardText.TrySet(window.Handle, text)));
+            try { if (await done.Task.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false)) return true; }
+            catch (TimeoutException) { return false; } // the UI thread is gone (exiting)
+            await Task.Delay(60).ConfigureAwait(false);
+        }
+        return false;
+    }
 
     /// <summary>Starts the settings window (a separate process, so WPF never loads into the resident host).</summary>
     private static void OpenSettings(string settingsFile, ToastWindow toast, HostLog log)
