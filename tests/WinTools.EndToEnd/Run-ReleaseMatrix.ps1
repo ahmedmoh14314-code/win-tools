@@ -13,7 +13,8 @@
 #       [-RowMinutes 15]                     a row that runs longer is stopped and every key and button released
 #
 # Start it and leave the PC: it waits until the mouse and keyboard have been idle for -IdleSeconds before the first
-# row, and pauses the same way whenever someone uses the PC between rows. It never injects while the PC is in use.
+# row, and pauses the same way whenever someone uses the PC between rows. Idle is checked between rows only: someone who
+# touches the mouse during a row can still disturb that row (and the harness's injected input), so leave the PC alone.
 #
 # Not automated here, by design: restarting Explorer (it is the user's shell), sign-in with "Start with Windows", and
 # rubber-band selection (UI Automation cannot drive it reliably). Those are manual protocol items in
@@ -29,6 +30,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Harness)) { throw "Harness not found: $Harness (build tests\WinTools.EndToEnd -c Release first)" }
+# Full paths: the hung-row cleanup finds the host by its path, which a relative -Harness or -HostPath would never match.
+$Harness = (Resolve-Path $Harness).Path
+if ($HostPath) { $HostPath = (Resolve-Path $HostPath).Path }
 New-Item -ItemType Directory -Force -Path $Results | Out-Null
 
 Add-Type @'
@@ -42,12 +46,19 @@ public static class MatrixIdle {
   [StructLayout(LayoutKind.Explicit)] struct UNION { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
   [StructLayout(LayoutKind.Sequential)] struct INPUT { public uint type; public UNION u; }
   [DllImport("user32.dll")] static extern uint SendInput(uint n, INPUT[] inputs, int size);
-  /// Releases the keys and the button a killed harness may have left down (Ctrl, Shift, Alt, Space, left button).
-  public static void ReleaseAll() {
-    var list = new System.Collections.Generic.List<INPUT>();
-    foreach (ushort vk in new ushort[] { 0x11, 0x10, 0x12, 0x20 }) { var k = new INPUT(); k.type = 1; k.u.ki.wVk = vk; k.u.ki.dwFlags = 2; list.Add(k); }
-    var m = new INPUT(); m.type = 0; m.u.mi.dwFlags = 4; list.Add(m);
-    SendInput((uint)list.Count, list.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+  static INPUT Key(ushort vk, uint flags) { var k = new INPUT(); k.type = 1; k.u.ki.wVk = vk; k.u.ki.dwFlags = flags; return k; }
+  /// Releases the keys and the button a killed harness may have left down, in the harness's own order: modifiers up,
+  /// Escape tapped BEFORE the button goes up, so a drag still in Explorer's loop is cancelled, never dropped (evaluator,
+  /// PR #14). Each input is sent on its own; returns how many SendInput refused (secure desktop, lock screen).
+  public static int ReleaseAll() {
+    var inputs = new INPUT[] { Key(0x11, 2), Key(0x10, 2), Key(0x12, 2), Key(0x1B, 0), Key(0x1B, 2), Key(0x20, 2), new INPUT() };
+    inputs[6].type = 0; inputs[6].u.mi.dwFlags = 4; // left button up
+    var refused = 0;
+    foreach (var input in inputs) {
+      if (SendInput(1, new[] { input }, Marshal.SizeOf(typeof(INPUT))) != 1) refused++;
+      System.Threading.Thread.Sleep(40);
+    }
+    return refused;
   }
 }
 '@
@@ -100,10 +111,18 @@ if ($rows.Count -eq 0) { throw 'No rows to run.' }
 $report = New-Object System.Collections.Generic.List[string]
 $report.Add('# Release regression matrix')
 $report.Add('')
-# The build under test: the host the rows use (next to the harness unless -HostPath), by version and content hash.
+# The build under test: the host the rows use (next to the harness unless -HostPath), by version and the content hash of
+# each product assembly, so a stale worker or core next to a fresh host shows up too.
 $testedHost = if ($HostPath) { $HostPath } else { Join-Path (Split-Path $Harness) 'WinTools.Host.exe' }
-$hostDll = Join-Path (Split-Path $testedHost) 'WinTools.Host.dll'
-$identity = if (Test-Path $hostDll) { '{0}, WinTools.Host.dll SHA-256 {1}' -f (Get-Item $hostDll).VersionInfo.ProductVersion, (Get-FileHash $hostDll -Algorithm SHA256).Hash.Substring(0, 12) } else { 'host not found' }
+$hostDir = Split-Path $testedHost
+$hostDll = Join-Path $hostDir 'WinTools.Host.dll'
+$identity = if (Test-Path $hostDll) {
+    $hashes = foreach ($dll in 'WinTools.Host.dll', 'WinTools.Core.dll', 'WinTools.Worker.dll', 'WinTools.Windows.dll') {
+        $path = Join-Path $hostDir $dll
+        if (Test-Path $path) { '{0} {1}' -f $dll, (Get-FileHash $path -Algorithm SHA256).Hash.Substring(0, 12) } else { "$dll missing" }
+    }
+    '{0}, SHA-256 {1}' -f (Get-Item $hostDll).VersionInfo.ProductVersion, ($hashes -join ', ')
+} else { 'host not found' }
 $report.Add(('Run {0} on {1}, harness `{2}`{3}.' -f (Get-Date -Format 's'), $env:COMPUTERNAME, $Harness, $(if ($HostPath) { ", installed host ``$HostPath``" } else { '' })))
 $report.Add("Build under test: $identity.")
 $report.Add('')
@@ -147,23 +166,30 @@ foreach ($row in $rows) {
         # A hung row may hold a synthetic drag: stop it and release every key and button it could have left down.
         Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
         Get-Process WinTools.Host -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $testedHost } | Stop-Process -Force -ErrorAction SilentlyContinue
-        [MatrixIdle]::ReleaseAll()
+        $refused = [MatrixIdle]::ReleaseAll()
         $stopped = "row $name hung for $RowMinutes min and was stopped"
-        $report.Add("| $name | $proves | hung, stopped | - | released |"); $failed++
+        $released = if ($refused -eq 0) { 'released' } else { "CHECK: $refused release input(s) refused" }
+        # The harness's own Explorer window stays open (and topmost) because its cleanup never ran: close it by hand.
+        $report.Add("| $name | $proves | hung, stopped; close its Explorer window | - | $released |"); $failed++
         Write-Warning "Stopping: $stopped."
         continue
     }
     $summary = Get-Content $out -Encoding UTF8 | Where-Object { $_ -match '"summary":true' } | Select-Object -Last 1
     $s = if ($summary) { $summary | ConvertFrom-Json } else { $null }
-    $keys = if ($s -and -not $s.leftDownAtEnd -and -not $s.spaceDownAtEnd -and -not $s.modifiersDownAtEnd) { 'none' } else { 'CHECK' }
+    # A harness that refused to start (swapped buttons 6, bad arguments 64, host or Explorer failed to start 3) injected
+    # nothing and writes no summary: that row failed, but no key can be down.
+    $refusedToRun = -not $s -and @(3, 6, 64) -contains $p.ExitCode
+    $keys = if ($refusedToRun) { 'none (refused to run)' }
+        elseif ($s -and -not $s.leftDownAtEnd -and -not $s.spaceDownAtEnd -and -not $s.modifiersDownAtEnd) { 'none' } else { 'CHECK' }
     $cyclesText = if ($s) { "$($s.passed)/$($s.cycles)" } else { 'no summary' }
-    if ($p.ExitCode -ne 0 -or -not $s -or $s.passed -ne $s.cycles -or $keys -ne 'none') { $failed++ }
+    $keysUp = $keys -like 'none*'
+    if ($p.ExitCode -ne 0 -or -not $s -or $s.passed -ne $s.cycles -or -not $keysUp) { $failed++ }
     $report.Add("| $name | $proves | $cyclesText | $($p.ExitCode) | $keys |")
     Write-Host ("{0,-22} {1,-8} exit {2}" -f $name, $cyclesText, $p.ExitCode)
-    if ($keys -ne 'none') {
-        [MatrixIdle]::ReleaseAll()
+    if (-not $keysUp) {
+        $refused = [MatrixIdle]::ReleaseAll()
         $stopped = "a key or button may have been down after $name"
-        Write-Warning "Stopping: $stopped (released)."
+        Write-Warning "Stopping: $stopped (released, $refused input(s) refused)."
     }
 }
 $report.Add('')

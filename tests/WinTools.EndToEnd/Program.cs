@@ -252,6 +252,8 @@ using (var explorer = opened)
 
             var heldVk = holdKey switch { "ctrl" => Desktop.VkControl, "shift" => Desktop.VkShift, _ => 0 };
             (int X, int Y)? lastClick = null; var lastClickAt = 0L;
+            // A click at the cursor; returns the time of its button-up, the moment the selection input ends.
+            static long Click() { Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); var at = Stopwatch.GetTimestamp(); Thread.Sleep(60); return at; }
             double? pressGapMs = null; string? selectionText = null; var candidateCount = 0;
             if (scenario == "batch")
             {
@@ -283,15 +285,18 @@ using (var explorer = opened)
                         Desktop.KeyDown(Desktop.VkControl);
                         foreach (var other in batchSources.Where(f => Path.GetFileName(f) != grabName))
                         {
-                            if (explorer.ItemCentre(Path.GetFileName(other)) is not { } oc || !Desktop.Inside(explorer.Hwnd, oc.X, oc.Y, Px(8)))
+                            // The item itself must be under the point: a realised item can lie under the status bar or past the
+                            // list, where the click selects nothing (evaluator, PR #14: the likely cause of a 9-of-10 selection).
+                            var otherName = Path.GetFileName(other)!;
+                            if (explorer.ItemCentre(otherName) is not { } oc || !Desktop.Inside(explorer.Hwnd, oc.X, oc.Y, Px(8))
+                                || !explorer.HitsItem(oc.X, oc.Y, [otherName]))
                             {
                                 Desktop.KeyUp(Desktop.VkControl);
-                                Record(new { cycle, abort = "item to Ctrl-click not visible", item = Path.GetFileName(other) });
+                                Record(new { cycle, abort = "item to Ctrl-click not visible", item = otherName });
                                 exitCode = 4; break;
                             }
                             Desktop.MoveTo(oc.X, oc.Y); Thread.Sleep(30);
-                            Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); Thread.Sleep(60);
-                            (lastClick, lastClickAt) = (oc, Stopwatch.GetTimestamp());
+                            (lastClick, lastClickAt) = (oc, Click());
                         }
                         if (exitCode == 4) break;
                         selectedAt = lastClickAt;
@@ -328,9 +333,9 @@ using (var explorer = opened)
                             if (!explorer.EnsureForeground(scrolledEnd.X, scrolledEnd.Y)) { Record(new { cycle, abort = "foreground lost while scrolling" }); exitCode = 4; break; }
                             Desktop.KeyDown(Desktop.VkShift);
                             Desktop.MoveTo(scrolledEnd.X, scrolledEnd.Y); Thread.Sleep(30);
-                            Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); Thread.Sleep(60);
+                            var shiftUpAt = Click();
                             Desktop.KeyUp(Desktop.VkShift);
-                            (lastClick, lastClickAt) = (scrolledEnd, Stopwatch.GetTimestamp());
+                            (lastClick, lastClickAt) = (scrolledEnd, shiftUpAt);
                             selectedAt = lastClickAt;
                             break;
                         }
@@ -339,8 +344,7 @@ using (var explorer = opened)
                         Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); Thread.Sleep(60);
                         Desktop.KeyDown(Desktop.VkShift);
                         Desktop.MoveTo(end.Value.X, end.Value.Y); Thread.Sleep(30);
-                        Desktop.LeftDown(); Thread.Sleep(30); Desktop.LeftUp(); Thread.Sleep(60);
-                        (lastClick, lastClickAt) = (end, Stopwatch.GetTimestamp());
+                        (lastClick, lastClickAt) = (end, Click());
                         selectedAt = lastClickAt;
                         if (holdKey != "shift") Desktop.KeyUp(Desktop.VkShift);
                         break;
@@ -542,7 +546,8 @@ using (var explorer = opened)
                 var bsounds = SoundsHeld(bev);
                 selectionText = explorer.StatusText(); // diagnostics, read after the drop so it cannot delay the press
                 // "At once" is a claim the record must prove: with --settle-ms 0 the press follows the last selection input
-                // within 150 ms (the move to the item and the input queue), unless a double-click wait was unavoidable.
+                // (its button-up, or the Ctrl+A tap) within 150 ms: the 60 ms pause after a click, the move to the item and the
+                // input queue. A press on the item just clicked would need a double-click wait; the matrix rows never do that.
                 var atOnce = settleMs > 0 || pressGapMs is <= 150;
                 var bok = allValid && intact && present.SequenceEqual(expectedSet) && baccepted == 1 && btoast && bfocus && bsounds && atOnce;
                 if (bok) passed++; else exitCode = 1;

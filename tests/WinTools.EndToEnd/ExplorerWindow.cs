@@ -133,7 +133,10 @@ internal sealed class ExplorerWindow : IDisposable
     {
         try
         {
-            var texts = _root.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text));
+            // Only the status bar: the list's own texts (dates, sizes, numbered names) carry digits too (evaluator, PR #14).
+            var bar = _root.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.StatusBar));
+            if (bar is null) return "?";
+            var texts = bar.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text));
             // Status-bar texts carry counts ("100 items", "20 items selected"); matching digits works in any display language.
             return string.Join(" | ", texts.Cast<AutomationElement>().Select(t => t.Current.Name).Where(n => n.Any(char.IsDigit) && n.Length < 80));
         }
