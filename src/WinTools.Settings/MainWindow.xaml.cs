@@ -70,6 +70,8 @@ public partial class MainWindow : Window
     private void Show(AppSettings settings)
     {
         _loading = true;
+        SizeError.Visibility = Visibility.Collapsed; // a message about the value being replaced must not stay (evaluator, PR #19)
+        FolderError.Visibility = Visibility.Collapsed;
         TriggerKey.SelectedItem = settings.TriggerKey;
         UiSounds.IsChecked = settings.UiSounds;
         SameFolder.IsChecked = settings.OutputPolicy == OutputPolicy.SameFolder;
@@ -136,6 +138,9 @@ public partial class MainWindow : Window
         // Every setting in the file back to its default ("Start with Windows" is not in the file and stays as it is).
         Reset.Click += (_, _) =>
         {
+            // One click wipes the output folder and every quality: ask first.
+            if (MessageBox.Show(this, "Reset every setting to its default? Start with Windows stays as it is.", "Reset settings",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes) return;
             Show(AppSettings.Defaults);
             Change(_ => AppSettings.Defaults);
         };

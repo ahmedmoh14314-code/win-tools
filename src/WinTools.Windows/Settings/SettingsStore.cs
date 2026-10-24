@@ -59,9 +59,11 @@ public sealed class SettingsStore(string path)
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { LastLoad = "defaults (corrupt file kept)"; ReadOnly = true; }
             return new AppSettings();
         }
-        LastLoad = parsed.OutputPolicy == OutputPolicy.SameFolder && RawAsksForFolder(text)
-            ? "loaded (output folder invalid; outputs go next to the sources)"
-            : "loaded";
+        var notes = new List<string>();
+        if (parsed.OutputPolicy == OutputPolicy.SameFolder && RawAsksForFolder(text)) notes.Add("output folder invalid; outputs go next to the sources");
+        if (RawTriggerKey(text) is { } asked && TriggerKeyPolicy.Judge(asked) is { Allowed: false } refused && !string.Equals(asked, parsed.TriggerKey, StringComparison.Ordinal))
+            notes.Add($"trigger key {asked} refused: {refused.Reason} Space is used");
+        LastLoad = notes.Count == 0 ? "loaded" : $"loaded ({string.Join("; ", notes)})";
         return parsed;
     }
 
@@ -104,10 +106,23 @@ public sealed class SettingsStore(string path)
         return 1;
     }
 
+    /// <summary>Whether the file asked for an output folder: "outputPolicy" (schema 1) or "output"."policy" (schema 2).</summary>
     private static bool RawAsksForFolder(string text) =>
-        RawProperty(text, "outputPolicy") is { } v
+        (RawProperty(text, "outputPolicy") ?? RawSection(text, "output", "policy")) is { } v
         && (v.ValueKind == System.Text.Json.JsonValueKind.String ? string.Equals(v.GetString(), nameof(OutputPolicy.Folder), StringComparison.OrdinalIgnoreCase)
             : v.ValueKind == System.Text.Json.JsonValueKind.Number && v.TryGetInt32(out var n) && n == (int)OutputPolicy.Folder);
+
+    /// <summary>The trigger key the file asked for: "triggerKey" (schema 1) or "trigger"."key" (schema 2).</summary>
+    private static string? RawTriggerKey(string text) =>
+        (RawProperty(text, "triggerKey") ?? RawSection(text, "trigger", "key")) is { ValueKind: System.Text.Json.JsonValueKind.String } v ? v.GetString() : null;
+
+    private static System.Text.Json.JsonElement? RawSection(string text, string section, string name)
+    {
+        if (RawProperty(text, section) is not { ValueKind: System.Text.Json.JsonValueKind.Object } s) return null;
+        foreach (var p in s.EnumerateObject())
+            if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)) return p.Value.Clone();
+        return null;
+    }
 
     private static System.Text.Json.JsonElement? RawProperty(string text, string name)
     {

@@ -75,6 +75,21 @@ public sealed class SettingsSchemaTests
     }
 
     [Fact]
+    public void A_schema_1_file_is_read_flat_even_with_a_field_named_like_a_section()
+    {
+        // The layout follows the schema number: a hand-edited schema 1 file must not lose its values (evaluator, PR #19).
+        var s = AppSettings.FromJson("""{ "schema": 1, "triggerKey": "F9", "jpegQuality": 77, "output": { "x": 1 } }""")!;
+        Assert.Equal(("F9", 77), (s.TriggerKey, s.JpegQuality));
+    }
+
+    [Fact]
+    public void A_newer_schema_number_is_kept_when_written()
+    {
+        using var doc = JsonDocument.Parse((new AppSettings() with { Schema = 3 }).ToJson());
+        Assert.Equal(3, doc.RootElement.GetProperty("schema").GetInt32());
+    }
+
+    [Fact]
     public void Reset_gives_the_defaults()
     {
         Assert.Equal(new AppSettings(), AppSettings.Defaults);

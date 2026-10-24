@@ -95,7 +95,7 @@ public sealed record AppSettings
     public string ToJson()
     {
         var s = Normalized();
-        return JsonSerializer.Serialize(new FileV2(CurrentSchema,
+        return JsonSerializer.Serialize(new FileV2(Math.Max(s.Schema, CurrentSchema), // a newer number is never lowered
             new(s.TriggerKey),
             new(s.OutputPolicy, s.OutputFolder),
             new(s.JpegQuality, s.WebPQuality, s.ResizeWidth, s.ResizeHeight, s.KeepAspectRatio, s.NoUpscale),
@@ -112,7 +112,11 @@ public sealed record AppSettings
         {
             using var doc = JsonDocument.Parse(text);
             if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
-            if (!HasSections(doc.RootElement)) return JsonSerializer.Deserialize<AppSettings>(text, Json)?.Normalized(); // schema 1
+            // Sections are read only when there are some and the file does not say schema 1 (evaluator, PR #19: a schema 1
+            // file with an object field named like a section lost every value). Anything else is read flat, as V1 did,
+            // which also keeps the known fields of a newer flat file.
+            if (SchemaOf(doc.RootElement) is <= 1 || !HasSections(doc.RootElement))
+                return JsonSerializer.Deserialize<AppSettings>(text, Json)?.Normalized(); // flat
             if (JsonSerializer.Deserialize<FileV2>(text, Json) is not { } f) return null;
             var d = Defaults;
             return new AppSettings
@@ -137,7 +141,20 @@ public sealed record AppSettings
         catch (InvalidOperationException) { return null; }
     }
 
-    /// <summary>Schema 2 or later: any section object at the top (any casing).</summary>
+    /// <summary>The "schema" field (any casing; a number or a numeric string), or null when there is none.</summary>
+    private static int? SchemaOf(JsonElement root)
+    {
+        foreach (var p in root.EnumerateObject())
+        {
+            if (!string.Equals(p.Name, "schema", StringComparison.OrdinalIgnoreCase)) continue;
+            if (p.Value.ValueKind == JsonValueKind.Number && p.Value.TryGetInt32(out var n)) return n;
+            if (p.Value.ValueKind == JsonValueKind.String && int.TryParse(p.Value.GetString(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var m)) return m;
+            return null;
+        }
+        return null;
+    }
+
+    /// <summary>A file without a schema number: sections mean schema 2 or later (any section object at the top, any casing).</summary>
     private static bool HasSections(JsonElement root) =>
         root.EnumerateObject().Any(p => p.Value.ValueKind == JsonValueKind.Object && Sections.Contains(p.Name));
 
