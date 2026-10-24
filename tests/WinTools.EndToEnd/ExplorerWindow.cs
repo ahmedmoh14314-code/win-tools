@@ -89,15 +89,76 @@ internal sealed class ExplorerWindow : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// Centres of the realised items among <paramref name="fileNames"/>, in one pass. Explorer realises only the items
+    /// near the view, so asking for each of 100 files with <see cref="ItemCentre"/> waited out its retries for every
+    /// unrealised one (minutes).
+    /// </summary>
+    public List<(int X, int Y)> RealisedItemCentres(IEnumerable<string> fileNames)
+    {
+        var wanted = new HashSet<string>(fileNames.SelectMany(f => new[] { f, Path.GetFileNameWithoutExtension(f) }), StringComparer.Ordinal);
+        var found = new List<(int X, int Y)>();
+        try
+        {
+            foreach (AutomationElement item in _root.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem)))
+            {
+                if (!wanted.Contains(item.Current.Name)) continue;
+                var r = item.Current.BoundingRectangle;
+                if (!r.IsEmpty) found.Add(((int)(r.X + r.Width / 2), (int)(r.Y + r.Height / 2)));
+            }
+        }
+        catch (ElementNotAvailableException) { }
+        return found;
+    }
+
+    /// <summary>
+    /// Whether the screen point hits one of these items itself. A realised item may lie below the visible part of the
+    /// list (under the status bar or past the window), where a press starts no drag.
+    /// </summary>
+    public bool HitsItem(int x, int y, IEnumerable<string> fileNames)
+    {
+        var wanted = new HashSet<string>(fileNames.SelectMany(f => new[] { f, Path.GetFileNameWithoutExtension(f) }), StringComparer.Ordinal);
+        try
+        {
+            var walker = TreeWalker.ControlViewWalker;
+            for (var e = AutomationElement.FromPoint(new System.Windows.Point(x, y)); e is not null && e != _root; e = walker.GetParent(e))
+                if (e.Current.ControlType == ControlType.ListItem) return wanted.Contains(e.Current.Name);
+        }
+        catch (ElementNotAvailableException) { }
+        return false;
+    }
+
+    /// <summary>Diagnostics: the status bar's texts ("100 items", "20 items selected").</summary>
+    public string StatusText()
+    {
+        try
+        {
+            // Only the status bar: the list's own texts (dates, sizes, numbered names) carry digits too (evaluator, PR #14).
+            var bar = _root.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.StatusBar));
+            if (bar is null) return "?";
+            var texts = bar.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text));
+            // Status-bar texts carry counts ("100 items", "20 items selected"); matching digits works in any display language.
+            return string.Join(" | ", texts.Cast<AutomationElement>().Select(t => t.Current.Name).Where(n => n.Any(char.IsDigit) && n.Length < 80));
+        }
+        catch (ElementNotAvailableException) { return "?"; }
+    }
+
     /// <summary>Centre of the first or last item in the view's own order, whatever the view mode.</summary>
-    public (int X, int Y)? EndItemCentre(bool last)
+    public (int X, int Y)? EndItemCentre(bool last) => EndItem(last)?.Centre;
+
+    /// <summary>
+    /// The first or last realised item and its name. Explorer realises only the items near the view, so the last one
+    /// realised is the list's last item only once the view has been scrolled to the end: compare the name.
+    /// </summary>
+    public (string Name, (int X, int Y) Centre)? EndItem(bool last)
     {
         try
         {
             var items = _root.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem));
             if (items.Count == 0) return null;
-            var r = items[last ? items.Count - 1 : 0].Current.BoundingRectangle;
-            return ((int)(r.X + r.Width / 2), (int)(r.Y + r.Height / 2));
+            var item = items[last ? items.Count - 1 : 0];
+            var r = item.Current.BoundingRectangle;
+            return (item.Current.Name, ((int)(r.X + r.Width / 2), (int)(r.Y + r.Height / 2)));
         }
         catch (ElementNotAvailableException) { return null; }
     }
@@ -140,8 +201,11 @@ internal sealed class ExplorerWindow : IDisposable
             try { ((dynamic)e.Browser).Quit(); } catch (COMException) { }
     }
 
+    // Compared as local paths: Explorer's LocationURL and .NET's AbsoluteUri escape non-ASCII names (Arabic, emoji)
+    // differently, so comparing the URL strings never matched such a folder.
     private static bool SameFolder(string url, string folder) =>
-        string.Equals(url.TrimEnd('/'), new Uri(Path.GetFullPath(folder).TrimEnd('\\')).AbsoluteUri.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+        Uri.TryCreate(url, UriKind.Absolute, out var u) && u.IsFile
+        && string.Equals(Path.TrimEndingDirectorySeparator(u.LocalPath), Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)), StringComparison.OrdinalIgnoreCase);
 
     private readonly record struct Entry(nint Hwnd, string Url, object Browser);
 

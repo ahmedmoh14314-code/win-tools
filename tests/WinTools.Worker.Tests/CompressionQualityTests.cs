@@ -1,0 +1,249 @@
+using WinTools.Core.Capabilities;
+using WinTools.Core.Feedback;
+using WinTools.Core.Files;
+using WinTools.Core.Jobs;
+using WinTools.Worker.Imaging;
+
+namespace WinTools.Worker.Tests;
+
+/// <summary>
+/// Release blocker 1 (owner field report, 2026-10-23): Compress often saved only a few percent on real photographs, wrote
+/// insignificant copies, and had no quality floor. These tests pin the redesigned semantics (ADR-0017) on the generated
+/// corpus (<see cref="CompressionCorpus"/>), measured with an SSIM written independently of the product:
+/// <list type="bullet">
+/// <item>High: no visible difference (SSIM ≥ 0.990). Balanced: SSIM ≥ 0.980. Smallest: SSIM ≥ 0.960.</item>
+/// <item>A copy is written only if it saves at least 8 %; otherwise "nothing to do" (already optimised).</item>
+/// <item>Dimensions never change; the source is never touched; the output is never larger; PNG stays lossless.</item>
+/// </list>
+/// The expected savings are not universal promises: they are what the quality floors allow on these corpus files, as
+/// measured (docs/performance/2026-10-23-compression.md), with a margin.
+/// </summary>
+[Collection(CpuHeavyTests.Name)]
+public sealed class CompressionQualityTests : IDisposable
+{
+    private readonly TempFolder _dir = new();
+    private static int _seq;
+
+    private static readonly Dictionary<string, double> Floor = new() { ["high"] = 0.990, ["balanced"] = 0.980, ["small"] = 0.960 };
+    private const double MinimumSaving = 0.08;
+
+    private static readonly IReadOnlyList<CompressionCorpus.Sample> Corpus = CompressionCorpus.All();
+
+    private sealed record Outcome(ConversionResult Result, long Source, long Output, double Saving, double Ssim, int Width, int Height, bool SourceIntact, byte[] Bytes);
+
+    private Outcome Compress(string file, string level)
+    {
+        var s = Corpus.Single(c => c.Name == file);
+        var src = Path.Combine(_dir.Path, $"{level}-{s.Name}");
+        File.WriteAllBytes(src, s.Bytes);
+        var r = ConversionJob.Run(new ConversionRequest($"c{Interlocked.Increment(ref _seq)}", $"compress.{level}", src));
+        var intact = File.ReadAllBytes(src).AsSpan().SequenceEqual(s.Bytes);
+        if (!r.Success || r.OutputPath is null) return new(r, s.Bytes.Length, 0, 0, 0, 0, 0, intact, []);
+        var bytes = File.ReadAllBytes(r.OutputPath);
+        var original = ImagePipeline.Decode(s.Bytes, s.Format).Image;
+        var output = ImagePipeline.Decode(bytes, s.Format).Image;
+        return new(r, s.Bytes.Length, bytes.Length, 1.0 - (double)bytes.Length / s.Bytes.Length, Ssim.Luma(original, output), output.Width, output.Height, intact, bytes);
+    }
+
+    public static TheoryData<string, string> LossyCases()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (var f in new[] { "phone.jpg", "camera.jpg", "moderate.jpg", "noisy.jpg", "screenshot.jpg", "photo-lossy.webp", "screenshot-lossless.webp" })
+            foreach (var level in new[] { "high", "balanced", "small" }) data.Add(f, level);
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(LossyCases))]
+    public void A_written_copy_keeps_the_presets_quality_floor_and_saves_meaningfully(string file, string level)
+    {
+        var o = Compress(file, level);
+        Assert.True(o.SourceIntact, "the source must be byte-identical");
+        if (!o.Result.Success)
+        {
+            Assert.Equal(ErrorCode.NothingToDo, o.Result.Error); // never a failure: either a good copy or "already optimised"
+            return;
+        }
+        Assert.True(o.Ssim >= Floor[level], $"{file} {level}: SSIM {o.Ssim:0.0000} below the floor {Floor[level]}");
+        Assert.True(o.Saving >= MinimumSaving, $"{file} {level}: saves only {o.Saving:P1}, an insignificant copy");
+        Assert.Equal((CompressionCorpus.Width, CompressionCorpus.Height), (o.Width, o.Height));
+        var format = Corpus.Single(c => c.Name == file).Format;
+        Assert.Equal(format, FileSignature.Detect(o.Bytes));
+        Assert.True(ContainerCheck.IsComplete(o.Bytes, format, out _));
+    }
+
+    [Theory]
+    // Measured on the corpus at the presets' floors (see the class summary): what each preset can save without visible loss.
+    [InlineData("phone.jpg", "high", 0.10)]
+    [InlineData("phone.jpg", "balanced", 0.50)]
+    [InlineData("phone.jpg", "small", 0.65)]
+    [InlineData("camera.jpg", "high", 0.10)]  // 4:4:4 kept: q95 is the lowest at SSIM ≥ 0.99 (13.6 %)
+    [InlineData("camera.jpg", "balanced", 0.65)]
+    [InlineData("camera.jpg", "small", 0.85)]
+    [InlineData("photo-lossy.webp", "high", 0.15)]
+    [InlineData("photo-lossy.webp", "balanced", 0.55)]
+    // Screenshots: text edges limit JPEG (the worst-region gate). Measured: Balanced 10.8 % (q93), Smallest 27.1 % (q88);
+    // Balanced at 30 % (q82) left the worst 1 % of windows at SSIM 0.80, visibly ringing glyphs (ADR-0017).
+    [InlineData("screenshot.jpg", "balanced", 0.08)]
+    [InlineData("screenshot.jpg", "small", 0.25)]
+    public void Typical_photographs_and_screenshots_get_a_meaningful_reduction(string file, string level, double atLeast)
+    {
+        var o = Compress(file, level);
+        Assert.True(o.Result.Success, $"{file} {level}: {o.Result.Error} {o.Result.Message}");
+        Assert.True(o.Saving >= atLeast, $"{file} {level}: saved {o.Saving:P1}, expected at least {atLeast:P0} (SSIM {o.Ssim:0.0000})");
+    }
+
+    [Theory]
+    [InlineData("moderate.jpg", "high")]
+    [InlineData("moderate.jpg", "balanced")]
+    [InlineData("noisy.jpg", "high")]
+    [InlineData("noisy.jpg", "balanced")]
+    [InlineData("screenshot-lossless.webp", "balanced")]
+    public void Files_that_cannot_shrink_without_visible_loss_are_reported_as_already_optimised(string file, string level)
+    {
+        var o = Compress(file, level);
+        Assert.Equal(ErrorCode.NothingToDo, o.Result.Error);
+        Assert.Equal([$"{level}-{file}"], _dir.Names().Where(n => n.StartsWith(level + "-", StringComparison.Ordinal) && n.Contains(Path.GetFileNameWithoutExtension(file), StringComparison.Ordinal)).ToArray());
+    }
+
+    // Evaluator, PR #12: the worst-region gate was the 1st percentile of 8×8 windows, so damage confined to less than 1 %
+    // of the image (a caption, a sign, a watermark in a large photograph) was averaged away and a preset could ruin it.
+    // Each preset's promise holds for every region: the patch is measured on its own, with the independent SSIM, against
+    // the preset's worst-region floor.
+    private static readonly Dictionary<string, double> RegionFloor = new() { ["high"] = 0.970, ["balanced"] = 0.930, ["small"] = 0.880 };
+
+    [Theory]
+    [InlineData("high")]
+    [InlineData("balanced")]
+    [InlineData("small")]
+    public void Small_text_in_a_large_photograph_keeps_the_presets_floor(string level)
+    {
+        var source = CaptionedPhoto();
+        var src = _dir.Write($"{level}-captioned.jpg", source);
+
+        var r = ConversionJob.Run(new ConversionRequest($"c{Interlocked.Increment(ref _seq)}", $"compress.{level}", src));
+
+        if (!r.Success) { Assert.Equal(ErrorCode.NothingToDo, r.Error); return; } // already optimized keeps the promise
+        var before = Caption(ImagePipeline.Decode(source, ImageFormat.Jpeg).Image);
+        var after = Caption(ImagePipeline.Decode(File.ReadAllBytes(r.OutputPath!), ImageFormat.Jpeg).Image);
+        var ssim = Ssim.Luma(before, after);
+        Assert.True(ssim >= RegionFloor[level], $"{level}: the caption's SSIM is {ssim:0.0000}, below {RegionFloor[level]}");
+    }
+
+    private const int CaptionX = 700, CaptionY = 820, CaptionW = 160, CaptionH = 48; // 0.4 % of the image
+
+    /// <summary>A phone-style JPEG photograph with a small caption: 1 px dark strokes on a light panel.</summary>
+    internal static byte[] CaptionedPhoto()
+    {
+        var photo = CompressionCorpus.Photo(seed: 31);
+        var bgra = (byte[])photo.Bgra.Clone();
+        var rnd = new Random(32);
+        void Fill(int x0, int y0, int x1, int y1, byte v)
+        {
+            for (var y = y0; y < y1; y++)
+                for (var x = x0; x < x1; x++)
+                {
+                    var i = (y * photo.Width + x) * 4;
+                    (bgra[i], bgra[i + 1], bgra[i + 2]) = (v, v, v);
+                }
+        }
+        Fill(CaptionX, CaptionY, CaptionX + CaptionW, CaptionY + CaptionH, 246);
+        for (var line = 0; line < 2; line++)
+            for (var x = CaptionX + 6; x < CaptionX + CaptionW - 8; x += 5)
+            {
+                var y = CaptionY + 8 + line * 20;
+                Fill(x, y + rnd.Next(0, 3), x + 1, y + 11, 30);          // 1 px glyph stems
+                if (rnd.Next(3) == 0) Fill(x, y + 5, x + 4, y + 6, 30);  // and bars
+            }
+        return WicCodec.Encode(photo.WithPixels(photo.Width, photo.Height, bgra), ImageFormat.Jpeg, 0.93f);
+    }
+
+    internal static RasterImage Caption(RasterImage image) => Crop(image, CaptionX, CaptionY, CaptionW, CaptionH);
+
+    // Evaluator, PR #12: fidelity is measured on white, so a change in transparency alone would be invisible to it.
+    // A guard (libwebp keeps lossy WebP's alpha lossless today), backed by an explicit check in the search.
+    [Theory]
+    [InlineData("high")]
+    [InlineData("balanced")]
+    [InlineData("small")]
+    public void Lossy_webp_keeps_transparency_exactly(string level)
+    {
+        var photo = CompressionCorpus.Photo(seed: 33, width: 800, height: 600);
+        var bgra = (byte[])photo.Bgra.Clone();
+        for (var y = 0; y < 600; y++)
+            for (var x = 0; x < 800; x++) bgra[(y * 800 + x) * 4 + 3] = (byte)(x < 400 ? 255 : Math.Max(0, 255 - (x - 400) * 255 / 300));
+        var source = SkiaCodec.EncodeWebP(photo.WithPixels(800, 600, bgra), 92, lossless: false);
+        var src = _dir.Write($"{level}-transparent.webp", source);
+
+        var r = ConversionJob.Run(new ConversionRequest($"c{Interlocked.Increment(ref _seq)}", $"compress.{level}", src));
+
+        Assert.True(r.Success, $"{level}: {r.Error} {r.Message}"); // a refusal here would hide the very damage the test looks for
+        var before = ImagePipeline.Decode(source, ImageFormat.WebP).Image.Bgra;
+        var after = ImagePipeline.Decode(File.ReadAllBytes(r.OutputPath!), ImageFormat.WebP).Image.Bgra;
+        for (var i = 3; i < before.Length; i += 4)
+            if (before[i] != after[i]) Assert.Fail($"{level}: alpha changed at pixel {i / 4}: {before[i]} → {after[i]}");
+    }
+
+    private static RasterImage Crop(RasterImage image, int x0, int y0, int w, int h)
+    {
+        var bgra = new byte[w * h * 4];
+        for (var y = 0; y < h; y++) Array.Copy(image.Bgra, ((y0 + y) * image.Width + x0) * 4, bgra, y * w * 4, w * 4);
+        return new RasterImage(w, h, bgra);
+    }
+
+    [Fact]
+    public void High_quality_keeps_full_colour_resolution_of_a_4_4_4_jpeg()
+    {
+        var o = Compress("camera.jpg", "high");
+        Assert.True(o.Result.Success, o.Result.Message);
+        Assert.Equal((1, 1), JpegSampling.ChromaSubsampling(o.Bytes)); // 4:4:4 in, 4:4:4 out
+    }
+
+    [Fact]
+    public void Png_compression_stays_lossless_and_skips_an_already_optimised_png()
+    {
+        var o = Compress("unoptimized.png", "lossless");
+        Assert.True(o.Result.Success, o.Result.Message);
+        var s = Corpus.Single(c => c.Name == "unoptimized.png");
+        Assert.Equal(ImagePipeline.Decode(s.Bytes, ImageFormat.Png).Image.Bgra, ImagePipeline.Decode(o.Bytes, ImageFormat.Png).Image.Bgra);
+        Assert.True(o.Saving > 0.9);
+        Assert.Equal(ErrorCode.NothingToDo, Compress("optimized.png", "lossless").Result.Error);
+    }
+
+    [Fact]
+    public void The_summary_says_how_much_was_saved()
+    {
+        var op = OperationCatalog.Get("compress.balanced");
+        var item = new JobItem("photo.jpg", WinTools.Worker.ImageJobs.From(ConversionResult.Ok("1", @"C:\x\photo (compressed).jpg", "0")), 2_480_000, 612_000);
+        var m = FeedbackText.For(op, [item]);
+        Assert.Contains("2.37 MB → 597.7 KB", m.Detail, StringComparison.Ordinal);
+        Assert.Contains("saved 75%", m.Detail, StringComparison.Ordinal);
+        var nothing = FeedbackText.For(op, [new JobItem("a.jpg", WinTools.Worker.ImageJobs.From(ConversionResult.Fail("1", ErrorCode.NothingToDo, "")))]);
+        Assert.Contains("Already optimized", nothing.Title + " " + nothing.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void Dispose() => _dir.Dispose();
+}
+
+/// <summary>Reads a baseline or progressive JPEG's chroma subsampling factors (horizontal, vertical) from its SOF segment.</summary>
+internal static class JpegSampling
+{
+    public static (int H, int V) ChromaSubsampling(byte[] jpeg)
+    {
+        for (var i = 2; i + 4 < jpeg.Length;)
+        {
+            if (jpeg[i] != 0xFF) { i++; continue; }
+            var marker = jpeg[i + 1];
+            var len = (jpeg[i + 2] << 8) | jpeg[i + 3];
+            if (marker is 0xC0 or 0xC1 or 0xC2)
+            {
+                var components = jpeg[i + 9];
+                var luma = jpeg[i + 11];
+                var chroma = components > 1 ? jpeg[i + 14] : luma;
+                return ((luma >> 4) / Math.Max(1, chroma >> 4), (luma & 15) / Math.Max(1, chroma & 15));
+            }
+            i += 2 + len;
+        }
+        throw new InvalidDataException("No SOF segment.");
+    }
+}

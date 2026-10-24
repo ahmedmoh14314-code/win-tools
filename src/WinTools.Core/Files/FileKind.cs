@@ -24,6 +24,9 @@ public static class FileKinds
     /// <summary>A folder. The drop target marks dropped folders with a trailing separator (UX-009, ADR-0019).</summary>
     public static FileKind Folder { get; } = new("folder", FileFamily.Folder, "Folder", []);
 
+    /// <summary>Every kind a capability's input rule may name.</summary>
+    public static IReadOnlyList<FileKind> Declared { get; } = [.. All, Folder];
+
     private static readonly Dictionary<string, FileKind> ByExtension =
         All.SelectMany(k => k.Extensions.Select(e => (e, k))).ToDictionary(p => p.e, p => p.k, StringComparer.OrdinalIgnoreCase);
 
@@ -38,5 +41,5 @@ public static class FileKinds
     }
 
     /// <summary>A kind by its id, or null.</summary>
-    public static FileKind? Find(string id) => All.FirstOrDefault(k => k.Id == id);
+    public static FileKind? Find(string id) => Declared.FirstOrDefault(k => k.Id == id);
 }

@@ -328,6 +328,15 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             _log.Event("drop", new { accepted = false, reason = "commandsChanged", files = paths.Count });
             return false;
         }
+        // Never throw here: this runs inside OLE's Drop. A command no module runs is refused like a changed one, with the
+        // Nothing sound: a drop that runs nothing never reads as accepted (evaluator, PR #15).
+        // "More…" belongs to the menu, not a module: it needs a module for the commands it holds.
+        if (RadialMenu.IsMore(chosen) ? !RadialMenu.Overflow(chosen).Any(o => _jobs.Runs(o.Module)) : !_jobs.Runs(chosen.Module))
+        {
+            _sounds.Play(UiSound.Nothing);
+            _log.Event("drop", new { accepted = false, reason = "noModule", op = chosen.Id, module = chosen.Module, files = paths.Count });
+            return false;
+        }
         _log.Event("drop", new { accepted = true, op = chosen.Id, openMs, files = paths.Count, sounds = SoundCounts(), frames });
         if (RadialMenu.IsMore(chosen)) _ = PickAndRunAsync(RadialMenu.Overflow(chosen), paths, _centre.X + dx, _centre.Y + dy);
         else Run(chosen, paths);

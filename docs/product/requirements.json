@@ -519,6 +519,24 @@
         "ADR-0013"
       ],
       "evidence": "AppSettingsTests (Core); SettingsStoreTests (Missing_file_gives_defaults_and_save_round_trips, Corrupt_file_is_moved_aside_and_defaults_are_used, Newer_schema_is_read_but_never_overwritten, Repeated_saves_leave_one_file_and_no_temp); SettingsHardeningTests (newer schema unparsable, other casing or as a string never moved or overwritten; folder or file in the way and read-only or locked file make Save return false with the old content intact; invalid output folder reported); BatchTests.Configured_output_folder_receives_the_outputs, Jpeg_quality_from_the_settings_changes_the_output. Evaluator findings of PR #4 fixed. No settings UI (UX-003)."
+    },
+    {
+      "id": "OPS-005",
+      "category": "operations",
+      "description": "Compress keeps a promised appearance per preset (High: no visible difference; Balanced: differences only on close comparison; Smallest: visible on close inspection, never damaged), writes a copy only when it saves at least 8 %, and otherwise says the file is already optimized. PNG compression is lossless.",
+      "acceptanceCriteria": [
+        "Every written copy passes its preset's gates on luma SSIM, worst-region SSIM, chroma SSIM, mean and 99th-percentile colour difference (ΔE) and edge SSIM (ADR-0017).",
+        "A 4:4:4 JPEG keeps 4:4:4 at High; dimensions never change; the source is never touched; the output is never larger.",
+        "Typical photographs get a meaningful reduction at each preset; files that cannot shrink without visible loss are reported as already optimized, with nothing written.",
+        "The result says how much was saved (\"2.37 MB → 597.7 KB, saved 75%\")."
+      ],
+      "status": "in-progress",
+      "source": "Owner field report on 0.1.0 Beta (2026-10-23); V2 plan Stage 0",
+      "relatedAdrs": [
+        "ADR-0017"
+      ],
+      "evidence": "CompressionQualityTests (39 cases, independent luma SSIM): failed 14 of 38 on main 8836149, all pass with ADR-0017; FidelityMetricTests (7); docs/performance/2026-10-23-compression.md.",
+      "notes": "In progress until the owner validates the gate values visually on real photographs and screenshots; they were calibrated on a generated corpus (ADR-0017 Consequences)."
     }
   ]
 }

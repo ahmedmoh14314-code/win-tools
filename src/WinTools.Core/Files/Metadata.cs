@@ -82,6 +82,27 @@ public static class Metadata
         return false;
     }
 
+    /// <summary>
+    /// True when a colour JPEG stores its colour at full resolution (4:4:4: every component sampled like the first),
+    /// read from the frame header (SOFn). False for subsampled colour (4:2:0, 4:2:2…), greyscale, or a frame header that
+    /// cannot be found or read.
+    /// </summary>
+    public static bool IsFullChromaJpeg(ReadOnlySpan<byte> d)
+    {
+        foreach (var (kind, m, s, e) in JpegElements(d))
+        {
+            if (kind != JpegKind.Marker || m is not ((>= 0xC0 and <= 0xC3) or (>= 0xC5 and <= 0xC7) or (>= 0xC9 and <= 0xCB) or (>= 0xCD and <= 0xCF))) continue;
+            var p = Payload(d, s, e);                                     // P, Y(2), X(2), Nf, then Nf × (C, HV, Tq)
+            if (p.Length < 6) return false;
+            var components = p[5];
+            if (components < 3 || p.Length < 6 + 3 * components) return false;
+            for (var c = 1; c < components; c++)
+                if (p[6 + 3 * c + 1] != p[6 + 1]) return false;
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>A TIFF block ("II*\0", IFD0 with one entry: Orientation) — the minimal EXIF that keeps the orientation.</summary>
     public static byte[] OrientationOnlyExif(int orientation) =>
     [
