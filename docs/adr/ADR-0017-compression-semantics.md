@@ -120,7 +120,7 @@ PNG stays lossless and is verified pixel for pixel, with the same 8 % minimum.
     - It is measured in `SmallDetailTests`: 9 tuned and 12 validation cases, all passing through the product's own search.
     - It is a measured property, not a guarantee for every region. Arbitrary regions of a text-free photo can fall below the floor: at Balanced, 815 of 118,604 12×12 regions of phone.jpg were under 0.93, the worst at 0.807. Balanced's tile gate is 0.910, below its 0.930 floor.
     - The evaluator's third round tried 28 new JPEG cases inside the scope: one exceeded it, a red-on-blue 28×14 word at Smallest with ΔE 10.81 against 10.
-  - **Balanced's region ΔE is 8, not 6. This is a product trade-off for the owner.** Holding 1 px saturated strokes to ΔE 6 cost 154 percentage points of saving across the 15 text-free photographs (one went from 52.5 % to 36.5 %). ΔE 8 costs 15.7 points (at most 6.4 on one photo). "Differences only on close comparison" allows that shift in small strokes. Tightening it is a one-line change once the owner weighs it.
+  - **Balanced's region ΔE is 8, not 6. The owner accepted this trade-off and the exceptions below on 2026-10-24.** Holding 1 px saturated strokes to ΔE 6 cost 154 percentage points of saving across the 15 text-free photographs (one went from 52.5 % to 36.5 %). ΔE 8 costs 15.7 points (at most 6.4 on one photo). "Differences only on close comparison" allows that shift in small strokes. Tightening it is a one-line change once the owner weighs it.
   - **Outside the promise, measured:** these can change visibly at Balanced and Smallest:
     - detail under 12 px: red-on-blue text 12×8 px, Smallest SSIM 0.84;
     - lines 1–2 px wide: a 1 px coloured line, ΔE 11–26;
@@ -139,4 +139,9 @@ PNG stays lossless and is verified pixel for pixel, with the same 8 % minimum.
 - **Thin margins.** Some corpus results sit close to their floors (camera High at 0.9908 against 0.990). A change in the encoder or the corpus can move them; the tests then fail and the numbers here are revisited, never the floors lowered silently.
 
 ## Evaluator review
-PR #12, 2026-10-24: no blocker. Two major findings (damage in less than 1 % of the image passed; the time was measured on one machine only) and the minor ones are answered by the amendment above.
+PR #12, three rounds (2026-10-24):
+- **First round:** no blocker. Two majors: damage in under 1 % of the image passed, and timing was measured on one machine only. Answered by the tile gates and the search deadline.
+- **Second round:** the 64×64 tiles still diluted small colour text (a major). The first 32×32 attempt used gates fitted to nine cases: they failed held-out probes and cut savings on text-free photos (a major).
+- **Third round:** no blocker or major. The gates were re-chosen on a calibration set, judged on a validation set and on text-free photos, and the promise was stated with its measured exceptions.
+
+The relaxations (Balanced region ΔE 8, and the exceptions listed above) were approved by the owner on 2026-10-24.
