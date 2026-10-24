@@ -1,0 +1,1270 @@
+## custom resize: none
+# C:\p\a.png
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.lossless | Lossless | writes True | suffix compressed | out Png
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png
+    rotate.right | Right | writes True | suffix rotated right | out Png
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
+# C:\p\a.jpg
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
+# C:\p\a.jpeg
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
+# C:\p\a.JFIF
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
+# C:\p\a.webp
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out WebP
+    compress.balanced | Balanced | writes True | suffix compressed | out WebP
+    compress.small | Smallest | writes True | suffix compressed | out WebP
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out WebP
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out WebP
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out WebP
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out WebP
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out WebP
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out WebP
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out WebP
+    rotate.right | Right | writes True | suffix rotated right | out WebP
+    rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
+# C:\p\a.bmp
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Bmp
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Bmp
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Bmp
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Bmp
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Bmp
+    rotate.right | Right | writes True | suffix rotated right | out Bmp
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
+# C:\p\a.dib
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Bmp
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Bmp
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Bmp
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Bmp
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Bmp
+    rotate.right | Right | writes True | suffix rotated right | out Bmp
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
+# C:\p\a.tif
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Tiff
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Tiff
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Tiff
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Tiff
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Tiff
+    rotate.right | Right | writes True | suffix rotated right | out Tiff
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
+# C:\p\a.tiff
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Tiff
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Tiff
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Tiff
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Tiff
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Tiff
+    rotate.right | Right | writes True | suffix rotated right | out Tiff
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
+# C:\p\a.png + C:\p\b.jpg
+  [Convert] Convert
+    convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png,Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png,Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png,Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png,Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png,Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Png,Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
+    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
+# C:\p\a.png + C:\p\b.png
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Compress] Compress
+    compress.lossless | Lossless | writes True | suffix compressed | out Png,Png
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Png
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Png
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png,Png
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png,Png
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png,Png
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png,Png
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png,Png
+    rotate.right | Right | writes True | suffix rotated right | out Png,Png
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Png
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
+    metadata.info | Image info | writes False | suffix - | out Png,Png
+# C:\p\a.jpg + C:\p\b.webp
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png,Png
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg,WebP
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg,WebP
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg,WebP
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg,WebP
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg,WebP
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg,WebP
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg,WebP
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg,WebP
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg,WebP
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg,WebP
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg,WebP
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg,WebP
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
+    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
+# C:\p\a.png + C:\p\b.bmp + C:\p\c.tif
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg,Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP,WebP
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Bmp,Tiff
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Bmp,Tiff
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png,Bmp,Tiff
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png,Bmp,Tiff
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png,Bmp,Tiff
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png,Bmp,Tiff
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png,Bmp,Tiff
+    rotate.right | Right | writes True | suffix rotated right | out Png,Bmp,Tiff
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Bmp,Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
+# C:\p\a.txt
+# C:\p\a.pdf
+# C:\p\a.png + C:\p\b.txt
+# C:\p\noext
+# (empty)
+# \\server\share\a.png
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.lossless | Lossless | writes True | suffix compressed | out Png
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png
+    rotate.right | Right | writes True | suffix rotated right | out Png
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
+# C:\p\a.png:stream
+# C:\p\a.png.
+## custom resize: resize.width-800
+# C:\p\a.png
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.lossless | Lossless | writes True | suffix compressed | out Png
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png
+    resize.width-800 | 800 wide | writes True | suffix 800 wide | out Png
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png
+    rotate.right | Right | writes True | suffix rotated right | out Png
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
+# C:\p\a.jpg
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg
+    resize.width-800 | 800 wide | writes True | suffix 800 wide | out Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
+# C:\p\a.jpeg
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg
+    resize.width-800 | 800 wide | writes True | suffix 800 wide | out Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
+# C:\p\a.JFIF
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg
+    resize.width-800 | 800 wide | writes True | suffix 800 wide | out Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
+# C:\p\a.webp
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out WebP
+    compress.balanced | Balanced | writes True | suffix compressed | out WebP
+    compress.small | Smallest | writes True | suffix compressed | out WebP
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out WebP
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out WebP
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out WebP
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out WebP
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out WebP
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out WebP
+    resize.width-800 | 800 wide | writes True | suffix 800 wide | out WebP
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out WebP
+    rotate.right | Right | writes True | suffix rotated right | out WebP
+    rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
+# C:\p\a.bmp
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Bmp
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Bmp
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Bmp
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Bmp
+    resize.width-800 | 800 wide | writes True | suffix 800 wide | out Bmp
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Bmp
+    rotate.right | Right | writes True | suffix rotated right | out Bmp
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
+# C:\p\a.dib
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Bmp
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Bmp
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Bmp
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Bmp
+    resize.width-800 | 800 wide | writes True | suffix 800 wide | out Bmp
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Bmp
+    rotate.right | Right | writes True | suffix rotated right | out Bmp
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
+# C:\p\a.tif
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Tiff
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Tiff
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Tiff
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Tiff
+    resize.width-800 | 800 wide | writes True | suffix 800 wide | out Tiff
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Tiff
+    rotate.right | Right | writes True | suffix rotated right | out Tiff
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
+# C:\p\a.tiff
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Tiff
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Tiff
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Tiff
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Tiff
+    resize.width-800 | 800 wide | writes True | suffix 800 wide | out Tiff
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Tiff
+    rotate.right | Right | writes True | suffix rotated right | out Tiff
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
+# C:\p\a.png + C:\p\b.jpg
+  [Convert] Convert
+    convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png,Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png,Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png,Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png,Jpeg
+    resize.width-800 | 800 wide | writes True | suffix 800 wide | out Png,Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png,Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Png,Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
+    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
+# C:\p\a.png + C:\p\b.png
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Compress] Compress
+    compress.lossless | Lossless | writes True | suffix compressed | out Png,Png
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Png
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Png
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png,Png
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png,Png
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png,Png
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png,Png
+    resize.width-800 | 800 wide | writes True | suffix 800 wide | out Png,Png
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png,Png
+    rotate.right | Right | writes True | suffix rotated right | out Png,Png
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Png
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
+    metadata.info | Image info | writes False | suffix - | out Png,Png
+# C:\p\a.jpg + C:\p\b.webp
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png,Png
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg,WebP
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg,WebP
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg,WebP
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg,WebP
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg,WebP
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg,WebP
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg,WebP
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg,WebP
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg,WebP
+    resize.width-800 | 800 wide | writes True | suffix 800 wide | out Jpeg,WebP
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg,WebP
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg,WebP
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg,WebP
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
+    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
+# C:\p\a.png + C:\p\b.bmp + C:\p\c.tif
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg,Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP,WebP
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Bmp,Tiff
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Bmp,Tiff
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png,Bmp,Tiff
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png,Bmp,Tiff
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png,Bmp,Tiff
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png,Bmp,Tiff
+    resize.width-800 | 800 wide | writes True | suffix 800 wide | out Png,Bmp,Tiff
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png,Bmp,Tiff
+    rotate.right | Right | writes True | suffix rotated right | out Png,Bmp,Tiff
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Bmp,Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
+# C:\p\a.txt
+# C:\p\a.pdf
+# C:\p\a.png + C:\p\b.txt
+# C:\p\noext
+# (empty)
+# \\server\share\a.png
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.lossless | Lossless | writes True | suffix compressed | out Png
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png
+    resize.width-800 | 800 wide | writes True | suffix 800 wide | out Png
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png
+    rotate.right | Right | writes True | suffix rotated right | out Png
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
+# C:\p\a.png:stream
+# C:\p\a.png.
+## custom resize: resize.box-1920x1080-stretch
+# C:\p\a.png
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.lossless | Lossless | writes True | suffix compressed | out Png
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png
+    resize.box-1920x1080-stretch | 1920×1080 (stretch) | writes True | suffix 1920x1080 | out Png
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png
+    rotate.right | Right | writes True | suffix rotated right | out Png
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
+# C:\p\a.jpg
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg
+    resize.box-1920x1080-stretch | 1920×1080 (stretch) | writes True | suffix 1920x1080 | out Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
+# C:\p\a.jpeg
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg
+    resize.box-1920x1080-stretch | 1920×1080 (stretch) | writes True | suffix 1920x1080 | out Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
+# C:\p\a.JFIF
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg
+    resize.box-1920x1080-stretch | 1920×1080 (stretch) | writes True | suffix 1920x1080 | out Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
+# C:\p\a.webp
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out WebP
+    compress.balanced | Balanced | writes True | suffix compressed | out WebP
+    compress.small | Smallest | writes True | suffix compressed | out WebP
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out WebP
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out WebP
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out WebP
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out WebP
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out WebP
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out WebP
+    resize.box-1920x1080-stretch | 1920×1080 (stretch) | writes True | suffix 1920x1080 | out WebP
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out WebP
+    rotate.right | Right | writes True | suffix rotated right | out WebP
+    rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
+# C:\p\a.bmp
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Bmp
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Bmp
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Bmp
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Bmp
+    resize.box-1920x1080-stretch | 1920×1080 (stretch) | writes True | suffix 1920x1080 | out Bmp
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Bmp
+    rotate.right | Right | writes True | suffix rotated right | out Bmp
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
+# C:\p\a.dib
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Bmp
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Bmp
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Bmp
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Bmp
+    resize.box-1920x1080-stretch | 1920×1080 (stretch) | writes True | suffix 1920x1080 | out Bmp
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Bmp
+    rotate.right | Right | writes True | suffix rotated right | out Bmp
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
+# C:\p\a.tif
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Tiff
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Tiff
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Tiff
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Tiff
+    resize.box-1920x1080-stretch | 1920×1080 (stretch) | writes True | suffix 1920x1080 | out Tiff
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Tiff
+    rotate.right | Right | writes True | suffix rotated right | out Tiff
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
+# C:\p\a.tiff
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Tiff
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Tiff
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Tiff
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Tiff
+    resize.box-1920x1080-stretch | 1920×1080 (stretch) | writes True | suffix 1920x1080 | out Tiff
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Tiff
+    rotate.right | Right | writes True | suffix rotated right | out Tiff
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
+# C:\p\a.png + C:\p\b.jpg
+  [Convert] Convert
+    convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png,Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png,Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png,Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png,Jpeg
+    resize.box-1920x1080-stretch | 1920×1080 (stretch) | writes True | suffix 1920x1080 | out Png,Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png,Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Png,Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
+    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
+# C:\p\a.png + C:\p\b.png
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Compress] Compress
+    compress.lossless | Lossless | writes True | suffix compressed | out Png,Png
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Png
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Png
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png,Png
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png,Png
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png,Png
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png,Png
+    resize.box-1920x1080-stretch | 1920×1080 (stretch) | writes True | suffix 1920x1080 | out Png,Png
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png,Png
+    rotate.right | Right | writes True | suffix rotated right | out Png,Png
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Png
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
+    metadata.info | Image info | writes False | suffix - | out Png,Png
+# C:\p\a.jpg + C:\p\b.webp
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png,Png
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg,WebP
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg,WebP
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg,WebP
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg,WebP
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg,WebP
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg,WebP
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg,WebP
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg,WebP
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg,WebP
+    resize.box-1920x1080-stretch | 1920×1080 (stretch) | writes True | suffix 1920x1080 | out Jpeg,WebP
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg,WebP
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg,WebP
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg,WebP
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
+    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
+# C:\p\a.png + C:\p\b.bmp + C:\p\c.tif
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg,Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP,WebP
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Bmp,Tiff
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Bmp,Tiff
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png,Bmp,Tiff
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png,Bmp,Tiff
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png,Bmp,Tiff
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png,Bmp,Tiff
+    resize.box-1920x1080-stretch | 1920×1080 (stretch) | writes True | suffix 1920x1080 | out Png,Bmp,Tiff
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png,Bmp,Tiff
+    rotate.right | Right | writes True | suffix rotated right | out Png,Bmp,Tiff
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Bmp,Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
+# C:\p\a.txt
+# C:\p\a.pdf
+# C:\p\a.png + C:\p\b.txt
+# C:\p\noext
+# (empty)
+# \\server\share\a.png
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.lossless | Lossless | writes True | suffix compressed | out Png
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png
+    resize.box-1920x1080-stretch | 1920×1080 (stretch) | writes True | suffix 1920x1080 | out Png
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png
+    rotate.right | Right | writes True | suffix rotated right | out Png
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
+# C:\p\a.png:stream
+# C:\p\a.png.
+## custom resize: resize.height-600-upscale
+# C:\p\a.png
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.lossless | Lossless | writes True | suffix compressed | out Png
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png
+    resize.height-600-upscale | 600 high | writes True | suffix 600 high | out Png
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png
+    rotate.right | Right | writes True | suffix rotated right | out Png
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
+# C:\p\a.jpg
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg
+    resize.height-600-upscale | 600 high | writes True | suffix 600 high | out Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
+# C:\p\a.jpeg
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg
+    resize.height-600-upscale | 600 high | writes True | suffix 600 high | out Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
+# C:\p\a.JFIF
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg
+    resize.height-600-upscale | 600 high | writes True | suffix 600 high | out Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
+# C:\p\a.webp
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out WebP
+    compress.balanced | Balanced | writes True | suffix compressed | out WebP
+    compress.small | Smallest | writes True | suffix compressed | out WebP
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out WebP
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out WebP
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out WebP
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out WebP
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out WebP
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out WebP
+    resize.height-600-upscale | 600 high | writes True | suffix 600 high | out WebP
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out WebP
+    rotate.right | Right | writes True | suffix rotated right | out WebP
+    rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
+# C:\p\a.bmp
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Bmp
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Bmp
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Bmp
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Bmp
+    resize.height-600-upscale | 600 high | writes True | suffix 600 high | out Bmp
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Bmp
+    rotate.right | Right | writes True | suffix rotated right | out Bmp
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
+# C:\p\a.dib
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Bmp
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Bmp
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Bmp
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Bmp
+    resize.height-600-upscale | 600 high | writes True | suffix 600 high | out Bmp
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Bmp
+    rotate.right | Right | writes True | suffix rotated right | out Bmp
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
+# C:\p\a.tif
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Tiff
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Tiff
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Tiff
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Tiff
+    resize.height-600-upscale | 600 high | writes True | suffix 600 high | out Tiff
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Tiff
+    rotate.right | Right | writes True | suffix rotated right | out Tiff
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
+# C:\p\a.tiff
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-png | To PNG | writes True | suffix - | out Png
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Tiff
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Tiff
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Tiff
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Tiff
+    resize.height-600-upscale | 600 high | writes True | suffix 600 high | out Tiff
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Tiff
+    rotate.right | Right | writes True | suffix rotated right | out Tiff
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
+# C:\p\a.png + C:\p\b.jpg
+  [Convert] Convert
+    convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Jpeg
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Jpeg
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png,Jpeg
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png,Jpeg
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png,Jpeg
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png,Jpeg
+    resize.height-600-upscale | 600 high | writes True | suffix 600 high | out Png,Jpeg
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png,Jpeg
+    rotate.right | Right | writes True | suffix rotated right | out Png,Jpeg
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Jpeg
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
+    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
+# C:\p\a.png + C:\p\b.png
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Compress] Compress
+    compress.lossless | Lossless | writes True | suffix compressed | out Png,Png
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Png
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Png
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png,Png
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png,Png
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png,Png
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png,Png
+    resize.height-600-upscale | 600 high | writes True | suffix 600 high | out Png,Png
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png,Png
+    rotate.right | Right | writes True | suffix rotated right | out Png,Png
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Png
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
+    metadata.info | Image info | writes False | suffix - | out Png,Png
+# C:\p\a.jpg + C:\p\b.webp
+  [Convert] Convert
+    convert.to-png | To PNG | writes True | suffix - | out Png,Png
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Compress] Compress
+    compress.high | High quality | writes True | suffix compressed | out Jpeg,WebP
+    compress.balanced | Balanced | writes True | suffix compressed | out Jpeg,WebP
+    compress.small | Smallest | writes True | suffix compressed | out Jpeg,WebP
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Jpeg,WebP
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Jpeg,WebP
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Jpeg,WebP
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Jpeg,WebP
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Jpeg,WebP
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Jpeg,WebP
+    resize.height-600-upscale | 600 high | writes True | suffix 600 high | out Jpeg,WebP
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Jpeg,WebP
+    rotate.right | Right | writes True | suffix rotated right | out Jpeg,WebP
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg,WebP
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
+    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
+# C:\p\a.png + C:\p\b.bmp + C:\p\c.tif
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg,Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP,WebP
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Bmp,Tiff
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Bmp,Tiff
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png,Bmp,Tiff
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png,Bmp,Tiff
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png,Bmp,Tiff
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png,Bmp,Tiff
+    resize.height-600-upscale | 600 high | writes True | suffix 600 high | out Png,Bmp,Tiff
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png,Bmp,Tiff
+    rotate.right | Right | writes True | suffix rotated right | out Png,Bmp,Tiff
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Bmp,Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
+# C:\p\a.txt
+# C:\p\a.pdf
+# C:\p\a.png + C:\p\b.txt
+# C:\p\noext
+# (empty)
+# \\server\share\a.png
+  [Convert] Convert
+    convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
+    convert.to-webp | To WebP | writes True | suffix - | out WebP
+    convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+    convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Compress] Compress
+    compress.lossless | Lossless | writes True | suffix compressed | out Png
+  [Resize] Resize
+    resize.percent-25 | 25% | writes True | suffix resized 25% | out Png
+    resize.percent-50 | 50% | writes True | suffix resized 50% | out Png
+    resize.percent-75 | 75% | writes True | suffix resized 75% | out Png
+    resize.box-1920x1080 | 1920×1080 | writes True | suffix 1920x1080 | out Png
+    resize.box-1280x720 | 1280×720 | writes True | suffix 1280x720 | out Png
+    resize.box-1080x1080 | 1080×1080 | writes True | suffix 1080x1080 | out Png
+    resize.height-600-upscale | 600 high | writes True | suffix 600 high | out Png
+  [Rotate] Rotate
+    rotate.left | Left | writes True | suffix rotated left | out Png
+    rotate.right | Right | writes True | suffix rotated right | out Png
+    rotate.180 | 180° | writes True | suffix rotated 180 | out Png
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
+# C:\p\a.png:stream
+# C:\p\a.png.
