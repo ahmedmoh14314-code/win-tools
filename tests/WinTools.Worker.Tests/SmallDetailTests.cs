@@ -53,7 +53,7 @@ public sealed class SmallDetailTests
     }
 
     /// <summary>Glyph-like strokes in a colour, on a panel or straight on the photograph.</summary>
-    private static RasterImage WithText(RasterImage photo, int x0, int y0, int w, int h, (byte R, byte G, byte B) fg, (byte R, byte G, byte B)? bg, int stroke, int seed)
+    internal static RasterImage WithText(RasterImage photo, int x0, int y0, int w, int h, (byte R, byte G, byte B) fg, (byte R, byte G, byte B)? bg, int stroke, int seed)
     {
         var bgra = (byte[])photo.Bgra.Clone();
         var rnd = new Random(seed);
@@ -68,7 +68,7 @@ public sealed class SmallDetailTests
         return photo.WithPixels(photo.Width, photo.Height, bgra);
     }
 
-    private static RasterImage Crop(RasterImage image, int x0, int y0, int w, int h)
+    internal static RasterImage Crop(RasterImage image, int x0, int y0, int w, int h)
     {
         var bgra = new byte[w * h * 4];
         for (var y = 0; y < h; y++) Array.Copy(image.Bgra, ((y0 + y) * image.Width + x0) * 4, bgra, y * w * 4, w * 4);
@@ -76,7 +76,7 @@ public sealed class SmallDetailTests
     }
 
     /// <summary>Mean CIE76 ΔE over every pixel (sRGB, D65), independent of the product's implementation.</summary>
-    private static double MeanDeltaE(RasterImage a, RasterImage b)
+    internal static double MeanDeltaE(RasterImage a, RasterImage b)
     {
         double sum = 0;
         for (var i = 0; i < a.Bgra.Length; i += 4)

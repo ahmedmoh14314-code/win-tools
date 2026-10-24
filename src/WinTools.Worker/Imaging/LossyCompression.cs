@@ -34,21 +34,21 @@ internal static class LossyCompression
     private static readonly int[] Ladder = [95, 93, 90, 88, 85, 82, 80, 75, 70, 65, 60, 55, 50];
 
     internal sealed record Preset(CompressLevel Level, int MinQuality, double Luma, double WorstLuma, double Chroma, double MeanDeltaE, double DeltaE99, double Edge,
-        double WorstTileLuma, double WorstTileDeltaE)
+        double WorstTileLuma, double WorstTileDeltaE, double WorstTileOver6 = 1)
     {
         public bool Accepts(FidelityReport f) =>
             f.LumaSsim >= Luma && f.WorstLumaSsim >= WorstLuma && f.ChromaSsim >= Chroma
             && f.MeanDeltaE <= MeanDeltaE && f.DeltaE99 <= DeltaE99 && f.EdgeSsim >= Edge
-            && f.WorstTileLumaSsim >= WorstTileLuma && f.WorstTileDeltaE <= WorstTileDeltaE;
+            && f.WorstTileLumaSsim >= WorstTileLuma && f.WorstTileDeltaE <= WorstTileDeltaE && f.WorstTileOver6 <= WorstTileOver6;
     }
 
     /// <summary>High: no visible difference. Balanced: differences only on close comparison. Smallest: visible on close
     /// inspection, never damaged.</summary>
     public static Preset For(CompressLevel level) => level switch
     {
-        CompressLevel.High => new(level, MinQuality: 85, Luma: 0.990, WorstLuma: 0.970, Chroma: 0.993, MeanDeltaE: 1.0, DeltaE99: 4.0, Edge: 0.975, WorstTileLuma: 0.975, WorstTileDeltaE: 3.0),
-        CompressLevel.Balanced => new(level, MinQuality: 65, Luma: 0.980, WorstLuma: 0.930, Chroma: 0.985, MeanDeltaE: 1.5, DeltaE99: 6.0, Edge: 0.950, WorstTileLuma: 0.950, WorstTileDeltaE: 5.0),
-        CompressLevel.Small => new(level, MinQuality: 50, Luma: 0.960, WorstLuma: 0.880, Chroma: 0.970, MeanDeltaE: 2.5, DeltaE99: 10.0, Edge: 0.900, WorstTileLuma: 0.900, WorstTileDeltaE: 7.0),
+        CompressLevel.High => new(level, MinQuality: 85, Luma: 0.990, WorstLuma: 0.970, Chroma: 0.993, MeanDeltaE: 1.0, DeltaE99: 4.0, Edge: 0.975, WorstTileLuma: 0.970, WorstTileDeltaE: 4.0),
+        CompressLevel.Balanced => new(level, MinQuality: 65, Luma: 0.980, WorstLuma: 0.930, Chroma: 0.985, MeanDeltaE: 1.5, DeltaE99: 6.0, Edge: 0.950, WorstTileLuma: 0.930, WorstTileDeltaE: 6.0, WorstTileOver6: 0.25),
+        CompressLevel.Small => new(level, MinQuality: 50, Luma: 0.960, WorstLuma: 0.880, Chroma: 0.970, MeanDeltaE: 2.5, DeltaE99: 10.0, Edge: 0.900, WorstTileLuma: 0.880, WorstTileDeltaE: 6.0),
         _ => throw new ArgumentOutOfRangeException(nameof(level), level, "Lossless is not a lossy preset."),
     };
 
