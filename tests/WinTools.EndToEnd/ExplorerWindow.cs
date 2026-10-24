@@ -140,8 +140,11 @@ internal sealed class ExplorerWindow : IDisposable
             try { ((dynamic)e.Browser).Quit(); } catch (COMException) { }
     }
 
+    // Compared as local paths: Explorer's LocationURL and .NET's AbsoluteUri escape non-ASCII names (Arabic, emoji)
+    // differently, so comparing the URL strings never matched such a folder.
     private static bool SameFolder(string url, string folder) =>
-        string.Equals(url.TrimEnd('/'), new Uri(Path.GetFullPath(folder).TrimEnd('\\')).AbsoluteUri.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+        Uri.TryCreate(url, UriKind.Absolute, out var u) && u.IsFile
+        && string.Equals(Path.TrimEndingDirectorySeparator(u.LocalPath), Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)), StringComparison.OrdinalIgnoreCase);
 
     private readonly record struct Entry(nint Hwnd, string Url, object Browser);
 
