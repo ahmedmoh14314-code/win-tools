@@ -18,7 +18,9 @@ public static class RadialMenu
     /// </summary>
     public static IReadOnlyList<MenuGroup> Build(IReadOnlyList<CapabilityDescriptor> allowed, IReadOnlyList<CapabilityCategory> categories)
     {
-        var known = categories.ToDictionary(c => c.Id, StringComparer.Ordinal);
+        // The first declaration of an id wins; "more" is the menu's own overflow category, which no module may take.
+        var known = categories.Where(c => c.Id != CapabilityCategory.More.Id).DistinctBy(c => c.Id, StringComparer.Ordinal)
+            .ToDictionary(c => c.Id, StringComparer.Ordinal);
         var groups = allowed
             .GroupBy(c => known.TryGetValue(c.Category, out var category) ? category : CapabilityCategory.Other)
             .OrderBy(g => g.Key.Order).ThenBy(g => g.Key.Id, StringComparer.Ordinal)

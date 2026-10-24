@@ -32,8 +32,12 @@ public partial class App : Application
 
     private void Answer(PickResult result)
     {
-        using (var output = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)))
+        try
+        {
+            using var output = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false));
             output.WriteLine(WorkerProtocol.Serialize(result));
+        }
+        catch (IOException) { } // the host stopped listening (it gave up or exited): there is nobody left to answer
         Shutdown();
     }
 }

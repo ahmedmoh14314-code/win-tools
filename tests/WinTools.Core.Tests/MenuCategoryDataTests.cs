@@ -11,6 +11,15 @@ public sealed class MenuCategoryDataTests
         new(id, id, category, module, new InputRule(FileKinds.All.Select(k => k.Id).ToHashSet()), CapabilityShape.PerFile, CapabilityOutput.Facts, false);
 
     [Fact]
+    public void A_module_category_may_not_take_the_reserved_more_id()
+    {
+        // "more" is the menu's own overflow category: a module that declares it gets Other, never a second "more" group.
+        CapabilityCategory clash = new("more", "Lots", "x", 5);
+        var menu = RadialMenu.Build([Any("x.one", "more")], [clash, clash]); // a duplicate is tolerated too
+        Assert.Equal(["Other"], menu.Select(g => g.Label));
+    }
+
+    [Fact]
     public void A_new_module_category_takes_its_declared_place_with_its_icon()
     {
         CapabilityCategory files = new("file", "File", "file", 50); // between Rotate (40) and Tools (90)

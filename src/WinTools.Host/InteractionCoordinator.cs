@@ -341,10 +341,21 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     /// <summary>"More…": the commands that did not fit the ring, in a list (the dialogs process); the pick runs on the dropped files.</summary>
     private async Task PickAndRunAsync(IReadOnlyList<CapabilityDescriptor> commands, IReadOnlyList<string> paths, int x, int y)
     {
-        var request = new PickRequest("More commands", [.. commands.Select(c => new PickItem(c.Id, c.Label))], x, y);
-        var chosen = await DialogsClient.Default.PickAsync(request).ConfigureAwait(false);
-        _log.Event("more.pick", new { offered = commands.Count, chosen });
-        if (commands.FirstOrDefault(c => c.Id == chosen) is { } capability) Run(capability, paths);
+        // Fire and forget from Drop: nothing here may throw unobserved (evaluator, PR #17). Runs on a pool thread; the
+        // scheduler, the log and the presenter are thread-safe.
+        try
+        {
+            var request = new PickRequest("More commands", [.. commands.Select(c => new PickItem(c.Id, c.Label))], x, y);
+            var outcome = await DialogsClient.Default.PickAsync(request).ConfigureAwait(false);
+            _log.Event("more.pick", new { offered = commands.Count, end = outcome.End.ToString(), chosen = outcome.Id });
+            if (outcome.End == PickEnd.Unavailable) _feedback.DialogUnavailable(); // an accepted drop that runs nothing must say so
+            else if (commands.FirstOrDefault(c => c.Id == outcome.Id) is { } capability) Run(capability, paths);
+        }
+        catch (Exception ex)
+        {
+            _log.Event("more.error", new { type = ex.GetType().Name });
+            _feedback.DialogUnavailable();
+        }
     }
 
     public void Dispose()

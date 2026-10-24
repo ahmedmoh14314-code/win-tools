@@ -6,6 +6,8 @@
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>..\WinTools.Host\Assets\WinTools.ico</ApplicationIcon>
+    <!-- LibraryImport (Native.cs, monitor placement) generates unsafe marshalling code. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <Using Include="System.IO" />
