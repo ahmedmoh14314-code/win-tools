@@ -79,9 +79,9 @@ public sealed class SettingsHardeningTests : IDisposable
     private string PathOf => Path.Combine(_dir.Path, "settings.json");
 
     [Theory]
-    [InlineData("{\"schema\":2,\"outputPolicy\":\"AskEachTime\"}")]   // a value this version cannot parse
-    [InlineData("{\"Schema\":2,\"triggerKey\":\"F9\",\"futureField\":1}")] // other casing
-    [InlineData("{\"schema\":\"3\",\"futureField\":1}")]                 // schema as a string
+    [InlineData("{\"schema\":3,\"outputPolicy\":\"AskEachTime\"}")]   // a value this version cannot parse
+    [InlineData("{\"Schema\":3,\"triggerKey\":\"F9\",\"futureField\":1}")] // other casing
+    [InlineData("{\"schema\":\"4\",\"futureField\":1}")]                 // schema as a string
     public void Newer_schema_is_never_moved_aside_or_overwritten(string json)
     {
         File.WriteAllText(PathOf, json);
