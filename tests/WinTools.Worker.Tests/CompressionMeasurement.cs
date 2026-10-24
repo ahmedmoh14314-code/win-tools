@@ -66,7 +66,7 @@ public sealed class CompressionMeasurement(ITestOutputHelper output) : IDisposab
     [MeasurementFact]
     public void Measure_fidelity_axes()
     {
-        output.WriteLine($"{"file",-26} {"enc",-9} {"saved",7} {"ssim",7} {"worst",7} {"chroma",7} {"dE",6} {"dE99",6} {"edge",7} {"ms",5}");
+        output.WriteLine($"{"file",-26} {"enc",-9} {"saved",7} {"ssim",7} {"worst",7} {"chroma",7} {"dE",6} {"dE99",6} {"edge",7} {"tile",7} {"tileDE",6} {"ms",5}");
         foreach (var s in CompressionCorpus.All().Where(x => x.Format is WinTools.Core.Files.ImageFormat.Jpeg or WinTools.Core.Files.ImageFormat.WebP))
         {
             var original = ImagePipeline.Decode(s.Bytes, s.Format).Image;
@@ -87,8 +87,24 @@ public sealed class CompressionMeasurement(ITestOutputHelper output) : IDisposab
                 var watch = System.Diagnostics.Stopwatch.StartNew();
                 var f = Fidelity.Compare(original, decoded);
                 var ms = watch.Elapsed.TotalMilliseconds;
-                output.WriteLine($"{s.Name,-26} {name,-9} {100.0 * (s.Bytes.Length - bytes.Length) / s.Bytes.Length,6:0.0}% {f.LumaSsim,7:0.0000} {f.WorstLumaSsim,7:0.0000} {f.ChromaSsim,7:0.0000} {f.MeanDeltaE,6:0.00} {f.DeltaE99,6:0.00} {f.EdgeSsim,7:0.0000} {ms,5:0}");
+                output.WriteLine($"{s.Name,-26} {name,-9} {100.0 * (s.Bytes.Length - bytes.Length) / s.Bytes.Length,6:0.0}% {f.LumaSsim,7:0.0000} {f.WorstLumaSsim,7:0.0000} {f.ChromaSsim,7:0.0000} {f.MeanDeltaE,6:0.00} {f.DeltaE99,6:0.00} {f.EdgeSsim,7:0.0000} {f.WorstTileLumaSsim,7:0.0000} {f.WorstTileDeltaE,6:0.00} {ms,5:0}");
             }
+        }
+    }
+
+    /// <summary>The captioned photograph of CompressionQualityTests: the worst tile against the caption's own SSIM.</summary>
+    [MeasurementFact]
+    public void Measure_caption_tiles()
+    {
+        var source = CompressionQualityTests.CaptionedPhoto();
+        var original = ImagePipeline.Decode(source, WinTools.Core.Files.ImageFormat.Jpeg).Image;
+        foreach (var q in new[] { 95, 93, 90, 88, 85, 82, 80, 75, 70, 65, 60, 55, 50 })
+        {
+            var bytes = WicCodec.Encode(original, WinTools.Core.Files.ImageFormat.Jpeg, q / 100f);
+            var decoded = ImagePipeline.Decode(bytes, WinTools.Core.Files.ImageFormat.Jpeg).Image;
+            var f = Fidelity.Compare(original, decoded);
+            var caption = Ssim.Luma(CompressionQualityTests.Caption(original), CompressionQualityTests.Caption(decoded));
+            output.WriteLine($"caption q{q}: saved {100.0 * (source.Length - bytes.Length) / source.Length,5:0.0}% luma {f.LumaSsim:0.0000} worst {f.WorstLumaSsim:0.0000} tile {f.WorstTileLumaSsim:0.0000} tileDE {f.WorstTileDeltaE:0.00} caption {caption:0.0000}");
         }
     }
 
@@ -149,6 +165,28 @@ public sealed class CompressionMeasurement(ITestOutputHelper output) : IDisposab
                 if (r.OutputPath is { } o) File.Delete(o);
             }
         }
+    }
+
+    /// <summary>
+    /// Four 48 MP 4:4:4 JPEGs compressed at once through the real worker processes and the host's 60 s job timeout,
+    /// with as many lanes as the host uses on this machine and with 4: the case one machine's single-file times hid.
+    /// </summary>
+    [MeasurementFact]
+    public async Task Measure_compress_batch_of_large_files_through_the_worker()
+    {
+        var image = CompressionCorpus.Photo(seed: 34, width: 8000, height: 6000);
+        var bytes = WicCodec.Encode(image, WinTools.Core.Files.ImageFormat.Jpeg, 0.97f, fullChroma: true);
+        output.WriteLine($"processors {Environment.ProcessorCount}, source {bytes.Length / 1048576.0:0.0} MB");
+        foreach (var lanes in new[] { 0, 4 })
+            foreach (var level in new[] { "high", "small" })
+            {
+                var requests = Enumerable.Range(0, 4).Select(i => new ConversionRequest($"B{Interlocked.Increment(ref _seq)}", $"compress.{level}", _dir.Write($"big{lanes}{level}{i}.jpg", bytes))).ToArray();
+                var client = new WinTools.Host.Jobs.WorkerClient(Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.exe"), TimeSpan.FromSeconds(60), parallelism: lanes);
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                var results = await client.RunAsync(requests, CancellationToken.None);
+                output.WriteLine($"lanes {(lanes == 0 ? "default" : lanes.ToString())} {level}: {watch.Elapsed.TotalSeconds:0.0} s for 4 · " + string.Join(", ", results.Select(r => r.Success ? "written" : r.Error.ToString())));
+                foreach (var r in results) if (r.OutputPath is { } o) File.Delete(o);
+            }
     }
 
     public void Dispose() => _dir.Dispose();

@@ -97,5 +97,14 @@ PNG stays lossless and is verified pixel for pixel, with the same 8 % minimum.
   - a 64×48 image that is mostly ICC profile;
   - x·y aliasing art.
 
+## Amendment: worst-tile gates, search deadline, transparency (2026-10-24, evaluator review of PR #12)
+- **Worst tile.** The worst-region gate (1st percentile of windows) cannot see damage in less than 1 % of the image. Two axes are added: the mean luma SSIM and the mean ΔE of the worst 64×64 tile, with tiles every 32 px, so damage 32 px or more across lies almost wholly in one tile. Gates: tile SSIM ≥ 0.975, 0.950 and 0.900; tile ΔE ≤ 3, 5 and 7 (High, Balanced, Smallest). The probe and the measurements are in `docs/performance/2026-10-23-compression.md`. Before the gates, Balanced left a caption covering 0.4 % of a photo at SSIM 0.926, under its floor.
+- **Thin images.** Images under 8 px on a side were compared as one window, so a damaged stretch of a long strip averaged away. They are compared in windows of the short side × 8 px along the long side.
+- **Deadline.** The search stops after 25 s and uses the best passing copy found so far. With none, the job fails with the timeout reason and writes nothing; "already optimized" is said only when the search finished. There is no cancellation token inside the worker: the host's cancel and its 60 s timeout kill the worker process, and the deadline keeps a slow search inside that limit.
+- **Transparency.** Fidelity is measured on white, so a change in alpha alone would be invisible to it. A candidate whose alpha differs from the source's is rejected. libwebp keeps lossy WebP's alpha lossless today; `Lossy_webp_keeps_transparency_exactly` guards it.
+- **Wording.** A mixed Compress batch says what was saved and how many files were already optimized. The "less than 8%" message no longer depends on the worker's culture.
+- **Test independence, stated precisely.** The release tests' SSIM (`Ssim` in the test project) is separate code, but it uses the same window size, grid and constants as the product's luma axis. It guards against a bug in the product's code, not against a blind spot of the method; the caption probe measures the region on its own for that reason.
+- **Thin margins.** Some corpus results sit close to their floors (camera High at 0.9908 against 0.990). A change in the encoder or the corpus can move them; the tests then fail and the numbers here are revisited, never the floors lowered silently.
+
 ## Evaluator review
-Pending (PR 0.3).
+PR #12, 2026-10-24: no blocker. Two major findings (damage in less than 1 % of the image passed; the time was measured on one machine only) and the minor ones are answered by the amendment above.

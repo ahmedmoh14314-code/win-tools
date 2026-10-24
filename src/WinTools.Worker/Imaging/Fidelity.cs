@@ -13,15 +13,20 @@ namespace WinTools.Worker.Imaging;
 /// second pixel of every second row: shifted colours, in perceptual units (about 2.3 is just noticeable).</item>
 /// <item><see cref="EdgeSsim"/>: structural similarity of the brightness gradient (Sobel magnitude): ringing,
 /// blurring and blocking at edges.</item>
+/// <item><see cref="WorstTileLumaSsim"/> and <see cref="WorstTileDeltaE"/>: the mean luma SSIM and the mean ΔE of the
+/// worst 64×64 tile. A percentile over the whole image cannot see damage confined to less than 1 % of it (a caption or
+/// a logo in a large photograph); a tile can, whatever the image size. Tiles overlap by half (one every 32 px), so
+/// damage 32 px or more across lies almost wholly inside one tile instead of being split between four.</item>
 /// </list>
 /// Transparent pixels are compared as composited onto white, which is how the user sees them on a light background.
 /// </summary>
-internal readonly record struct FidelityReport(double LumaSsim, double WorstLumaSsim, double ChromaSsim, double MeanDeltaE, double DeltaE99, double EdgeSsim);
+internal readonly record struct FidelityReport(double LumaSsim, double WorstLumaSsim, double ChromaSsim, double MeanDeltaE, double DeltaE99, double EdgeSsim,
+    double WorstTileLumaSsim, double WorstTileDeltaE);
 
 /// <summary>
-/// Computes a <see cref="FidelityReport"/> streaming over rows of 4×4 blocks, in parallel bands. Memory is a few rows and
-/// a histogram per band whatever the image size (the worker's 50-megapixel images included); nothing the size of a plane
-/// is kept.
+/// Computes a <see cref="FidelityReport"/> streaming over rows of 4×4 blocks, in parallel bands. Its own working memory is
+/// a few rows, a histogram and the 32×32 cell sums per band (about 9 MB at 48 MP); it builds no plane of its own. The two
+/// images it compares are, of course, whole: the source and the decoded candidate are each a full BGRA buffer.
 /// </summary>
 internal static class Fidelity
 {
@@ -34,28 +39,62 @@ internal static class Fidelity
     {
         if (a.Width != b.Width || a.Height != b.Height) throw new ArgumentException("Images differ in size.");
         var (bw, bh) = (a.Width / Block, a.Height / Block);
-        var (meanDe, de99) = DeltaE(a, b);
-        if (bw < 2 || bh < 2) return Tiny(a, b, meanDe, de99);
+        var cells = new Cells(a.Width, a.Height);
+        var (meanDe, de99, worstTileDe) = DeltaE(a, b, cells);
+        if (bw < 2 || bh < 2) return Thin(a, b, meanDe, de99, worstTileDe);
 
         // Window rows 1..bh-1 (each uses block rows wy-1 and wy), split into bands that run in parallel and are merged.
         var bands = Math.Clamp(Math.Min(Environment.ProcessorCount, (bh - 1) / 16), 1, 8);
         var parts = new Band[bands];
-        Parallel.For(0, bands, k => parts[k] = Band.Run(a, b, 1 + (bh - 1) * k / bands, 1 + (bh - 1) * (k + 1) / bands));
+        Parallel.For(0, bands, k => parts[k] = Band.Run(a, b, cells, 1 + (bh - 1) * k / bands, 1 + (bh - 1) * (k + 1) / bands));
         var all = parts[0];
         for (var k = 1; k < bands; k++) all.Merge(parts[k]);
-        return new FidelityReport(all.Luma / all.Windows, all.Worst.Percentile(0.01), all.Chroma / all.Windows, meanDe, de99, all.Edge / all.Windows);
+        return new FidelityReport(all.Luma / all.Windows, all.Worst.Percentile(0.01), all.Chroma / all.Windows, meanDe, de99, all.Edge / all.Windows,
+            cells.WorstTile(all.TileLuma, all.TileWindows, lowest: true), worstTileDe);
+    }
+
+    /// <summary>
+    /// The image cut into 32×32 cells (the last row and column take the remainder); a tile is 2×2 cells, so tiles are
+    /// 64×64 and start every 32 px. Sums are kept per cell, a few thousand doubles even at 50 MP.
+    /// </summary>
+    private sealed class Cells(int width, int height)
+    {
+        private const int Size = 32;
+        public int X { get; } = Math.Max(1, width / Size);
+        public int Y { get; } = Math.Max(1, height / Size);
+        public int Count => X * Y;
+
+        public int Of(int x, int y) => Math.Min(y / Size, Y - 1) * X + Math.Min(x / Size, X - 1);
+
+        /// <summary>The lowest (or highest) tile mean, a tile being cells (cx..cx+1, cy..cy+1).</summary>
+        public double WorstTile(double[] sums, long[] counts, bool lowest)
+        {
+            var worst = lowest ? double.MaxValue : double.MinValue;
+            for (var ty = 0; ty < Math.Max(1, Y - 1); ty++)
+                for (var tx = 0; tx < Math.Max(1, X - 1); tx++)
+                {
+                    double s = 0; long n = 0;
+                    for (var cy = ty; cy <= Math.Min(ty + 1, Y - 1); cy++)
+                        for (var cx = tx; cx <= Math.Min(tx + 1, X - 1); cx++) { s += sums[cy * X + cx]; n += counts[cy * X + cx]; }
+                    if (n == 0) continue;
+                    worst = lowest ? Math.Min(worst, s / n) : Math.Max(worst, s / n);
+                }
+            return worst is double.MaxValue or double.MinValue ? (lowest ? 1 : 0) : worst;
+        }
     }
 
     /// <summary>The windows of rows [first, end) of the window grid, from the block rows they need.</summary>
-    private sealed class Band
+    private sealed class Band(Cells cells)
     {
         public double Luma, Chroma, Edge;
         public long Windows;
         public Histogram Worst { get; } = new(-1, 1, 4000);
+        public double[] TileLuma { get; } = new double[cells.Count];
+        public long[] TileWindows { get; } = new long[cells.Count];
 
-        public static Band Run(RasterImage a, RasterImage b, int first, int end)
+        public static Band Run(RasterImage a, RasterImage b, Cells cells, int first, int end)
         {
-            var band = new Band();
+            var band = new Band(cells);
             var w = a.Width;
             var bw = w / Block;
             var lumaA = new LumaRows(a);
@@ -84,6 +123,9 @@ internal static class Fidelity
                         var l = Window(previous, current, bx, 0, win);
                         band.Luma += l;
                         band.Worst.Add(l);
+                        var cell = cells.Of(bx * Block, (by - 1) * Block);
+                        band.TileLuma[cell] += l;
+                        band.TileWindows[cell]++;
                         band.Chroma += (Window(previous, current, bx, 1, win) + Window(previous, current, bx, 2, win)) / 2;
                         band.Edge += Window(previous, current, bx, 3, win);
                         band.Windows++;
@@ -97,6 +139,7 @@ internal static class Fidelity
         {
             (Luma, Chroma, Edge, Windows) = (Luma + other.Luma, Chroma + other.Chroma, Edge + other.Edge, Windows + other.Windows);
             Worst.Merge(other.Worst);
+            for (var c = 0; c < TileLuma.Length; c++) { TileLuma[c] += other.TileLuma[c]; TileWindows[c] += other.TileWindows[c]; }
         }
     }
 
@@ -120,19 +163,39 @@ internal static class Fidelity
         return (2 * ma * mb + C1) * (2 * cov + C2) / ((ma * ma + mb * mb + C1) * (va + vb + C2));
     }
 
-    /// <summary>Images smaller than one window (under 8 px a side): one window over everything, gradient left out.</summary>
-    private static FidelityReport Tiny(RasterImage a, RasterImage b, double meanDe, double de99)
+    /// <summary>
+    /// Images under 8 px on a side, where no 8×8 window fits: windows of the full short side by 8 px of the long side
+    /// (or the whole image when both sides are short), every 4 px along it, so a damaged stretch of a long thin strip is
+    /// not averaged away. The gradient is left out (edge = luma); the worst window stands in for the worst tile.
+    /// </summary>
+    private static FidelityReport Thin(RasterImage a, RasterImage b, double meanDe, double de99, double worstTileDe)
     {
+        var alongX = a.Width >= a.Height;
+        var (length, across) = alongX ? (a.Width, a.Height) : (a.Height, a.Width);
+        var span = Math.Min(8, length);
         var sums = new double[3 * Sums];
-        for (var i = 0; i < a.Bgra.Length; i += 4)
+        double luma = 0, chroma = 0, worst = double.MaxValue;
+        var windows = 0;
+        for (var start = 0; start + span <= length; start += 4)
         {
-            var (ya, cba, cra) = Ycc(a.Bgra, i);
-            var (yb, cbb, crb) = Ycc(b.Bgra, i);
-            Add(sums, 0, ya, yb); Add(sums, Sums, cba, cbb); Add(sums, 2 * Sums, cra, crb);
+            Array.Clear(sums);
+            for (var t = start; t < start + span; t++)
+                for (var u = 0; u < across; u++)
+                {
+                    var i = (alongX ? u * a.Width + t : t * a.Width + u) * 4;
+                    var (ya, cba, cra) = Ycc(a.Bgra, i);
+                    var (yb, cbb, crb) = Ycc(b.Bgra, i);
+                    Add(sums, 0, ya, yb); Add(sums, Sums, cba, cbb); Add(sums, 2 * Sums, cra, crb);
+                }
+            var n = span * across;
+            var l = Ssim(sums.AsSpan(0, Sums), n);
+            luma += l;
+            worst = Math.Min(worst, l);
+            chroma += (Ssim(sums.AsSpan(Sums, Sums), n) + Ssim(sums.AsSpan(2 * Sums, Sums), n)) / 2;
+            windows++;
+            if (span == length) break;
         }
-        var n = a.Width * a.Height;
-        var luma = Ssim(sums.AsSpan(0, Sums), n);
-        return new FidelityReport(luma, luma, (Ssim(sums.AsSpan(Sums, Sums), n) + Ssim(sums.AsSpan(2 * Sums, Sums), n)) / 2, meanDe, de99, luma);
+        return new FidelityReport(luma / windows, worst, chroma / windows, meanDe, de99, luma / windows, worst, worstTileDe);
     }
 
     /// <summary>Y, Cb, Cr (BT.601 full range, as JPEG uses) of one pixel composited onto white.</summary>
@@ -179,16 +242,20 @@ internal static class Fidelity
         }
     }
 
-    /// <summary>Mean and 99th percentile of CIE76 ΔE on every second pixel of every second row.</summary>
-    private static (double Mean, double P99) DeltaE(RasterImage a, RasterImage b)
+    /// <summary>Mean, 99th percentile and worst tile mean of CIE76 ΔE on every second pixel of every second row.</summary>
+    private static (double Mean, double P99, double WorstTile) DeltaE(RasterImage a, RasterImage b, Cells cells)
     {
         var rows = (a.Height + 1) / 2;
         var bands = Math.Clamp(Math.Min(Environment.ProcessorCount, rows / 32), 1, 8);
         var histograms = new Histogram[bands];
         var sums = new double[bands];
+        var cellSums = new double[bands][];
+        var cellCounts = new long[bands][];
         Parallel.For(0, bands, k =>
         {
             var histogram = histograms[k] = new Histogram(0, 200, 4000);
+            var cs = cellSums[k] = new double[cells.Count];
+            var cn = cellCounts[k] = new long[cells.Count];
             for (var r = rows * k / bands; r < rows * (k + 1) / bands; r++)
                 for (var x = 0; x < a.Width; x += 2)
                 {
@@ -198,10 +265,17 @@ internal static class Fidelity
                     var de = MathF.Sqrt((l1 - l2) * (l1 - l2) + (a1 - a2) * (a1 - a2) + (b1 - b2) * (b1 - b2));
                     sums[k] += de;
                     histogram.Add(de);
+                    var c = cells.Of(x, 2 * r);
+                    cs[c] += de;
+                    cn[c]++;
                 }
         });
-        for (var k = 1; k < bands; k++) histograms[0].Merge(histograms[k]);
-        return (sums.Sum() / histograms[0].Total, histograms[0].Percentile(0.99, upper: true));
+        for (var k = 1; k < bands; k++)
+        {
+            histograms[0].Merge(histograms[k]);
+            for (var c = 0; c < cells.Count; c++) { cellSums[0][c] += cellSums[k][c]; cellCounts[0][c] += cellCounts[k][c]; }
+        }
+        return (sums.Sum() / histograms[0].Total, histograms[0].Percentile(0.99, upper: true), cells.WorstTile(cellSums[0], cellCounts[0], lowest: false));
     }
 
     private static readonly float[] Linear = [.. Enumerable.Range(0, 256).Select(v =>

@@ -49,6 +49,63 @@ public sealed class FidelityMetricTests
         Assert.True(f.WorstLumaSsim < 0.5, $"worst {f.WorstLumaSsim:0.0000}");
     }
 
+    // Evaluator, PR #12: percentiles over the whole image cannot see damage in less than 1 % of it, so the worst axes
+    // are also pooled per 64×64 tile and the worst tile is reported.
+    private static readonly RasterImage Large = CompressionCorpus.Photo(seed: 23);
+
+    private static RasterImage Damaged(RasterImage image, int x0, int y0, int size, Action<byte[], int> damage)
+    {
+        var bgra = (byte[])image.Bgra.Clone();
+        for (var y = y0; y < y0 + size; y++)
+            for (var x = x0; x < x0 + size; x++) damage(bgra, (y * image.Width + x) * 4);
+        return image.WithPixels(image.Width, image.Height, bgra);
+    }
+
+    [Fact]
+    public void Damage_in_far_less_than_one_percent_of_a_large_image_is_seen_by_the_worst_tile()
+    {
+        // 40×40 px of 1600×1200: 0.08 % of the image
+        var damaged = Damaged(Large, 803, 611, 40, (px, i) => { var v = (byte)((i / 4 % 2) == 0 ? 20 : 235); (px[i], px[i + 1], px[i + 2]) = (v, v, v); });
+        var f = Fidelity.Compare(Large, damaged);
+        Assert.True(f.LumaSsim > 0.99, $"mean {f.LumaSsim:0.0000}");
+        Assert.True(f.WorstTileLumaSsim < 0.8, $"worst tile {f.WorstTileLumaSsim:0.0000} (1st percentile {f.WorstLumaSsim:0.0000})");
+    }
+
+    [Fact]
+    public void A_colour_shift_in_a_small_region_is_seen_by_the_worst_tile_delta_e()
+    {
+        var shifted = Damaged(Large, 803, 611, 40, (px, i) => { px[i + 2] = (byte)Math.Min(255, px[i + 2] + 60); px[i] = (byte)Math.Max(0, px[i] - 40); });
+        var f = Fidelity.Compare(Large, shifted);
+        Assert.True(f.DeltaE99 < 2, $"ΔE99 {f.DeltaE99:0.00}: the region is below the 99th percentile");
+        Assert.True(f.WorstTileDeltaE > 4, $"worst tile ΔE {f.WorstTileDeltaE:0.00}");
+    }
+
+    [Fact]
+    public void An_identical_image_has_perfect_tiles()
+    {
+        var f = Fidelity.Compare(Large, Large);
+        Assert.Equal(1.0, Math.Round(f.WorstTileLumaSsim, 9));
+        Assert.Equal(0, f.WorstTileDeltaE);
+    }
+
+    [Fact]
+    public void A_long_thin_image_is_compared_in_windows_along_its_length()
+    {
+        // 6 px high: no 8×8 window fits; a single window over 4000 px would average a damaged stretch away.
+        var thin = CompressionCorpus.Photo(seed: 24, width: 4000, height: 6);
+        var damaged = (byte[])thin.Bgra.Clone();
+        for (var y = 0; y < 6; y++)
+            for (var x = 2000; x < 2040; x++)
+            {
+                var i = (y * 4000 + x) * 4;
+                var v = (byte)(x % 2 == 0 ? 20 : 235);
+                (damaged[i], damaged[i + 1], damaged[i + 2]) = (v, v, v);
+            }
+        var f = Fidelity.Compare(thin, thin.WithPixels(4000, 6, damaged));
+        Assert.True(f.LumaSsim > 0.95, $"mean {f.LumaSsim:0.0000}");
+        Assert.True(f.WorstLumaSsim < 0.8 && f.WorstTileLumaSsim < 0.8, $"worst {f.WorstLumaSsim:0.0000}, tile {f.WorstTileLumaSsim:0.0000}");
+    }
+
     [Fact]
     public void A_colour_shift_is_measured_in_delta_e()
     {

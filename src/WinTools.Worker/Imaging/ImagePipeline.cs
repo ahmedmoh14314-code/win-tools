@@ -1,3 +1,4 @@
+using System.Globalization;
 using WinTools.Core.Capabilities;
 using WinTools.Core.Files;
 using WinTools.Core.Jobs;
@@ -62,7 +63,7 @@ internal static class ImagePipeline
             case OperationKind.Compress:
                 bytes = Compress(image, output, op.Compress, input);
                 if (bytes.LongLength > (long)Math.Floor(input.LongLength * (1 - LossyCompression.MinimumSaving)))
-                    throw new ImagingException(ErrorCode.NothingToDo, $"Already optimized: this setting would save less than {LossyCompression.MinimumSaving:P0}; no copy was written.");
+                    throw new ImagingException(ErrorCode.NothingToDo, string.Create(CultureInfo.InvariantCulture, $"Already optimized: this setting would save less than {LossyCompression.MinimumSaving * 100:0}%; no copy was written."));
                 break;
             default:
                 throw new ImagingException(ErrorCode.UnsupportedOperation, $"Operation {op.Id} is not supported.");

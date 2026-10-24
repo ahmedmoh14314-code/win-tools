@@ -44,8 +44,9 @@ public static class FeedbackText
             return new(FeedbackKind.Failure, $"Could not {Verb(operation)} {Images(n)}", MostCommonReason(failed));
 
         var parts = new List<string>();
+        if (operation.Kind == OperationKind.Compress && TotalSizes(operation, ok) is { } sizes) parts.Add(sizes); // what was saved is the point
         if (failed.Length > 0) parts.Add($"{failed.Length} failed: {MostCommonReason(failed).TrimEnd('.')}");
-        if (unchanged.Length > 0) parts.Add($"{unchanged.Length} unchanged");
+        if (unchanged.Length > 0) parts.Add(operation.Kind == OperationKind.Compress ? $"{unchanged.Length} already optimized" : $"{unchanged.Length} unchanged");
         var kind = failed.Length > 0 ? FeedbackKind.Partial : FeedbackKind.Success;
         return new(kind, $"{Images(ok.Length)} of {n} completed", string.Join(" · ", parts));
     }
