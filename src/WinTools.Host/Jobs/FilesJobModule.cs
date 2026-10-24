@@ -39,7 +39,9 @@ internal sealed class FilesJobModule : IJobModule
 /// </summary>
 internal sealed class FilesExecutor(IJobExecutor info, IJobExecutor hash, Func<string, Task<bool>> copyText) : IJobExecutor
 {
-    private IJobExecutor? _last; // what ran the last job, for the log; null after Copy path, which starts no worker
+    // What ran the last worker job, for the log. Copy path never changes it: it runs beside the queue, and would
+    // otherwise rewrite a running job's log values (evaluator, PR #18).
+    private IJobExecutor? _last;
 
     public bool JobObjectAssigned => _last?.JobObjectAssigned ?? true;
     public int LastLaneCount => _last?.LastLaneCount ?? 0;
@@ -52,7 +54,7 @@ internal sealed class FilesExecutor(IJobExecutor info, IJobExecutor hash, Func<s
             _last = requests.Count > 0 && requests[0].CapabilityId == FilesCapabilities.Sha256Id ? hash : info;
             return await _last.RunAsync(requests, cancellationToken, onFileDone).ConfigureAwait(false);
         }
-        _last = null;
+
         var results = new List<JobResult>(requests.Count);
         foreach (var r in requests)
         {

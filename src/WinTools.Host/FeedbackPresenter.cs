@@ -111,7 +111,8 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
             var unread = items.Where(i => i.Result.Facts.Count == 0).ToArray();
             if (unread.Length > 0)
             {
-                ShowToast(ToastContent.From(FeedbackText.For(words, unread))); // say which files could not be read, and why
+                // Say which files could not be read, and why; never over a batch's progress toast (its updates would stop).
+                if (!progressShowing || capability.LongRunning) ShowToast(ToastContent.From(FeedbackText.For(words, unread)));
                 sounds.Play(UiSound.Failure);
             }
             return;
@@ -155,7 +156,7 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
 
     public void Crashed(CapabilityDescriptor capability, int files) => ui.Post(() =>
     {
-        _done = _total;
+        if (capability.LongRunning) _done = _total;
         var words = capability.Words;
         ShowToast(new ToastContent(FeedbackKind.Failure, $"Could not {words.Verb} {(files == 1 ? $"the {words.Noun}" : words.Count(files))}",
             "Something went wrong. The originals are unchanged."));

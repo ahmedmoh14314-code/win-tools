@@ -69,7 +69,7 @@ public sealed class FilesModuleTests
         await executor.RunAsync([Info], CancellationToken.None);
         Assert.Equal((1, 1), (info.Calls, hash.Calls));
         await executor.RunAsync([new JobRequest("c1", FilesCapabilities.CopyPathId, [@"C:\p\a.png"])], CancellationToken.None);
-        Assert.Equal(0, executor.LastLaneCount); // Copy path started no worker, and the log says so
+        Assert.Equal(1, executor.LastLaneCount); // Copy path leaves the last worker job's values alone (it may still be running)
     }
 
     private sealed class NoWorker : IJobExecutor
