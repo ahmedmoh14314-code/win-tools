@@ -208,6 +208,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     /// <summary>Why paths were refused, when any were, and the longest length: never the paths themselves.</summary>
     private static object? PathDiagnostics(IReadOnlyList<string> paths)
     {
+        if (paths.Count > CapabilityResolver.MaxFiles) return null; // refused for its size anyway; not worth a pass on the UI thread
         var refused = paths.Select(PathPolicy.Explain).Where(v => v != PathVerdict.Supported).ToArray();
         return refused.Length == 0 ? null : new
         {

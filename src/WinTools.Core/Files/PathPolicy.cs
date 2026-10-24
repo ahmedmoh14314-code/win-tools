@@ -47,9 +47,15 @@ public static class PathPolicy
     /// <summary>
     /// Whether a component has the shape of an 8.3 alias as NTFS and FAT generate them: upper case, at most 8 characters
     /// before an extension of at most 3, ending in '~' and digits, with no spaces or lower-case letters. Judged by shape
-    /// alone, so no lookup is made; a file a person really named like an alias (ABC~1.PNG) is refused too.
+    /// alone, so no lookup is made; a file or folder a person really named like an alias (ABC~1.PNG) is refused too.
     /// </summary>
-    private static bool HasShortAlias(string path)
+    private static bool HasShortAlias(string path) => LooksLikeShortName(path, anyCase: false);
+
+    /// <summary>
+    /// Whether any component could be an 8.3 alias. With <paramref name="anyCase"/>, lower case is allowed too: some
+    /// sources send aliases in lower case, which only a lookup can tell from a name a person chose ("photo~2.png").
+    /// </summary>
+    public static bool LooksLikeShortName(string path, bool anyCase)
     {
         if (!path.Contains('~')) return false;
         foreach (var part in path.Split('\\'))
@@ -59,7 +65,7 @@ public static class PathPolicy
             var tilde = stem.LastIndexOf('~');
             if (tilde < 1 || stem.Length > 8 || tilde == stem.Length - 1 || ext.Length > 3) continue;
             if (!stem[(tilde + 1)..].All(char.IsAsciiDigit)) continue;
-            if ((stem[..tilde] + ext).All(c => c > ' ' && !char.IsLower(c) && c != '.')) return true;
+            if ((stem[..tilde] + ext).All(c => c > ' ' && (anyCase || !char.IsLower(c)) && c != '.')) return true;
         }
         return false;
     }
