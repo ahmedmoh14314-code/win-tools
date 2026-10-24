@@ -62,22 +62,30 @@ public partial class MainWindow : Window
 
     private void Load()
     {
-        _loading = true;
         _settings = _store.Load();
-        TriggerKey.SelectedItem = _settings.TriggerKey;
-        UiSounds.IsChecked = _settings.UiSounds;
-        SameFolder.IsChecked = _settings.OutputPolicy == OutputPolicy.SameFolder;
-        CustomFolder.IsChecked = _settings.OutputPolicy == OutputPolicy.Folder;
-        FolderPath.Text = _settings.OutputFolder ?? "";
-        JpegQuality.Value = _settings.JpegQuality;
-        WebPQuality.Value = _settings.WebPQuality;
-        JpegValue.Text = _settings.JpegQuality.ToString(CultureInfo.InvariantCulture);
-        WebPValue.Text = _settings.WebPQuality.ToString(CultureInfo.InvariantCulture);
-        ResizeWidth.Text = _settings.ResizeWidth.ToString(CultureInfo.InvariantCulture);
-        ResizeHeight.Text = _settings.ResizeHeight.ToString(CultureInfo.InvariantCulture);
-        KeepAspect.IsChecked = _settings.KeepAspectRatio;
-        NoUpscale.IsChecked = _settings.NoUpscale;
-        Animations.SelectedIndex = Math.Max(0, Array.FindIndex(AnimationChoices, c => c.Value == _settings.Animations));
+        Show(_settings);
+    }
+
+    /// <summary>Puts the settings into the controls without saving anything.</summary>
+    private void Show(AppSettings settings)
+    {
+        _loading = true;
+        SizeError.Visibility = Visibility.Collapsed; // a message about the value being replaced must not stay (evaluator, PR #19)
+        FolderError.Visibility = Visibility.Collapsed;
+        TriggerKey.SelectedItem = settings.TriggerKey;
+        UiSounds.IsChecked = settings.UiSounds;
+        SameFolder.IsChecked = settings.OutputPolicy == OutputPolicy.SameFolder;
+        CustomFolder.IsChecked = settings.OutputPolicy == OutputPolicy.Folder;
+        FolderPath.Text = settings.OutputFolder ?? "";
+        JpegQuality.Value = settings.JpegQuality;
+        WebPQuality.Value = settings.WebPQuality;
+        JpegValue.Text = settings.JpegQuality.ToString(CultureInfo.InvariantCulture);
+        WebPValue.Text = settings.WebPQuality.ToString(CultureInfo.InvariantCulture);
+        ResizeWidth.Text = settings.ResizeWidth.ToString(CultureInfo.InvariantCulture);
+        ResizeHeight.Text = settings.ResizeHeight.ToString(CultureInfo.InvariantCulture);
+        KeepAspect.IsChecked = settings.KeepAspectRatio;
+        NoUpscale.IsChecked = settings.NoUpscale;
+        Animations.SelectedIndex = Math.Max(0, Array.FindIndex(AnimationChoices, c => c.Value == settings.Animations));
         AnimationsHint.Text = WinTools.Windows.SystemPreferences.ReducedMotion()
             ? "Short movements when the menu opens and changes. Animation effects are off in Windows now, so Follow Windows shows none."
             : "Short movements when the menu opens and changes.";
@@ -86,7 +94,7 @@ public partial class MainWindow : Window
         {
             ReadOnlyBanner.Visibility = Visibility.Visible;
             ReadOnlyText.Text = "These settings cannot be changed here: the settings file was written by a newer version of WinTools, or it cannot be read. Nothing will be overwritten.";
-            foreach (var c in new Control[] { TriggerKey, UiSounds, SameFolder, CustomFolder, Browse, JpegQuality, WebPQuality, ResizeWidth, ResizeHeight, KeepAspect, NoUpscale, Animations })
+            foreach (var c in new Control[] { TriggerKey, UiSounds, SameFolder, CustomFolder, Browse, JpegQuality, WebPQuality, ResizeWidth, ResizeHeight, KeepAspect, NoUpscale, Animations, Reset })
                 c.IsEnabled = false;
         }
         Footer.Text = "Saved in " + Shorten(_store.Path);
@@ -127,6 +135,15 @@ public partial class MainWindow : Window
     private void Wire()
     {
         TriggerKey.SelectionChanged += (_, _) => Change(s => s with { TriggerKey = TriggerKey.SelectedItem as string ?? "Space" });
+        // Every setting in the file back to its default ("Start with Windows" is not in the file and stays as it is).
+        Reset.Click += (_, _) =>
+        {
+            // One click wipes the output folder and every quality: ask first.
+            if (MessageBox.Show(this, "Reset every setting to its default? Start with Windows stays as it is.", "Reset settings",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+            Show(AppSettings.Defaults);
+            Change(_ => AppSettings.Defaults);
+        };
         UiSounds.Click += (_, _) => Change(s => s with { UiSounds = UiSounds.IsChecked == true });
         Animations.SelectionChanged += (_, _) => Change(s => s with { Animations = AnimationChoices[Math.Max(0, Animations.SelectedIndex)].Value });
         KeepAspect.Click += (_, _) => Change(s => s with { KeepAspectRatio = KeepAspect.IsChecked == true });

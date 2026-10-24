@@ -79,9 +79,10 @@ public sealed class SettingsHardeningTests : IDisposable
     private string PathOf => Path.Combine(_dir.Path, "settings.json");
 
     [Theory]
-    [InlineData("{\"schema\":2,\"outputPolicy\":\"AskEachTime\"}")]   // a value this version cannot parse
-    [InlineData("{\"Schema\":2,\"triggerKey\":\"F9\",\"futureField\":1}")] // other casing
-    [InlineData("{\"schema\":\"3\",\"futureField\":1}")]                 // schema as a string
+    [InlineData("{\"schema\":3,\"outputPolicy\":\"AskEachTime\"}")]   // a value this version cannot parse
+    [InlineData("{\"Schema\":3,\"triggerKey\":\"F9\",\"futureField\":1}")] // other casing
+    [InlineData("{\"schema\":\"4\",\"futureField\":1}")]                 // schema as a string
+    [InlineData("{\"schema\":3,\"trigger\":{\"key\":\"F9\"},\"future\":{\"x\":1}}")] // sections, as a newer version will write them
     public void Newer_schema_is_never_moved_aside_or_overwritten(string json)
     {
         File.WriteAllText(PathOf, json);
@@ -135,6 +136,27 @@ public sealed class SettingsHardeningTests : IDisposable
         var store = new SettingsStore(PathOf);
         Assert.Equal(OutputPolicy.SameFolder, store.Load().OutputPolicy);
         Assert.Contains("output folder invalid", store.LastLoad, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_invalid_output_folder_in_a_schema_2_file_is_reported_too()
+    {
+        File.WriteAllText(PathOf, "{\"schema\":2,\"output\":{\"policy\":\"Folder\",\"folder\":\"D:/Out\"}}");
+        var store = new SettingsStore(PathOf);
+        Assert.Equal(OutputPolicy.SameFolder, store.Load().OutputPolicy);
+        Assert.Contains("output folder invalid", store.LastLoad, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("{\"schema\":2,\"trigger\":{\"key\":\"F5\"}}")]
+    [InlineData("{\"triggerKey\":\"A\"}")]
+    public void A_refused_trigger_key_is_reported_with_its_reason(string json)
+    {
+        File.WriteAllText(PathOf, json);
+        var store = new SettingsStore(PathOf);
+        Assert.Equal("Space", store.Load().TriggerKey);
+        Assert.Contains("trigger key", store.LastLoad, StringComparison.Ordinal);
+        Assert.Contains("Explorer", store.LastLoad, StringComparison.Ordinal); // the policy's reason, not just "invalid"
     }
 }
 

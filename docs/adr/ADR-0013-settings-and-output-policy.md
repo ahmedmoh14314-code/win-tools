@@ -9,7 +9,7 @@ V1 needs persisted preferences: the trigger key, where outputs go, encoder quali
 
 ## Decision
 - **Model (`WinTools.Core.Settings.AppSettings`):** an immutable record with safe defaults.
-  - `Schema` (currently 1).
+  - `Schema` (1 in V1; 2 since ADR-0021, which also groups the file in sections).
   - `TriggerKey`: Space by default; allowed values are Space and F8–F12. Modifiers are never allowed, because they change Explorer's drop effect.
   - `OutputPolicy` and `OutputFolder`: SameFolder by default, or Folder with a path.
   - `JpegQuality` and `WebPQuality`: 90 by default, range 1–100.
