@@ -1,4 +1,5 @@
 using WinTools.Core.Capabilities;
+using WinTools.Core.Files;
 using WinTools.Core.Interaction;
 
 namespace WinTools.Core.Tests;
@@ -7,7 +8,7 @@ namespace WinTools.Core.Tests;
 public sealed class MenuCategoryDataTests
 {
     private static CapabilityDescriptor Any(string id, string category, string module = "files") =>
-        new(id, id, category, module, new InputRule(_ => true), CapabilityShape.PerFile, CapabilityOutput.Facts, false);
+        new(id, id, category, module, new InputRule(FileKinds.All.Select(k => k.Id).ToHashSet()), CapabilityShape.PerFile, CapabilityOutput.Facts, false);
 
     [Fact]
     public void A_new_module_category_takes_its_declared_place_with_its_icon()

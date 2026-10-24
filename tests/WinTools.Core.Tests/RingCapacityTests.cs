@@ -1,4 +1,5 @@
 using WinTools.Core.Capabilities;
+using WinTools.Core.Files;
 using WinTools.Core.Interaction;
 
 namespace WinTools.Core.Tests;
@@ -11,7 +12,7 @@ namespace WinTools.Core.Tests;
 public sealed class RingCapacityTests
 {
     private static CapabilityDescriptor Cmd(string id, string category) =>
-        new(id, id, category, "test", new InputRule(_ => true), CapabilityShape.PerFile, CapabilityOutput.Facts, false);
+        new(id, id, category, "test", new InputRule(FileKinds.All.Select(k => k.Id).ToHashSet()), CapabilityShape.PerFile, CapabilityOutput.Facts, false);
 
     private static IReadOnlyList<MenuGroup> Menu(IEnumerable<CapabilityDescriptor> commands, IEnumerable<CapabilityCategory> categories) =>
         RadialMenu.Build(new CapabilityResolver([.. commands], [.. categories]), [@"C:\p\a.png"]);
