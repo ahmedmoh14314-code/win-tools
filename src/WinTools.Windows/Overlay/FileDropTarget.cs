@@ -218,7 +218,7 @@ internal static class HDrop
         try
         {
             var status = DropFiles.Parse(new ReadOnlySpan<byte>((void*)p, (int)size), out var paths);
-            return new DropRead(status, Array.ConvertAll(paths, ShortNames.Expand)); // Explorer's 8.3 names for long paths
+            return new DropRead(status, ShortNames.ExpandAll(paths)); // Explorer's 8.3 names for long paths
         }
         finally { Kernel32.GlobalUnlock(hGlobal); }
     }

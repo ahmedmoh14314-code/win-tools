@@ -64,6 +64,16 @@ Not yet decided. Depends on ADR-0001 and the spike for ADR-0003.
   - The coordinator's pending, late-menu and release-grace paths (`InteractionCoordinator`) need the real overlay and are covered only by the Explorer runs.
 - Real-Explorer regression runs: see PR #11.
 
+### Long paths arrive as short names (2026-10-24, found by the release matrix)
+The release matrix (PR 0.4, path style `long`) showed that a file whose full path is longer than 260 characters got "No actions". The new `drag.enter` diagnostic (refused reasons and the longest length, never the paths) logged `refused ShortName:1`, longest 124: Explorer puts the file's 8.3 short path in CF_HDROP so that legacy programs can open it, and `PathPolicy` refuses short names because they are not canonical.
+
+- **Decision:** expand before judging. `ShortNames.ExpandAll` calls `GetLongPathNameW` with the `\\?\` prefix (so the answer may exceed MAX_PATH) for each path `PathPolicy.Explain` calls a short name. A name that merely contains `~` is canonical and untouched; a path that cannot be expanded stays refused. The worker receives the long path, so the operation and the output name use the real name.
+- **Bounded, because it runs on the UI thread:** only drive-letter paths on fixed, removable or RAM drives are asked about (`GetDriveTypeW`); UNC and mapped network paths are left refused, since a lookup there can block for seconds. Expansion stops after 100 ms per read.
+- **`PathPolicy` no longer touches the file system.** Testing the bound showed that `Path.GetFullPath`, which `PathPolicy` used for its canonical-form check, itself expands any name containing `~` by calling `GetLongPathName`. On a UNC path that is a network lookup, on the UI thread, for every dropped path, and it has been so since V1. An 8.3 alias was also refused only when that lookup happened to succeed. `PathPolicy` now swaps `~` for a private-use character before `GetFullPath` (positions are kept, so every normalisation change is still found) and recognises an alias by its shape: upper case, at most 8 characters before an extension of at most 3, ending in `~` and digits. A file a person really named like an alias (`ABC~1.PNG`) is refused too; lower-case names such as `photo~2.png` are not aliases and stay supported.
+- **Rejected alternatives:** accepting short names as they are (the output would carry the 8.3 name, and two names for one file break the canonical-path rule); reading `CFSTR_SHELLIDLIST` instead of CF_HDROP (a second parser for a second format, for one case); expanding in the worker (the menu is resolved before any worker is involved).
+- **Residual:** a file beyond MAX_PATH on a network share still gets no commands, and so does a local one whose name looks like an alias. Recorded in the threat model.
+- **Evidence:** `DropDataLongPathTests` (`A_file_beyond_max_path_dropped_as_its_short_name_reaches_the_menu_as_its_long_path` fails on the code before the fix; the budget and local-drive tests use a fake clock), `FilesAndCapabilitiesTests.A_path_longer_than_260_characters_is_supported`, `An_8_3_alias_is_recognised_without_asking_the_file_system` (4 cases, all failing on the code before: a missing or unreachable alias was accepted) and `Long_names_with_a_tilde_are_supported`, and the matrix rows `long-png` and `long-batch-10`.
+
 ## Consequences
 To be written with the decision.
 

@@ -43,6 +43,43 @@ public sealed partial class DropDataTests
         Assert.Equal(paths, sink.Entered);
     }
 
+    // Expansion asks the file system from DragEnter, on the UI thread: a hostile source with thousands of short names,
+    // or names on a network share, must not hold the overlay.
+    private static readonly string[] FiveShortNames = Enumerable.Range(1, 5).Select(i => $@"C:\photos\LONGPA~{i}\a.png").ToArray();
+
+    [Fact]
+    public void Short_names_stop_being_expanded_once_the_budget_is_spent()
+    {
+        long ticks = 0;
+        var step = (long)(WinTools.Windows.Overlay.ShortNames.Budget.TotalSeconds * System.Diagnostics.Stopwatch.Frequency * 0.6);
+        var asked = new List<string>();
+        var result = WinTools.Windows.Overlay.ShortNames.ExpandAll(FiveShortNames, _ => true,
+            p => { asked.Add(p); ticks += step; return p.Replace("~", "-long-"); }, () => ticks);
+
+        Assert.Equal(FiveShortNames[..2], asked);                 // at 0 and 0.6 of the budget; 1.2 is past it
+        Assert.DoesNotContain('~', result[0]);
+        Assert.DoesNotContain('~', result[1]);
+        Assert.Equal(FiveShortNames[2..], result[2..]);           // left as dropped, so refused
+    }
+
+    [Fact]
+    public void Paths_off_local_drives_are_never_asked_about()
+    {
+        string[] paths = [@"\\server\share\LONGPA~1\a.png", @"Z:\LONGPA~1\a.png", @"C:\LONGPA~1\a.png"];
+        var asked = new List<string>();
+        var result = WinTools.Windows.Overlay.ShortNames.ExpandAll(paths, p => p.StartsWith(@"C:\", StringComparison.Ordinal),
+            p => { asked.Add(p); return p; }, () => 0);
+        Assert.Equal([@"C:\LONGPA~1\a.png"], asked);
+        Assert.Equal(paths, result);
+    }
+
+    [Fact]
+    public void A_unc_short_name_is_left_as_it_is_without_touching_the_network()
+    {
+        string[] paths = [@"\\wintools-test-host.invalid\share\LONGPA~1\a.png"];
+        Assert.Same(paths, WinTools.Windows.Overlay.ShortNames.ExpandAll(paths)); // a path that was asked about is copied
+    }
+
     private static string? ShortPath(string longPath)
     {
         var buffer = new char[32768];

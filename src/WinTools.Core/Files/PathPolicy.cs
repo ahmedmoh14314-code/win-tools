@@ -6,7 +6,8 @@ namespace WinTools.Core.Files;
 /// write "dir\photo.png", a different file. A path must also be well-formed UTF-16: a lone surrogate cannot cross the
 /// worker's JSON pipe intact and would name a different file on the other side. Device and verbatim (\\?\, \\.\)
 /// paths, alternate data streams ("a.png:s") and names without a stem (".png") are refused too. 8.3 short names are
-/// refused as well (GetFullPath expands them); Explorer drops long names. Pure string checks; no file-system access.
+/// refused as well, recognised by their shape (the drop target expands the ones Explorer sends for paths beyond
+/// MAX_PATH, on local drives, before they get here). Pure string checks; no file-system access.
 /// </summary>
 public static class PathPolicy
 {
@@ -31,11 +32,36 @@ public static class PathPolicy
             }
             else if (char.IsLowSurrogate(c) || c < 0x20) return PathVerdict.BadText;
         }
+        // GetFullPath expands a name containing '~' by asking the file system (GetLongPathName), which would put disk and
+        // network I/O on the UI thread. '~' is swapped for a private-use character that triggers nothing and normalises
+        // the same way; positions are kept, so the comparison still finds every change normalisation would make.
+        var probe = path.Replace('~', (char)0xE000);
         string full;
-        try { full = Path.GetFullPath(path); }
+        try { full = Path.GetFullPath(probe); }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return PathVerdict.NotCanonical; }
-        if (!string.Equals(full, path, StringComparison.Ordinal)) return path.Contains('~') ? PathVerdict.ShortName : PathVerdict.NotCanonical;
+        if (!string.Equals(full, probe, StringComparison.Ordinal)) return PathVerdict.NotCanonical;
+        if (HasShortAlias(path)) return PathVerdict.ShortName;
         return Path.GetFileNameWithoutExtension(path).Length > 0 ? PathVerdict.Supported : PathVerdict.NoStem;
+    }
+
+    /// <summary>
+    /// Whether a component has the shape of an 8.3 alias as NTFS and FAT generate them: upper case, at most 8 characters
+    /// before an extension of at most 3, ending in '~' and digits, with no spaces or lower-case letters. Judged by shape
+    /// alone, so no lookup is made; a file a person really named like an alias (ABC~1.PNG) is refused too.
+    /// </summary>
+    private static bool HasShortAlias(string path)
+    {
+        if (!path.Contains('~')) return false;
+        foreach (var part in path.Split('\\'))
+        {
+            var dot = part.LastIndexOf('.');
+            var (stem, ext) = dot < 0 ? (part, "") : (part[..dot], part[(dot + 1)..]);
+            var tilde = stem.LastIndexOf('~');
+            if (tilde < 1 || stem.Length > 8 || tilde == stem.Length - 1 || ext.Length > 3) continue;
+            if (!stem[(tilde + 1)..].All(char.IsAsciiDigit)) continue;
+            if ((stem[..tilde] + ext).All(c => c > ' ' && !char.IsLower(c) && c != '.')) return true;
+        }
+        return false;
     }
 }
 

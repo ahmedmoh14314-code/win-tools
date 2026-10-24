@@ -138,6 +138,8 @@ internal static partial class Kernel32
     public const int MaxLongPath = 32_768;
     [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     public static partial uint GetLongPathNameW(string shortPath, [Out] char[] longPath, uint length);
+    public const uint DRIVE_REMOVABLE = 2, DRIVE_FIXED = 3, DRIVE_RAMDISK = 6;
+    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)] public static partial uint GetDriveTypeW(string rootPathName);
     [LibraryImport("kernel32.dll")] public static unsafe partial int MultiByteToWideChar(uint codePage, uint flags, byte* multiByte, int multiByteLength, char* wide, int wideLength);
 }
 
