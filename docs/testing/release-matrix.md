@@ -54,4 +54,6 @@ These are not automated, by design. Record each run in the release's acceptance 
 
 | Date | Build | Result |
 |---|---|---|
-RUNS
+| 2026-10-24 | main `14a4145`, the long-path fix (PR #13), this harness | 22 of 23 rows passed, including 100 files by Ctrl+A and by Shift range, Ctrl and Shift held, Alt refused, Unicode and paths beyond 260 characters. `photo-compress-high` failed: High wrote a copy that saved 2.8 % (the defect PR #12 fixes). No key was left down after any row. |
+| 2026-10-24 | PR #12 host (`fe2d2d9`, then `63cccc1`) | `photo-compress` 2/2 (saved 37.3 %), `photo-compress-high` 2/2 (already optimized, nothing written) |
+| 2026-10-24 | PR #13 host (`902af77`) | `long-png` 3/3, `long-batch-10` 2/2 with no settle time |
