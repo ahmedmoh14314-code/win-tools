@@ -104,4 +104,21 @@ public sealed class CapabilityDescriptorTests
         Assert.DoesNotContain("y.png", resolver.Resolve([@"C:\a.png", @"C:\b.jpg"]).Select(c => c.Id));
         Assert.Contains("convert.to-tiff", resolver.Resolve([@"C:\a.png", @"C:\b.jpg"]).Select(c => c.Id));
     }
+    [Fact]
+    public void An_input_rule_refuses_kind_ids_nobody_declared()
+    {
+        // "PNG" and ".jpg" are not ids: a rule written so would silently match nothing (evaluator, PR #15).
+        Assert.Throws<ArgumentException>(() => new InputRule(new HashSet<string> { "PNG" }));
+        Assert.Throws<ArgumentException>(() => new InputRule(new HashSet<string> { ".jpg" }));
+    }
+
+    [Fact]
+    public void An_input_rule_keeps_its_own_copy_of_the_kinds()
+    {
+        var kinds = new HashSet<string> { "png" };
+        var rule = new InputRule(kinds);
+        kinds.Add("jpeg");
+        Assert.False(rule.Accepts(FileKinds.Jpeg));
+        Assert.IsNotType<HashSet<string>>(rule.Kinds);
+    }
 }

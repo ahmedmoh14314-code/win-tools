@@ -317,10 +317,17 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             _log.Event("drop", new { accepted = false, reason = "commandsChanged", files = paths.Count });
             return false;
         }
+        // The only module so far; jobs become generic in V2 PR 1.2. Never throw here: this runs inside OLE's Drop. A command
+        // no module can run is refused like a changed one, with the Nothing sound: a drop that runs nothing never reads as
+        // accepted (evaluator, PR #15).
+        if (!ImageCapabilities.TryOperationOf(chosen, out var operation))
+        {
+            _sounds.Play(UiSound.Nothing);
+            _log.Event("drop", new { accepted = false, reason = "noModule", op = chosen.Id, module = chosen.Module, files = paths.Count });
+            return false;
+        }
         _log.Event("drop", new { accepted = true, op = chosen.Id, openMs, files = paths.Count, sounds = SoundCounts(), frames });
-        // The only module so far; jobs become generic in V2 PR 1.2. Never throw here: this runs inside OLE's Drop.
-        if (ImageCapabilities.TryOperationOf(chosen, out var operation)) _ = _jobs.Start(operation, paths);
-        else _log.Event("job.refused", new { op = chosen.Id, module = chosen.Module });
+        _ = _jobs.Start(operation, paths);
         return true;
     }
 
