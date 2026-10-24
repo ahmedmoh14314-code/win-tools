@@ -68,10 +68,22 @@ public sealed class MenuNavigator
     public CapabilityDescriptor? Hot => _level >= 0 && _hot >= 1 ? _groups[_level].Commands[_hot - 1] : null;
 
     /// <summary>
-    /// Width of Back on a category's ring: an equal share, but never narrower than a category sector, so the reverse of
-    /// any stroke that opened the category (which stayed inside that sector) points into Back.
+    /// The narrowest a command sector may get: V1's narrowest, tested by hand (a BMP's Resize: 7 commands beside a 90° Back, 4 categories, 38.6°).
     /// </summary>
-    public static double BackSweep(int groupCount, int commandCount) => Math.Max(2 * Math.PI / (commandCount + 1), 2 * Math.PI / groupCount);
+    public const double MinCommandSweep = 38.5 * Math.PI / 180;
+
+    /// <summary>
+    /// Width of Back on a category's ring: an equal share, widened to a category sector's width so the reverse of any
+    /// stroke that opened the category (which stayed inside that sector) points into Back, but never so far that a
+    /// command gets narrower than <see cref="MinCommandSweep"/>. With one category there is no other sector to come back
+    /// from: Back takes an equal share (evaluator, PR #17: it took the whole circle).
+    /// </summary>
+    public static double BackSweep(int groupCount, int commandCount)
+    {
+        var equal = 2 * Math.PI / (commandCount + 1);
+        var category = groupCount > 1 ? 2 * Math.PI / groupCount : 0;
+        return Math.Max(equal, Math.Min(category, 2 * Math.PI - commandCount * MinCommandSweep));
+    }
 
     /// <summary>
     /// Where sector 0 (Back) of category <paramref name="group"/>'s ring begins: Back is centred on the direction

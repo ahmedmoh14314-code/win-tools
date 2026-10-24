@@ -67,6 +67,45 @@ public sealed class RingCapacityTests
         Assert.Equal(commands.Select(c => c.Id).Order(), reachable.Select(c => c.Id).Order());
     }
 
+    /// <summary>
+    /// The cap of 8 sectors is about width: no sector may be narrower than V1's narrowest, which was tested by hand
+    /// (a BMP's Resize: 7 commands beside a 90° Back with 4 categories, 38.6°), whatever the number of categories. With one
+    /// category, Back used to take the whole circle and no command could be reached (evaluator, PR #17).
+    /// </summary>
+    [Theory]
+    [InlineData(1)] [InlineData(2)] [InlineData(3)] [InlineData(4)] [InlineData(5)] [InlineData(6)] [InlineData(7)] [InlineData(8)]
+    public void No_command_sector_is_narrower_than_v1s_narrowest(int groups)
+    {
+        const double narrowest = 38.5 * Math.PI / 180;
+        for (var commands = 1; commands <= RadialMenu.RingCapacity - 1; commands++)
+        {
+            var back = MenuNavigator.BackSweep(groups, commands);
+            Assert.True(back >= narrowest - 1e-9, $"{groups} groups, {commands} commands: Back {back}");
+            if (groups is 4 or 5) Assert.Equal(Math.Max(2 * Math.PI / (commands + 1), 2 * Math.PI / groups), back, 9); // V1's layout is unchanged
+            Assert.True((2 * Math.PI - back) / commands >= narrowest - 1e-9, $"{groups} groups, {commands} commands: commands {(2 * Math.PI - back) / commands}");
+        }
+    }
+
+    [Fact]
+    public void Every_command_of_a_single_category_can_be_armed_by_a_stroke()
+    {
+        var menu = Menu(Enumerable.Range(1, 7).Select(i => Cmd($"c{i}", "a")), [new("a", "A", "a", 1)]);
+        for (var c = 0; c < 7; c++)
+        {
+            var n = new MenuNavigator(menu, 96);
+            var t = TimeSpan.Zero;
+            n.Move(0, 0, t);
+            var (ox, oy) = RingGeometry.PointAt(RingGeometry.SectorCentre(0, 1), RingGeometry.OpenRadius96 + 10);
+            Assert.True(n.Move((int)ox, (int)oy, t));
+            n.Shown(0, 0, t, 96);
+            n.Move(0, 0, t);
+            var (from, to) = RingGeometry.SectorBounds(c + 1, 8, MenuNavigator.LevelStart(0, 1, 7), MenuNavigator.BackSweep(1, 7));
+            var (x, y) = RingGeometry.PointAt((from + to) / 2, 69);
+            n.Move((int)Math.Round(x), (int)Math.Round(y), t);
+            Assert.Equal($"c{c + 1}", n.Hot?.Id);
+        }
+    }
+
     [Fact]
     public void Overflow_of_an_ordinary_command_is_an_error()
     {
