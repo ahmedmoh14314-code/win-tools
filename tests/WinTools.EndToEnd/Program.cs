@@ -27,6 +27,9 @@ using WinTools.EndToEnd;
 // "lockedzip" (V2 PR 5.3): WinRAR's AES-256 sample with an Arabic password (tests/samples/locked-aes256-arabic.zip) as
 // "photos.zip", with Extract (default) or Test: the first run finds it locked, the password dialog must come to the front,
 // the password is typed into it, and the job runs again with it. --password wrong types another: no folder, a toast.
+// "video" and "audio" (V2 media sprint, ADR-0028): a 4-second clip ("clip.mp4", a test pattern with a tone) or a tone
+// ("song.wav") the harness makes with the bundled FFmpeg, with a media command (default media.video-to-webm and
+// media.audio-to-mp3; --op media.video-info...): a new file with the right streams, or the info panel.
 // "srt" (V2 PR 7.1): an Arabic SRT the harness writes, with a subtitle command (default subtitles.to-vtt; --op
 // subtitles.shift-plus-1000, subtitles.info...): a new subtitle file with the module's name, or the info panel.
 // "docx" (V2 PR 6.1, 6.2): a small Word document the harness builds, with Extract text (default), Document info (--op
@@ -106,6 +109,8 @@ var (sample, sourceName, defaultTarget) = scenario switch
     "tgz" => ("", "photos.tar.gz", ImageFormat.Unknown),
     "lockedzip" => ("locked-aes256-arabic.zip", "photos.zip", ImageFormat.Unknown),
     "srt" => ("", "film.srt", ImageFormat.Unknown),
+    "video" => ("", "clip.mp4", ImageFormat.Unknown),
+    "audio" => ("", "song.wav", ImageFormat.Unknown),
     "docx" => ("", "report.docx", ImageFormat.Unknown),
     _ => ("quadrants-64x48.png", "photo.png", ImageFormat.Jpeg),
 };
@@ -118,6 +123,8 @@ if (opArg is null && scenario == "rename") opArg = FilesCapabilities.RenameId;
 if (opArg is null && scenario == "pdf") opArg = PdfCapabilities.RotateRightId;
 if (opArg is null && scenario is "zip" or "tgz" or "lockedzip") opArg = ArchiveCapabilities.ExtractId;
 if (opArg is null && scenario == "srt") opArg = SubtitleCapabilities.ToVttId;
+if (opArg is null && scenario == "video") opArg = "media.video-to-webm";
+if (opArg is null && scenario == "audio") opArg = "media.audio-to-mp3";
 if (opArg is null && scenario == "docx") opArg = DocumentCapabilities.ExtractTextId;
 var op = opArg is not null ? catalog.FirstOrDefault(o => o.Id == opArg) : target == ImageFormat.Unknown ? null : OperationCatalog.Convert(target);
 // Every module, as the host resolves them: the ring positions the harness aims at must be the host's.
@@ -132,16 +139,18 @@ var pdfFile = scenario == "pdf" && capability is { Module: PdfCapabilities.Modul
 // Extract makes a folder named after the archive.
 var zipFolder = (scenario is "zip" or "tgz" || scenario == "lockedzip" && !wrongPassword) && capability?.Id == ArchiveCapabilities.ExtractId;
 var subtitleFile = scenario == "srt" && capability is { Module: SubtitleCapabilities.Module, Produces: CapabilityOutput.File };
+var mediaFile = scenario is "video" or "audio" && capability is { Module: MediaCapabilities.Module, Produces: CapabilityOutput.File };
 var documentText = scenario == "docx" && capability?.Id == DocumentCapabilities.ExtractTextId;
 var documentClean = scenario == "docx" && capability?.Id == DocumentCapabilities.RemovePropertiesId;
 string? OutputNameFor(string path) => zipFolder ? (path.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ? Path.GetFileName(path)[..^".tar.gz".Length] : Path.GetFileNameWithoutExtension(path))
     : subtitleFile ? Path.GetFileName(SubtitleCapabilities.Candidates(capability!.Id, path, null).First())
+    : mediaFile ? Path.GetFileName(MediaCapabilities.Candidates(capability!.Id, path, null).First())
     : documentText ? Path.GetFileName(DocumentCapabilities.Candidates(path, null).First())
     : documentClean ? Path.GetFileName(DocumentCapabilities.CleanCandidates(path, null).First())
     : pdfFile ? Path.GetFileName(OutputNaming.CandidatesWithExtension(path, ".pdf", PdfCapabilities.NameSuffix(capability!.Id)).First())
     : outputFormat == ImageFormat.Unknown ? null : Path.GetFileName(OutputNaming.Candidates(path, outputFormat, op!.NameSuffix).First());
-var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "batch" or "edge" or "rename" || pdfFile || zipFolder || subtitleFile || documentText || documentClean;
-var expectOutput = producing && (outputFormat != ImageFormat.Unknown || pdfFile || zipFolder || subtitleFile || documentText || documentClean || scenario == "rename");
+var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "batch" or "edge" or "rename" || pdfFile || zipFolder || subtitleFile || documentText || documentClean || mediaFile;
+var expectOutput = producing && (outputFormat != ImageFormat.Unknown || pdfFile || zipFolder || subtitleFile || documentText || documentClean || mediaFile || scenario == "rename");
 var stamp = DateTime.Now.ToString("HHmmss", System.Globalization.CultureInfo.InvariantCulture);
 var folder = Path.Combine(Path.GetTempPath(), "wintools-e2e", pathStyle == "unicode" ? $"{scenario} مجلد 😀 {stamp}" : $"{scenario}-{stamp}");
 if (pathStyle == "long")
@@ -185,6 +194,18 @@ else if (scenario == "docx")
     // Properties as Office writes them: app.xml carries vt:vector elements (V2 PR 6.2 found Info failing on them).
     Part("docProps/core.xml", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>تقرير الربع</dc:title><dc:creator>WinTools E2E</dc:creator><dcterms:modified xsi:type="dcterms:W3CDTF">2026-10-25T03:00:00Z</dcterms:modified></cp:coreProperties>""");
     Part("docProps/app.xml", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Template>Normal.dotm</Template><Pages>1</Pages><Words>5</Words><Application>Microsoft Office Word</Application><HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Title</vt:lpstr></vt:variant><vt:variant><vt:i4>1</vt:i4></vt:variant></vt:vector></HeadingPairs><TitlesOfParts><vt:vector size="1" baseType="lpstr"><vt:lpstr></vt:lpstr></vt:vector></TitlesOfParts><Company></Company></Properties>""");
+}
+else if (scenario is "video" or "audio")
+{
+    // Made by the bundled FFmpeg next to the harness: a test pattern with a tone, or the tone alone.
+    var psi = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "ffmpeg", "ffmpeg.exe")) { UseShellExecute = false, CreateNoWindow = true };
+    foreach (var a in scenario == "video"
+        ? new[] { "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=25:duration=4", "-f", "lavfi", "-i", "sine=frequency=440:duration=4", "-c:v", "libopenh264", "-b:v", "1M", "-pix_fmt", "yuv420p", "-c:a", "aac", source }
+        : ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=4", "-ac", "2", "-c:a", "pcm_s16le", source])
+        psi.ArgumentList.Add(a);
+    using var made = Process.Start(psi)!;
+    made.WaitForExit();
+    if (made.ExitCode != 0) { Console.Error.WriteLine("could not make the media sample"); return 5; }
 }
 else if (scenario == "srt") File.WriteAllText(source, "1\r\n00:00:01,000 --> 00:00:02,500\r\nمرحبا بكم 😀\r\n\r\n2\r\n00:00:03,000 --> 00:00:04,000\r\nإلى اللقاء\r\n\r\n");
 else File.WriteAllText(source, "plain text, not an image");
@@ -832,7 +853,18 @@ using (var explorer = opened)
                 return Part("word/document.xml").Contains("تقرير الربع 😀", StringComparison.Ordinal)
                     && !props.Contains("WinTools E2E", StringComparison.Ordinal) && !props.Contains("تقرير", StringComparison.Ordinal) && !props.Contains("Normal.dotm", StringComparison.Ordinal);
             }
+            // A media result: ffprobe (next to the harness) finds the streams it should have.
+            bool MediaValid(string file)
+            {
+                var psi = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "ffmpeg", "ffprobe.exe")) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true };
+                foreach (var a in new[] { "-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0", file }) psi.ArgumentList.Add(a);
+                using var probe = Process.Start(psi)!;
+                var types = probe.StandardOutput.ReadToEnd();
+                probe.WaitForExit();
+                return probe.ExitCode == 0 && types.Contains("audio", StringComparison.Ordinal) && (scenario == "audio" || types.Contains("video", StringComparison.Ordinal));
+            }
             var outputValid = output is not null && zipFolder ? ZipTreeValid(output!) : output is not null && subtitleFile ? SubtitleValid(output!)
+                : output is not null && mediaFile ? MediaValid(output!)
                 : output is not null && documentClean ? CleanValid(output!)
                 : output is not null && documentText ? File.ReadAllText(output!, System.Text.Encoding.UTF8) == "تقرير الربع 😀\r\nSecond line\r\n" : output is not null && File.ReadAllBytes(output) is var bytes && (pdfFile
                 ? bytes.AsSpan().StartsWith("%PDF-"u8) && bytes.AsSpan(Math.Max(0, bytes.Length - 1024)).IndexOf("%%EOF"u8) >= 0 // a whole PDF
@@ -876,8 +908,8 @@ using (var explorer = opened)
                     && ev.Any(e => Ev(e) == "job.result" && Data(e).TryGetProperty("error", out var pe) && pe.GetString() == "PasswordIncorrect"),
                 "lockedzip" when facts => output is null && infoShown && focusKept == true && accepted == 1 && dialogInFront == true && secretAsked,
                 "lockedzip" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1 && dialogInFront == true && secretAsked,
-                "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "file" or "folder" or "pdf" or "zip" or "tgz" or "srt" or "docx" when facts => output is null && infoShown && focusKept == true && accepted == 1,
-                "zip" or "tgz" or "srt" or "docx" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
+                "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "file" or "folder" or "pdf" or "zip" or "tgz" or "srt" or "docx" or "video" or "audio" when facts => output is null && infoShown && focusKept == true && accepted == 1,
+                "zip" or "tgz" or "srt" or "docx" or "video" or "audio" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 "rename" => output is not null && Path.GetFileName(output) == "2026 notes.txt" && accepted == 1 && dialogInFront == true,
                 "pdf" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1 && (capability?.Prompt is null || dialogInFront == true),
                 "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
