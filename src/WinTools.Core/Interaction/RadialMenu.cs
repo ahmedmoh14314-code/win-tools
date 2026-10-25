@@ -39,12 +39,19 @@ public static class RadialMenu
 
     public const string MoreId = "menu.more";
 
-    /// <summary>A category ring is Back plus its commands; beyond that, the last command sector is "More…".</summary>
+    /// <summary>
+    /// How many commands a ring that overflows shows before "More…". A full ring of seven fits only short labels (V1's
+    /// Resize); an overflowing category holds long ones ("Remove metadata", "Batch rename…"), which did not fit seven
+    /// sectors at any DPI (V2 PR 7.2), so it shows five and "More…".
+    /// </summary>
+    public const int ShownBeforeMore = 5;
+
+    /// <summary>A category ring is Back plus its commands; beyond seven, five of them and "More…".</summary>
     private static MenuGroup Fit(MenuGroup group)
     {
         if (group.Commands.Count <= RingCapacity - 1) return group;
-        var shown = group.Commands.Take(RingCapacity - 2).ToArray();
-        var rest = group.Commands.Skip(RingCapacity - 2).ToArray();
+        var shown = group.Commands.Take(ShownBeforeMore).ToArray();
+        var rest = group.Commands.Skip(ShownBeforeMore).ToArray();
         var more = new CapabilityDescriptor(MoreId, "More…", group.Category.Id, "menu", new InputRule(new HashSet<string>()), // never resolved: it only carries the overflow
             CapabilityShape.Selection, CapabilityOutput.Facts, LongRunning: false, Payload: rest);
         return group with { Commands = [.. shown, more] };

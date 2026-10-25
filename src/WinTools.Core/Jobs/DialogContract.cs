@@ -12,8 +12,29 @@ public sealed record PickRequest(string Title, IReadOnlyList<PickItem> Items, in
 /// <summary>Which dialog a request asks for, so the dialogs process reads the right request (V2 PR 2.2).</summary>
 public static class DialogKinds
 {
-    public const string Pick = "pick", Secret = "secret";
+    public const string Pick = "pick", Secret = "secret", Rename = "rename";
 }
+
+/// <summary>
+/// The parameter a command that asks a dialog first gets (V2 PR 7.2): the dialog's answer, as the command reads it (Batch
+/// rename: its rule). Only such a command takes it, and only it.
+/// </summary>
+public static class DialogParameters
+{
+    public const string Name = "dialog";
+}
+
+/// <summary>
+/// Batch rename's dialog (V2 PR 7.2): the names to preview, never their folder or paths, in the order dropped; at most
+/// <see cref="MaxNames"/>, a bound the host enforces before asking.
+/// </summary>
+public sealed record RenameRequest(string Title, IReadOnlyList<string> Names, int X, int Y, string Kind = DialogKinds.Rename)
+{
+    public const int MaxNames = 1000;
+}
+
+/// <summary>The rename dialog's answer: the rule (serialized, <see cref="Files.RenameRule"/>), or null when cancelled.</summary>
+public sealed record RenameResult(string? Rule);
 
 /// <summary>Only the kind of a request, read first: the rest is read as that kind's request.</summary>
 public sealed record DialogEnvelope(string? Kind);

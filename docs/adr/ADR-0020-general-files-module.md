@@ -29,6 +29,21 @@ V2 PR 1.4 is the walking skeleton of a second module: File info, SHA-256 and Cop
 - **Copying the SHA-256 to the clipboard as well.** Deferred: it would overwrite the clipboard as a side effect of another command. The hash is shown in the info panel; copy name, path or folder variants come with Stage 7 (V2 plan §10 PR 7.2).
 - **Keeping "no kind" for unknown files.** Rejected: every general command would then need a special case in the resolver.
 
+## Amendment, V2 PR 7.2: Copy name, Folder path, Rename files
+- **Copy name** and **Folder path** (it copies the containing folder's path) run in the host like Copy path. The folder path is copied once for all the files.
+- **Rename files** (Batch rename) asks a dialog first. This is a new, general `CapabilityDescriptor.Dialog`: the dialog's answer is the job's one `dialog` parameter. A command with a dialog takes exactly that parameter, and no other command takes it.
+  - **The dialog** gets the names, never the folder or the paths. It previews them with the same pure plan the host applies (`BatchRename`): prefix, suffix, find and replace (any case), spaces and underscores, case, and numbering in the names' natural order. Extensions are kept.
+  - **The host renames** in two steps through `~wintools-<id>-<n>.tmp` names in the folder, so a file can take a name the batch frees, and a change of case alone works.
+  - **What refuses the rename:**
+    - a name held by a file outside the batch refuses all of it, so nothing is ever overwritten;
+    - an invalid or clashing name;
+    - files from several folders;
+    - more than 1,000 files.
+  - **A failure** puts every name back.
+  - **The result** is believed from the disk.
+- **Tools is ordered by everyday use:** File info, Copy path, Rename files, Copy name, Folder path, then SHA-256.
+- **A ring that overflows shows five commands and "More…"**, not six: with seven sectors the long labels ("Remove metadata") did not fit at any DPI. A full ring of seven, like V1's Resize, is unchanged. Labels are chosen to wrap onto two lines: "Batch rename…" and "Copy folder path" did not fit.
+
 ## Consequences
 - Every file now gets a menu. Image commands still never accept a file of another kind; the resolver's intersection rule is unchanged.
 - Tests that specify the image module's own menu (the V1 golden file among them) now build it from `CapabilityResolver.Images`; the combined menu is covered by `GeneralFilesTests`.

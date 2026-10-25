@@ -26,15 +26,16 @@ public sealed class RingCapacityTests
     }
 
     [Fact]
-    public void Beyond_seven_commands_the_seventh_sector_is_more_holding_the_rest_in_order()
+    public void Beyond_seven_commands_the_sixth_sector_is_more_holding_the_rest_in_order()
     {
+        // V2 PR 7.2: an overflowing ring shows five commands and More…, so its long labels fit (seven did not, at any DPI).
         var menu = Menu(Enumerable.Range(1, 10).Select(i => Cmd($"c{i}", "a")), [new("a", "A", "a", 1)]);
         var ring = menu.Single().Commands;
-        Assert.Equal(RadialMenu.RingCapacity - 1, ring.Count);       // with Back, a full ring
-        Assert.Equal(["c1", "c2", "c3", "c4", "c5", "c6"], ring.Take(6).Select(c => c.Id));
-        Assert.True(RadialMenu.IsMore(ring[6]));
-        Assert.Equal("More…", ring[6].Label);
-        Assert.Equal(["c7", "c8", "c9", "c10"], RadialMenu.Overflow(ring[6]).Select(c => c.Id));
+        Assert.Equal(RadialMenu.ShownBeforeMore + 1, ring.Count);
+        Assert.Equal(["c1", "c2", "c3", "c4", "c5"], ring.Take(5).Select(c => c.Id));
+        Assert.True(RadialMenu.IsMore(ring[5]));
+        Assert.Equal("More…", ring[5].Label);
+        Assert.Equal(["c6", "c7", "c8", "c9", "c10"], RadialMenu.Overflow(ring[5]).Select(c => c.Id));
     }
 
     [Fact]
@@ -54,8 +55,8 @@ public sealed class RingCapacityTests
         var categories = Enumerable.Range(1, 9).Select(i => new CapabilityCategory($"k{i}", $"K{i}", "x", i)).ToArray();
         var commands = categories.SelectMany(c => Enumerable.Range(1, 5).Select(j => Cmd($"{c.Id}.{j}", c.Id)));
         var more = Menu(commands, categories)[^1];
-        Assert.Equal(7, more.Commands.Count);                       // 10 commands from K8 and K9: 6 + More…
-        Assert.Equal(4, RadialMenu.Overflow(more.Commands[6]).Count);
+        Assert.Equal(6, more.Commands.Count);                       // 10 commands from K8 and K9: 5 + More… (V2 PR 7.2)
+        Assert.Equal(5, RadialMenu.Overflow(more.Commands[5]).Count);
     }
 
     [Fact]

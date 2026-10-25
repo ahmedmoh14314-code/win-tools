@@ -154,6 +154,14 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         log.Event("toast", new { kind = "dialogUnavailable" });
     });
 
+    /// <summary>A drop the host refused before asking or running anything, with the reason (V2 PR 7.2). Any thread.</summary>
+    public void Refused(string title, string detail) => ui.Post(() =>
+    {
+        ShowToast(new ToastContent(FeedbackKind.Nothing, title, detail));
+        sounds.Play(UiSound.Nothing);
+        log.Event("toast", new { kind = "refused" });
+    });
+
     /// <summary>A drop on a password command while a password window is already open (V2 PR 2.2). Any thread.</summary>
     public void SecretBusy() => ui.Post(() =>
     {
