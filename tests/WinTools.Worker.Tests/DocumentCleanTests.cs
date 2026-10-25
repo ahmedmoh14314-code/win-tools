@@ -157,8 +157,82 @@ public sealed class DocumentCleanTests : IDisposable
         }
         File.WriteAllBytes(docx, bytes);
         var r = DocumentJobs.Run(Request(docx));
-        Assert.False(r.Success);
+        Assert.Equal(ErrorCode.DecodeFailed, r.Error); // ZipArchive stops at the declared size: the CRC-32 catches it
         Assert.Equal(["liar.docx"], _dir.Names());
+    }
+
+    // Evaluator, PR 6.2: each finding as its failing input.
+
+    private static (string, string)[] WithCoreAt(string partName, string target) =>
+        [.. FullDocx().Where(p => p.Item1 is not ("_rels/.rels" or "docProps/core.xml")),
+            ("_rels/.rels", RootRels.Replace("Target=\"docProps/core.xml\"", $"Target=\"{target}\"", StringComparison.Ordinal)),
+            (partName, """<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>SECRETAUTHOR</dc:creator></cp:coreProperties>""")];
+
+    [Theory]
+    [InlineData("meta/c.xml", "./meta/c.xml")]
+    [InlineData("meta/c.xml", "x/../meta/c.xml")]
+    [InlineData("meta/c.xml", "/meta/c.xml")]
+    [InlineData("meta/my%20c.xml", "meta/my%20c.xml")]
+    public void A_relationship_target_is_resolved_as_the_package_rules_say(string partName, string target)
+    {
+        var r = DocumentJobs.Run(Request(Make("moved.docx", WithCoreAt(partName, target))));
+        Assert.True(r.Success, r.Message);
+        Assert.DoesNotContain("SECRETAUTHOR", Encoding.UTF8.GetString(Parts(r.OutputPath!)[partName]), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_property_relationship_to_a_part_that_is_not_there_is_refused_not_reported_done()
+    {
+        var parts = WithCoreAt("meta/c.xml", "meta/elsewhere.xml");
+        var r = DocumentJobs.Run(Request(Make("missing.docx", parts)));
+        Assert.False(r.Success);
+        Assert.Equal(["missing.docx"], _dir.Names());
+    }
+
+    [Fact]
+    public void A_relationship_that_calls_the_body_a_properties_part_cannot_blank_it()
+    {
+        var parts = FullDocx().Select(p => p.Item1 == "_rels/.rels" ? (p.Item1, RootRels.Replace("Target=\"docProps/core.xml\"", "Target=\"word/document.xml\"", StringComparison.Ordinal)) : p).ToArray();
+        var r = DocumentJobs.Run(Request(Make("hostile.docx", parts)));
+        Assert.False(r.Success);
+        Assert.Equal(["hostile.docx"], _dir.Names());
+    }
+
+    [Fact]
+    public void Revision_authors_anywhere_in_the_document_are_said()
+    {
+        var docx = Make("footer.docx", [.. FullDocx(), ("word/footer1.xml", """<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:ins w:id="1" w:author="SECRETAUTHOR"><w:r><w:t>x</w:t></w:r></w:ins></w:p></w:ftr>""")]);
+        var r = DocumentJobs.Run(Request(docx));
+        Assert.True(r.Success, r.Message);
+        Assert.Contains(r.Facts, f => f is { Label: "Kept", Notice: true } && f.Value.Contains("revision", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Paths_and_names_office_writes_outside_the_properties_are_said()
+    {
+        const string settingsRels = """<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate" Target="file:///C:\Users\SECRET\x.dotm" TargetMode="External"/></Relationships>""";
+        var docx = Make("template.docx", [.. FullDocx(), ("word/_rels/settings.xml.rels", settingsRels), ("docProps/thumbnail.jpeg", "jpeg")]);
+        var word = DocumentJobs.Run(Request(docx)).Facts.Single(f => f.Label == "Kept").Value;
+        Assert.Contains("template", word, StringComparison.Ordinal);
+        Assert.Contains("thumbnail", word, StringComparison.Ordinal);
+
+        const string workbook = """<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:x15ac="http://schemas.microsoft.com/office/spreadsheetml/2010/11/ac"><fileSharing userName="SECRETAUTHOR"/><mc:AlternateContent><mc:Choice Requires="x15"><x15ac:absPath url="C:\Users\SECRET\Desktop\"/></mc:Choice></mc:AlternateContent></workbook>""";
+        var xlsx = Make("book.xlsx", [.. OoxmlSamples.Xlsx(["a"], ""), ("docProps/core.xml", """<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>A</dc:creator></cp:coreProperties>""")]);
+        var parts = Parts(xlsx);
+        parts["xl/workbook.xml"] = Encoding.UTF8.GetBytes(workbook);
+        File.Delete(xlsx);
+        OoxmlSamples.Write(xlsx, [.. parts.Select(p => (p.Key, Encoding.UTF8.GetString(p.Value)))]);
+        var excel = DocumentJobs.Run(Request(xlsx)).Facts.Single(f => f.Label == "Kept").Value;
+        Assert.Contains("folder", excel, StringComparison.Ordinal);
+        Assert.Contains("user name", excel, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_signature_found_through_its_relationship_is_refused_too()
+    {
+        var rels = RootRels.Replace("</Relationships>", """<Relationship Id="rId9" Type="http://schemas.openxmlformats.org/package/2006/relationships/digital-signature/origin" Target="sig/origin.sigs"/></Relationships>""", StringComparison.Ordinal);
+        var parts = FullDocx().Select(p => p.Item1 == "_rels/.rels" ? (p.Item1, rels) : p).Append(("sig/origin.sigs", "")).ToArray();
+        Assert.Equal(ErrorCode.UnsupportedContent, DocumentJobs.Run(Request(Make("signed2.docx", parts))).Error);
     }
 
     [Fact]
