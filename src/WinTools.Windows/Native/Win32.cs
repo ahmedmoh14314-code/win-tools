@@ -150,7 +150,7 @@ internal static partial class Kernel32
 /// <summary>Unicode normalization from Windows itself (Normaliz.dll, Windows Vista and later), which needs no ICU.</summary>
 internal static partial class Normaliz
 {
-    public const int NormalizationKC = 5;
+    public const int NormalizationC = 1, NormalizationKC = 5;
     public const int ERROR_INSUFFICIENT_BUFFER = 122;
 
     [LibraryImport("normaliz.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]

@@ -385,7 +385,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             var parameters = new Dictionary<string, string>(StringComparer.Ordinal);
             if (prompt.Confirm)
             {
-                var check = PasswordPolicy.CheckNew(outcome.Secret, WinTools.Windows.UnicodeText.ToFormKC);
+                var check = PasswordPolicy.CheckNew(outcome.Secret, WinTools.Windows.UnicodeText.ToFormKC, WinTools.Windows.UnicodeText.ToFormC);
                 if (!check.Ok) { _feedback.SecretRefused(check.Problem!); return; }
                 parameters[PasswordPolicy.ParameterName] = check.Password!;
             }

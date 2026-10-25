@@ -286,6 +286,42 @@ internal static class PdfJobs
         return !run.TimedOut && run.ExitCode == QpdfRun.Success && int.TryParse(run.Output.AsSpan().Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var pages) && pages > 0 ? pages : -1;
     }
 
+    /// <summary>
+    /// The page count of a file qpdf calls "not encrypted". A clean read decides. One qpdf had to repair is accepted only
+    /// when the bytes hold no "/Encrypt" and <c>--check</c> finds warnings but no error: stale offsets are common in real
+    /// files and readers open them silently (second review, PR 2.2), while a protected PDF cut short loses its /Encrypt
+    /// with its trailer, and its encrypted streams then fail to decode (<c>--check</c> exits 2; measured).
+    /// </summary>
+    private static int PlainPages(Source source, string work)
+    {
+        var clean = CleanPages(work, source.Copy, null);
+        if (clean > 0) return clean;
+        if (HoldsEncrypt(Path.Combine(work, source.Copy))) throw Damaged();
+        var check = Q(work, "--check", source.Copy);
+        if (check.TimedOut) throw new PdfFailure(ErrorCode.WorkerTimeout, "The PDF took too long to check.");
+        if (check.ExitCode != QpdfRun.Warnings) throw Damaged();
+        try { return Open(source, work).Pages; }
+        catch (PdfFailure) { throw Damaged(); }
+    }
+
+    /// <summary>Whether the bytes contain "/Encrypt" anywhere (read in blocks, overlapping by the word's length).</summary>
+    private static bool HoldsEncrypt(string file)
+    {
+        ReadOnlySpan<byte> word = "/Encrypt"u8;
+        using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, FileOptions.SequentialScan);
+        var buffer = new byte[(1 << 16) + 8];
+        var carried = 0;
+        int n;
+        while ((n = fs.Read(buffer, carried, buffer.Length - carried)) > 0)
+        {
+            var filled = carried + n;
+            if (buffer.AsSpan(0, filled).IndexOf(word) >= 0) return true;
+            carried = Math.Min(word.Length - 1, filled);
+            buffer.AsSpan(filled - carried, carried).CopyTo(buffer);
+        }
+        return false;
+    }
+
     private static PdfFailure Damaged() => new(ErrorCode.DecodeFailed, "The PDF is damaged (qpdf had to repair it to read it); repair it first. Nothing was changed.");
 
     /// <summary>
@@ -301,8 +337,7 @@ internal static class PdfJobs
             case PasswordNeeded: return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "The PDF is already protected with a password.");
             case PasswordOpens: return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "The PDF is already encrypted by its author (it opens without a password but has restrictions).");
         }
-        var pages = CleanPages(work, source.Copy, null);
-        if (pages < 1) throw Damaged();
+        var pages = PlainPages(source, work);
         Destination(request, request.Inputs[0]);
         const string produced = "out.pdf";
         var owner = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(24));
@@ -328,8 +363,8 @@ internal static class PdfJobs
         switch (PasswordStatus(work, source.Copy, null))
         {
             case NotEncrypted:
-                // qpdf's 2 is also "an error": only a file it reads cleanly is "not protected".
-                if (CleanPages(work, source.Copy, null) < 1) throw Damaged();
+                // qpdf's 2 is also "an error": only a file read as plain, as PlainPages decides, is "not protected".
+                _ = PlainPages(source, work);
                 return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "The PDF is not protected.");
             case PasswordOpens:
                 return JobResult.Fail(request.Id, ErrorCode.UnsupportedContent, "The PDF opens without a password; its restrictions were set by its author, and WinTools does not remove them.");

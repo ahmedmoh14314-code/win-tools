@@ -95,3 +95,8 @@ One round (2026-10-25), on the built worker, the real qpdf and samples in RC4-40
   - with Windows Error Reporting LocalDumps configured, a crash dump of the worker or the dialog process could hold the password (threat model);
   - the reviewer found no injection through `@-`: only CR and LF split a line, and the policy refuses both.
 - Each finding is a test that failed on the old code. The reviewer's own probes now give the expected refusals.
+
+**Focused re-review:** every first-round finding is confirmed closed, with no blocker or major. Three minors:
+- **The strict clean-read rule refused real PDFs with stale offsets.** Acrobat and Edge open them silently. Fixed: qpdf's repair is accepted when the bytes hold no `/Encrypt` and `--check` finds warnings only. A cut protected PDF still fails, because its encrypted streams do not decode (`--check` exits 2, measured).
+- **New passwords that NFKC reorders or composes are refused,** including shadda then fatha as an Arabic keyboard types them, a decomposed é, NBSP, and ❤️ with its style marker. The refusal stays: it is the only choice safe across readers. The message now names the cause (mark order, a compatibility character, joined emoji, the emoji style marker).
+- **"Already encrypted" for an author-encrypted PDF** reads correctly; no change.

@@ -52,7 +52,9 @@ public static class PasswordPolicy
     /// <summary>Remove protection only: the password's NFKC form, when it differs, tried after the typed one.</summary>
     public const string NormalizedParameterName = "password-nfkc";
 
-    public static PasswordCheck CheckNew(string? typed, Func<string, string?>? normalizeKC = null)
+    /// <param name="normalizeC">NFC, to tell a canonical difference (marks in another order, a decomposed letter) from a
+    /// compatibility one ("²") in the message; the verdict is the same.</param>
+    public static PasswordCheck CheckNew(string? typed, Func<string, string?>? normalizeKC = null, Func<string, string?>? normalizeC = null)
     {
         if (string.IsNullOrEmpty(typed)) return new(null, "Enter a password.");
         if ((ChannelProblem(typed) ?? ForbiddenProblem(typed)) is { } problem) return new(null, problem);
@@ -61,7 +63,9 @@ public static class PasswordPolicy
             var normalized = normalizeKC(typed);
             if (normalized is null) return new(null, "The password contains characters that cannot be used.");
             if (!string.Equals(normalized, typed, StringComparison.Ordinal))
-                return new(null, "Some characters would change under Unicode normalization (for example ² becomes 2), so some PDF readers would not accept the password. Type them as plain characters.");
+                return new(null, normalizeC?.Invoke(typed) is { } c && !string.Equals(c, typed, StringComparison.Ordinal)
+                    ? "Some marks are in an order (or a form) that PDF readers change, so some would not accept the password. Retype them in the other order (for example the vowel mark before the shadda), or type the letter as one character."
+                    : "Some characters would change under Unicode normalization (for example ² becomes 2, or a non-breaking space becomes a space), so some PDF readers would not accept the password. Type them as plain characters.");
         }
         if (Encoding.UTF8.GetByteCount(typed) > MaxUtf8Bytes) return new(null, "The password is too long (at most 127 bytes: fewer characters in some scripts).");
         return new(typed, null);
@@ -102,6 +106,7 @@ public static class PasswordPolicy
         {
             var v = rune.Value;
             var category = Rune.GetUnicodeCategory(rune);
+            if (v == 0x200D) return "Emoji joined from several (such as a family or a profession) cannot be used; use single emoji.";
             if (category is UnicodeCategory.Format or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator)
                 return "A password cannot contain invisible characters (direction marks, zero-width spaces, separators).";
             if (category is UnicodeCategory.PrivateUse or UnicodeCategory.OtherNotAssigned || (v & 0xFFFE) == 0xFFFE || v is >= 0xFDD0 and <= 0xFDEF)

@@ -80,6 +80,19 @@ public sealed class PdfPasswordTests
         Assert.True(PasswordPolicy.CheckNew("x2", Fake).Ok);
     }
 
+    [Fact]
+    public void A_refused_new_password_says_what_to_change()
+    {
+        // Second review, PR 2.2: the reason must fit the case. Marks in another order (shadda then fatha, as an Arabic
+        // keyboard types them) are a canonical difference; "²" is a compatibility one; joined emoji have a joiner.
+        static string? Kc(string s) => s.Replace("\u0651\u064E", "\u064E\u0651", StringComparison.Ordinal).Replace("\u00B2", "2", StringComparison.Ordinal);
+        static string? C(string s) => s.Replace("\u0651\u064E", "\u064E\u0651", StringComparison.Ordinal);
+        Assert.Contains("order", PasswordPolicy.CheckNew("\u0634\u0651\u064E", Kc, C).Problem, StringComparison.Ordinal);
+        Assert.Contains("² becomes 2", PasswordPolicy.CheckNew("x\u00B2", Kc, C).Problem, StringComparison.Ordinal);
+        Assert.Contains("joined", PasswordPolicy.CheckNew("\U0001F468\u200D\U0001F469", Kc, C).Problem, StringComparison.Ordinal);
+        Assert.Contains("emoji", PasswordPolicy.CheckNew("\u2764\uFE0F", Kc, C).Problem, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("heart\u2764\uFE0F")]      // a variation selector (SASLprep maps it to nothing)
     [InlineData("tag\U000E0041")]           // a tag character outside the BMP (format)

@@ -141,5 +141,9 @@ public sealed class JobSecretTests : IDisposable
         Assert.False(PasswordPolicy.CheckNew("\uFB01ne", UnicodeText.ToFormKC).Ok); // changed by NFKC: refused as a new password
         Assert.Equal("fine", PasswordPolicy.CheckExisting("\uFB01ne", UnicodeText.ToFormKC).Normalized);
         Assert.Equal("2", UnicodeText.ToFormKC("\u00B2"));
+        Assert.Equal("\u0634\u064E\u0651", UnicodeText.ToFormC("\u0634\u0651\u064E")); // canonical reordering of marks
+        Assert.Equal("\u00E9", UnicodeText.ToFormC("e\u0301"));
+        Assert.Contains("order", PasswordPolicy.CheckNew("\u0634\u0651\u064E", UnicodeText.ToFormKC, UnicodeText.ToFormC).Problem, StringComparison.Ordinal);
+        Assert.True(PasswordPolicy.CheckNew("\u0634\u064E\u0651", UnicodeText.ToFormKC, UnicodeText.ToFormC).Ok); // the order NFKC keeps
     }
 }

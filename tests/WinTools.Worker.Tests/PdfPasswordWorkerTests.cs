@@ -145,14 +145,29 @@ public sealed class PdfPasswordWorkerTests : IDisposable
     }
 
     [Fact]
-    public void A_damaged_file_is_never_reported_as_not_protected()
+    public void A_pdf_with_stale_offsets_but_no_encryption_is_still_protected()
     {
-        var bytes = PdfSamples.Pages(3);
-        var cut = _dir.Write("cut.pdf", bytes[..(bytes.Length / 2)]);
-        var r = PdfJobs.Run(Request(PdfCapabilities.UnprotectId, cut, "any"));
+        // Second review, PR 2.2: real files often have offsets a line out (an editor added a comment); readers open
+        // them silently. Only a file holding /Encrypt keeps the strict rule.
+        var bytes = PdfSamples.Pages(2);
+        var shifted = _dir.Write("shifted.pdf", [.. "%PDF-1.4\n%\u00E2\u00E3\n"u8.ToArray(), .. bytes["%PDF-1.4\n".Length..]]);
+        var p = PdfJobs.Run(Request(PdfCapabilities.ProtectId, shifted, "pass"));
+        Assert.True(p.Success, p.Message);
+        Assert.Equal(3, Opens(p.OutputPath!, "pass"));
+        Assert.Equal(2, Pages(p.OutputPath!, "pass"));
+        Assert.Equal(ErrorCode.NothingToDo, PdfJobs.Run(Request(PdfCapabilities.UnprotectId, shifted, "pass")).Error);
+    }
+
+    [Fact]
+    public void An_unreadable_file_is_never_reported_as_not_protected()
+    {
+        // A PDF header over random bytes: qpdf's "2" there is an error, not "not encrypted". (A plain PDF cut short is
+        // genuinely not protected and may say so: second review, PR 2.2.)
+        var junk = _dir.Write("junk.pdf", [.. "%PDF-1.4\n"u8.ToArray(), .. System.Security.Cryptography.RandomNumberGenerator.GetBytes(4096)]);
+        var r = PdfJobs.Run(Request(PdfCapabilities.UnprotectId, junk, "any"));
         Assert.NotEqual(ErrorCode.NothingToDo, r.Error);
         Assert.False(r.Success);
-        Assert.Equal(["cut.pdf"], _dir.Names());
+        Assert.Equal(["junk.pdf"], _dir.Names());
     }
 
     [Fact]
