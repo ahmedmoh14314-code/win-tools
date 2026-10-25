@@ -23,8 +23,8 @@ internal sealed class SubtitleJobModule : IJobModule
         if (request.Inputs is not [var source]) return false;
         if (request.CapabilityId == SubtitleCapabilities.InfoId) return result.Outputs.Count == 0 && JobFacts.AreShowable(result.Facts);
         if (result.Outputs is not [{ Sha256: { Length: 64 } claimed } output]) return false;
-        // The only fact a written file may carry says what a conversion could not keep, which the toast shows.
-        if (result.Facts.Count > 0 && !(result.Facts is [{ Label: "Dropped", Notice: true }] && JobFacts.AreShowable(result.Facts))) return false;
+        // A written file may carry only notices for the toast: the code page it was read as, and what a conversion could not keep.
+        if (result.Facts.Count > 0 && !(result.Facts.Count <= 2 && result.Facts.All(f => f is { Label: "Read as" or "Dropped", Notice: true }) && JobFacts.AreShowable(result.Facts))) return false;
         try
         {
             if (!SubtitleCapabilities.Candidates(request.CapabilityId, source, request.OutputDirectory).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;

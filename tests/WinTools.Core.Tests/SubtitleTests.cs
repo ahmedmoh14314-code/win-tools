@@ -84,12 +84,12 @@ public sealed class SubtitleTests
     [Fact]
     public void Encodings_are_told_apart_by_bom_strict_utf8_and_arabic_runs()
     {
-        var arabic = "مرحبا بكم في الفيلم";
+        var arabic = "مرحبا بكم في الفيلم الجديد"; // 1256 is read when the article is as common as in prose (third look)
         var e1256 = CodePages.Get(1256).GetBytes(arabic);
         var western = "Café crème à la française, déjà vu";
         var e1252 = CodePages.Get(1252).GetBytes(western);
         Assert.Equal((arabic, "Windows-1256 (Arabic)"), Decode(e1256));
-        Assert.Equal((western, "Windows-1252 (Western)"), Decode(e1252));
+        Assert.Null(SubtitleEncoding.TryDecode(e1252, out _)); // not guessed: Western, Central European and Turkish share their bytes (second review)
         Assert.Equal((arabic, "UTF-8"), Decode(Encoding.UTF8.GetBytes(arabic)));
         Assert.Equal((arabic, "UTF-8 with BOM"), Decode([0xEF, 0xBB, 0xBF, .. Encoding.UTF8.GetBytes(arabic)]));
         Assert.Equal((arabic, "UTF-16 LE"), Decode([0xFF, 0xFE, .. Encoding.Unicode.GetBytes(arabic)]));
@@ -98,7 +98,7 @@ public sealed class SubtitleTests
 
     private static (string, string) Decode(byte[] bytes)
     {
-        var d = SubtitleEncoding.Decode(bytes);
+        var d = SubtitleEncoding.TryDecode(bytes, out var why) ?? throw new InvalidOperationException(why);
         return (d.Text, d.EncodingName);
     }
 

@@ -16,20 +16,87 @@ public sealed class SubtitleReviewTests
     {
         var bytes = CodePages.Get(codePage).GetBytes(text);
         Assert.Null(SubtitleEncoding.TryDecode(bytes, out var why));
-        Assert.Contains("not recognised", why, StringComparison.Ordinal);
+        Assert.Contains("Save it as UTF-8", why, StringComparison.Ordinal);
+    }
+
+    // Second review, PR 7.1: Western, Central European and Turkish code pages share most byte values, so no content rule
+    // tells them apart; each is refused with the reason (save as UTF-8), never read as another script.
+    [Theory]
+    [InlineData(1252, "Ação! Atenção às ações e emoções.")]
+    [InlineData(1252, "Ich weiß es nicht. Das ist schön.")]
+    [InlineData(1252, "¿Dónde está? No sé, señor.")]
+    [InlineData(1252, "Jag förstår inte vad du säger.")]
+    [InlineData(1251, "Я не знаю, но он да. Мы с ним в доме.")]
+    [InlineData(1253, "Ναι, το ξέρω. Θα σε δω.")]
+    [InlineData(1254, "Teşekkürler. Şimdi gidiyorum.")]
+    [InlineData(1250, "Dziękuję. Chodź tutaj, děkuji.")]
+    public void A_code_page_that_content_cannot_tell_apart_is_refused_never_misread(int codePage, string text)
+    {
+        Assert.Null(SubtitleEncoding.TryDecode(CodePages.Get(codePage).GetBytes(text), out var why));
+        Assert.Contains("UTF-8", why, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData("Ação! Atenção às ações e emoções.")]
-    [InlineData("«Œuvre» — déjà vu… “quoted” Größe")]
-    [InlineData("Ééé ! Il était une fois, à côté de la forêt, un garçon très âgé qui aimait le cinéma.")]
-    public void Western_text_with_accented_pairs_is_still_western(string text)
+    [InlineData("مرحبا بكم في الفيلم الجديد")]
+    [InlineData("- «هيا بنا إلى السوق»\n- «إلى أين؟ إلى البيت» …لا… – حسنا، الآن")] // Arabic quotes and dashes are neutral
+    [InlineData("الحلقة 12: ما بعد النهاية (الجزء الثاني)")]
+    public void Unambiguous_arabic_in_windows_1256_is_read(string text)
     {
-        var decoded = SubtitleEncoding.TryDecode(CodePages.Get(1252).GetBytes(text), out _);
-        Assert.NotNull(decoded);
+        var decoded = SubtitleEncoding.TryDecode(CodePages.Get(1256).GetBytes(text), out var why);
+        Assert.True(decoded is not null, why);
         Assert.Equal(text, decoded.Text);
-        Assert.Equal("Windows-1252 (Western)", decoded.EncodingName);
+        Assert.Equal("Windows-1256 (Arabic)", decoded.EncodingName);
     }
+
+    // Third look, PR 7.1: KOI8-R puts lower-case Cyrillic on the bytes 1256 uses for Arabic letters, and all-caps Russian
+    // or Greek and Thai can too. Arabic is recognised by its definite article, which garbage hardly ever forms.
+    [Theory]
+    [InlineData(20866, "Да, мы едем завтра.\nСейчас? Ладно.\nМама сказала, что всё хорошо.\nЯ жду тебя уже 20 минут.")]
+    [InlineData(1251, "ПРИВЕТ, МАША! КАК ДЕЛА? [МУЗЫКА] ХОРОШО, СПАСИБО.")]
+    [InlineData(1253, "ΓΕΙΑ ΣΟΥ, ΜΑΡΙΑ! ΤΙ ΚΑΝΕΙΣ; ΚΑΛΑ, ΕΥΧΑΡΙΣΤΩ.")]
+    [InlineData(874, "สวัสดีครับ คุณสมชาย! วันนี้อากาศดีมาก")]
+    public void Text_that_only_looks_like_arabic_bytes_is_refused(int codePage, string text)
+    {
+        var bytes = CodePages.Get(codePage).GetBytes(text);
+        Assert.Null(SubtitleEncoding.TryDecode(bytes, out _));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Utf16_without_a_bom_is_refused_not_read_as_utf8(bool bigEndian)
+    {
+        var bytes = (bigEndian ? Encoding.BigEndianUnicode : Encoding.Unicode).GetBytes("1\n00:00:01,000 --> 00:00:02,000\nhello\n");
+        Assert.Null(SubtitleEncoding.TryDecode(bytes, out var why));
+        Assert.Contains("UTF-16", why, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Arabic_mixed_with_accented_latin_in_windows_1256_is_refused_not_half_misread() =>
+        Assert.Null(SubtitleEncoding.TryDecode(CodePages.Get(1256).GetBytes("مرحبا Hélène, ça va? Très bien, café à côté."), out _));
+
+    [Theory]
+    [InlineData("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\na --&gt; b\n")]
+    public void A_webvtt_line_that_srt_cannot_hold_stops_the_conversion(string vtt)
+    {
+        var doc = SubtitleParser.Parse(vtt, SubtitleFormat.Vtt);
+        Assert.Empty(doc.Problems);
+        Assert.NotNull(SubtitleWriter.CannotWrite(doc, SubtitleFormat.Srt));
+    }
+
+    [Fact]
+    public void A_webvtt_cue_whose_text_becomes_empty_still_converts()
+    {
+        var doc = SubtitleParser.Parse("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<v Bob></v>\n&nbsp;\n\n00:00:03.000 --> 00:00:04.000\nnext\n", SubtitleFormat.Vtt);
+        var srt = SubtitleParser.Parse(SubtitleWriter.Write(doc, SubtitleFormat.Srt), SubtitleFormat.Srt);
+        Assert.Empty(srt.Problems);
+        Assert.Equal(2, srt.Cues.Count);
+        Assert.Contains("speaker names", SubtitleWriter.Dropped(doc, SubtitleFormat.Srt));
+    }
+
+    [Fact]
+    public void Srt_settings_are_only_its_own_position_hints() =>
+        Assert.NotEmpty(SubtitleParser.Parse("1\n00:00:01,000 --> 00:00:02,000 Xjunk\ntext\n", SubtitleFormat.Srt).Problems);
 
     [Fact]
     public void Utf8_with_a_few_damaged_bytes_is_refused_not_read_as_a_code_page()

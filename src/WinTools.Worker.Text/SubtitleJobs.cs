@@ -48,11 +48,14 @@ internal static class SubtitleJobs
             if (output.Cues.Any(c => c.End > SubtitleWriter.MaxTime))
                 return JobResult.Fail(id, ErrorCode.LimitExceeded, "A cue would end after 999:59:59, which subtitle files cannot hold.");
             var target = SubtitleCapabilities.OutputFormat(request.CapabilityId, path);
+            if (SubtitleWriter.CannotWrite(output, target) is { } cannot) return JobResult.Fail(id, ErrorCode.UnsupportedContent, cannot);
             var bytes = SubtitleWriter.Bytes(output, target);
             // Clean up on a file that already is exactly what it would write: say so, write nothing.
             if (request.CapabilityId == SubtitleCapabilities.CleanUpId && raw.AsSpan().SequenceEqual(bytes))
                 return JobResult.Fail(id, ErrorCode.NothingToDo, "The file already is clean UTF-8.");
-            return Commit(request, path, bytes, target, output, SubtitleWriter.Dropped(output, target));
+            // A legacy code page is a judgement, not a fact the file states: say which one was used (third look, PR 7.1).
+            var readAs = decoded.EncodingName.StartsWith("Windows-", StringComparison.Ordinal) ? $"Read as {decoded.EncodingName}" : null;
+            return Commit(request, path, bytes, target, output, SubtitleWriter.Dropped(output, target), readAs);
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return JobResult.Fail(id, ErrorCode.SourceNotFound, "The file is no longer there."); }
         catch (UnauthorizedAccessException) { return JobResult.Fail(id, ErrorCode.OutputDirectoryNotWritable, "The destination folder is not writable."); }
@@ -99,12 +102,10 @@ internal static class SubtitleJobs
 
     private static string Clip(string s) => s.Length <= 150 ? s : s[..149] + "…";
 
-    private static bool SameCues(SubtitleDocument a, SubtitleDocument b) =>
-        a.Cues.Count == b.Cues.Count && a.Cues.Zip(b.Cues).All(p => p.First.Start == p.Second.Start && p.First.End == p.Second.End && p.First.Lines.SequenceEqual(p.Second.Lines));
 
     private static string Time(TimeSpan t) => string.Create(CultureInfo.InvariantCulture, $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}");
 
-    private static JobResult Commit(JobRequest request, string source, byte[] bytes, SubtitleFormat format, SubtitleDocument written, IReadOnlyList<string> dropped)
+    private static JobResult Commit(JobRequest request, string source, byte[] bytes, SubtitleFormat format, SubtitleDocument written, IReadOnlyList<string> dropped, string? readAs)
     {
         var dir = new DirectoryInfo(request.OutputDirectory ?? Path.GetDirectoryName(source)!);
         if (!dir.Exists) return JobResult.Fail(request.Id, request.OutputDirectory is null ? ErrorCode.SourceNotFound : ErrorCode.OutputDirectoryNotWritable, "The destination folder does not exist.");
@@ -122,10 +123,12 @@ internal static class SubtitleJobs
             File.SetAttributes(temp, FileAttributes.Hidden);
             // Read back: the written file must parse, without a problem, to the same cues: every time, and every line once
             // turned into the target format.
+            // The expected lines come from the document in memory, not from a parse of the same bytes (second review, PR 7.1).
             var again = SubtitleParser.Parse(SubtitleEncoding.Decode(File.ReadAllBytes(temp)).Text, format);
-            var expected = SubtitleParser.Parse(SubtitleEncoding.Decode(bytes).Text, format);
-            if (again.Problems.Count > 0 || again.Cues.Count != written.Cues.Count || !SameCues(again, expected)
-                || !again.Cues.Select(c => (c.Start, c.End)).SequenceEqual(written.Cues.Select(c => (c.Start, c.End))))
+            var lines = written.Cues.Select(c => SubtitleWriter.LinesAs(c, written.Format, format)).ToArray();
+            if (again.Problems.Count > 0 || again.Cues.Count != written.Cues.Count
+                || !again.Cues.Select(c => (c.Start, c.End)).SequenceEqual(written.Cues.Select(c => (c.Start, c.End)))
+                || !again.Cues.Select((c, k) => c.Lines.SequenceEqual(lines[k])).All(same => same))
                 return JobResult.Fail(request.Id, ErrorCode.OutputValidationFailed, "The new file did not check out; nothing was saved.");
             if (MarkOfTheWeb.ZoneToCarry(source) is { } z) MarkOfTheWeb.Apply(temp, z);
             File.SetAttributes(temp, FileAttributes.Normal);
@@ -137,7 +140,9 @@ internal static class SubtitleJobs
                     File.Move(temp, candidate, overwrite: false);
                     committed = true;
                     // What the target format cannot hold is said in the toast (evaluator, PR 7.1).
-                    IReadOnlyList<JobFact> facts = dropped.Count > 0 ? [new JobFact("Dropped", "Not kept: " + string.Join(", ", dropped), Notice: true)] : [];
+                    var facts = new List<JobFact>();
+                    if (readAs is not null) facts.Add(new JobFact("Read as", readAs, Notice: true));
+                    if (dropped.Count > 0) facts.Add(new JobFact("Dropped", "Not kept: " + string.Join(", ", dropped), Notice: true));
                     return new JobResult(request.Id, true, ErrorCode.None, null, [new JobOutput(candidate, hash)], facts);
                 }
                 catch (IOException ex) when (ex.HResult is ErrorFileExists or ErrorAlreadyExists) { }
