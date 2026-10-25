@@ -61,7 +61,23 @@ One round (2026-10-25), reproduced on the built code: three blockers and five ma
   - 1,000,000 lines at most;
   - a shift past 999 hours is refused.
 
-**Decision 3, as revised:** a BOM with a strict decoder; strict UTF-8, refusing mostly-valid UTF-8 with damaged bytes; Windows-1256 only when at least 80 % of the decoded non-ASCII characters are Arabic script; Windows-1252 only when at least 95 % are Latin and fewer than half of the high bytes stand in runs of three or more (Cyrillic and Greek put over 90 % there). Anything else is refused: "save it as UTF-8 and try again".
+**Decision 3, as revised after two rounds:**
+1. A BOM, with a strict decoder.
+2. Strict UTF-8; mostly valid UTF-8 with damaged bytes is refused.
+3. **Windows-1256 only when unambiguous:**
+   - every letter is Arabic script (punctuation such as « » … – is neutral);
+   - at least ten letters;
+   - no Arabic letter touching a Latin letter.
+4. **Windows-1252 is not guessed at all.** The second round showed that no content rule tells it from 1250, 1254 or 1257: German, Spanish and Swedish read as Arabic, and short Russian and Greek dialogue read as Western.
+
+Everything else is refused with the reason ("save it as UTF-8"). A user-chosen encoding comes with the dialog (V2 Stage 7).
+
+Further fixes from the second round:
+- a WebVTT line that would become "-->" stops the conversion;
+- lines left empty by a removed tag are dropped;
+- cue ids and speaker names are named in "Not kept";
+- SRT settings must be its position hints;
+- the read-back compares every line with the document in memory.
 
 ## Alternatives considered
 - **SubtitlesParserV2.** LGPL-3, rejected by the licence policy.
@@ -70,7 +86,7 @@ One round (2026-10-25), reproduced on the built code: three blockers and five ma
 - **UTF-8 without a BOM for SRT.** Rejected: common Windows players then show Arabic as mojibake.
 
 ## Consequences
-- Other legacy code pages (1250, 1251, 1253, Shift-JIS…) are refused with the reason, not guessed; Info says "Not recognised".
+- Legacy code pages other than unambiguous Arabic 1256 (1252, 1250, 1251, 1253, 1254, Shift-JIS…) are refused with the reason, not guessed; Info says "Not recognised". A Western file saved by an old editor must be saved as UTF-8 first, until the encoding dialog exists.
 - WebVTT styling is lost on conversion to SRT, which cannot hold it.
 
 ## Evidence / experiments
