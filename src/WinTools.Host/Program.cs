@@ -15,6 +15,9 @@ internal static class Program
 {
     private static readonly TimeSpan JobTimeout = TimeSpan.FromSeconds(60);
 
+    /// <summary>How long the exit waits for cancelled jobs: the workers' 1 s grace plus temp cleanup.</summary>
+    private static readonly TimeSpan ExitGrace = TimeSpan.FromSeconds(3);
+
     [STAThread]
     private static int Main(string[] args)
     {
@@ -56,7 +59,8 @@ internal static class Program
             var feedback = new FeedbackPresenter(window, toast, info, sounds, log);
             var current = settings;
             toast.ReducedMotionSource = () => Volatile.Read(ref current).ReducedMotion(SystemPreferences.ReducedMotion());
-            var jobs = new JobRunner(new WorkerClient(workerPath, JobTimeout), log, () => Volatile.Read(ref current), feedback);
+            var images = new JobModuleRunner(ImageJobModule.Instance, new WorkerClient(workerPath, JobTimeout, ImageJobModule.Instance), ImageJobModule.Parameters);
+            var jobs = new JobScheduler([images], log, () => Volatile.Read(ref current), feedback);
             coordinator = new InteractionCoordinator(log, window, jobs, feedback, sounds, settings);
             using (coordinator)
             {
@@ -89,7 +93,10 @@ internal static class Program
                 if (listener is null) log.Event("settings.listen", new { ok = false }); // runs on; changes then apply at the next start
                 log.Event("host.start", new { pid = Environment.ProcessId, runtime = Environment.Version.ToString(), log = log.Path, tray = tray.Visible });
                 MessageWindow.RunLoop();
-                log.Event("host.stop");
+                // Exiting: queued jobs never start; running ones stop, their workers get the cancel message and its grace, and
+                // their temps are cleaned. Waited for a bounded time; the job object ends any worker still alive after that.
+                var stopped = jobs.CancelAll().Wait(ExitGrace);
+                log.Event("host.stop", new { jobsStopped = stopped });
             }
         }
         finally

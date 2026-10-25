@@ -24,7 +24,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     private const nuint ArmTimer = 2; // repaints a hovered command as armed when the arm delay has passed
 
     private readonly HostLog _log;
-    private readonly JobRunner _jobs;
+    private readonly JobScheduler _jobs;
     private readonly FeedbackPresenter _feedback;
     private readonly SoundPlayer _sounds;
     private readonly NavigationSounds _navigationSounds;
@@ -40,7 +40,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     private uint _dpi = 96;
     private (int X, int Y) _anchor, _centre;
 
-    public InteractionCoordinator(HostLog log, MessageWindow window, JobRunner jobs, FeedbackPresenter feedback, SoundPlayer sounds, AppSettings settings)
+    public InteractionCoordinator(HostLog log, MessageWindow window, JobScheduler jobs, FeedbackPresenter feedback, SoundPlayer sounds, AppSettings settings)
     {
         _log = log;
         _jobs = jobs;
@@ -317,17 +317,16 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             _log.Event("drop", new { accepted = false, reason = "commandsChanged", files = paths.Count });
             return false;
         }
-        // The only module so far; jobs become generic in V2 PR 1.2. Never throw here: this runs inside OLE's Drop. A command
-        // no module can run is refused like a changed one, with the Nothing sound: a drop that runs nothing never reads as
-        // accepted (evaluator, PR #15).
-        if (!ImageCapabilities.TryOperationOf(chosen, out var operation))
+        // Never throw here: this runs inside OLE's Drop. A command no module runs is refused like a changed one, with the
+        // Nothing sound: a drop that runs nothing never reads as accepted (evaluator, PR #15).
+        if (!_jobs.Runs(chosen.Module))
         {
             _sounds.Play(UiSound.Nothing);
             _log.Event("drop", new { accepted = false, reason = "noModule", op = chosen.Id, module = chosen.Module, files = paths.Count });
             return false;
         }
         _log.Event("drop", new { accepted = true, op = chosen.Id, openMs, files = paths.Count, sounds = SoundCounts(), frames });
-        _ = _jobs.Start(operation, paths);
+        if (_jobs.Enqueue(chosen, paths) is null) _log.Event("job.refused", new { op = chosen.Id, module = chosen.Module });
         return true;
     }
 

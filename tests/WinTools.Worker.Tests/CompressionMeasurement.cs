@@ -181,7 +181,7 @@ public sealed class CompressionMeasurement(ITestOutputHelper output) : IDisposab
             foreach (var level in new[] { "high", "small" })
             {
                 var requests = Enumerable.Range(0, 4).Select(i => new ConversionRequest($"B{Interlocked.Increment(ref _seq)}", $"compress.{level}", _dir.Write($"big{lanes}{level}{i}.jpg", bytes))).ToArray();
-                var client = new WinTools.Host.Jobs.WorkerClient(Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.exe"), TimeSpan.FromSeconds(60), parallelism: lanes);
+                var client = ImageJobsCompat.Images(Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.exe"), TimeSpan.FromSeconds(60), parallelism: lanes);
                 var watch = System.Diagnostics.Stopwatch.StartNew();
                 var results = await client.RunAsync(requests, CancellationToken.None);
                 output.WriteLine($"lanes {(lanes == 0 ? "default" : lanes.ToString())} {level}: {watch.Elapsed.TotalSeconds:0.0} s for 4 · " + string.Join(", ", results.Select(r => r.Success ? "written" : r.Error.ToString())));

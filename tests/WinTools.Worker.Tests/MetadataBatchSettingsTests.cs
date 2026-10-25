@@ -100,7 +100,7 @@ public sealed class MetadataOperationTests : IDisposable
         Assert.Equal(("JPEG", 48, 64, 6, true, true, true, true), (i.Format, i.Width, i.Height, i.Orientation, i.HasExif, i.HasGps, i.HasXmp, i.HasTextOrComments));
         Assert.Equal(new FileInfo(src).Length, i.FileBytes);
         Assert.Equal(["photo.jpg"], _dir.Names());
-        Assert.True(WorkerClient.IsBelievable(new ConversionRequest("x", "metadata.info", src), r with { Id = "x" }));
+        Assert.True(ImageJobsCompat.IsBelievable(new ConversionRequest("x", "metadata.info", src), r with { Id = "x" }));
     }
 }
 
@@ -116,7 +116,7 @@ public sealed class BatchTests : IDisposable
         var files = Enumerable.Range(0, 120).Select(i => _dir.CopySample("quadrants-64x48.png", $"img {i:000} ✓.png")).ToArray();
         var requests = files.Select((f, i) => new ConversionRequest($"b{i}", "convert.to-webp", f)).ToArray();
 
-        var results = await new WorkerClient(WorkerExe, TimeSpan.FromSeconds(30), parallelism: 4).RunAsync(requests, CancellationToken.None);
+        var results = await ImageJobsCompat.Images(WorkerExe, TimeSpan.FromSeconds(30), parallelism: 4).RunAsync(requests, CancellationToken.None);
 
         Assert.Equal(requests.Select(r => r.Id), results.Select(r => r.Id));
         Assert.All(results, r => Assert.True(r.Success, r.Message));
@@ -129,7 +129,7 @@ public sealed class BatchTests : IDisposable
         var good = Enumerable.Range(0, 9).Select(i => _dir.CopySample("quadrants-64x48.png", $"g{i}.png")).ToList();
         var bad = _dir.Write("bad.png", [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3]);
         good.Insert(4, bad);
-        var results = await new WorkerClient(WorkerExe, TimeSpan.FromSeconds(30)).RunAsync(good.Select((f, i) => new ConversionRequest($"c{i}", "convert.to-jpeg", f)).ToArray(), CancellationToken.None);
+        var results = await ImageJobsCompat.Images(WorkerExe, TimeSpan.FromSeconds(30)).RunAsync(good.Select((f, i) => new ConversionRequest($"c{i}", "convert.to-jpeg", f)).ToArray(), CancellationToken.None);
         Assert.Equal(9, results.Count(r => r.Success));
         Assert.Equal(ErrorCode.DecodeFailed, results[4].Error);
     }
@@ -140,8 +140,8 @@ public sealed class BatchTests : IDisposable
         var a = _dir.CopySample("quadrants-64x48.png", "same.png");
         var b = _dir.CopySample("quadrants-64x48.jpg", "same.jpg");
         var c = _dir.CopySample("quadrants-64x48.bmp", "same.bmp");
-        var results = await new WorkerClient(WorkerExe, TimeSpan.FromSeconds(30), parallelism: 3)
-            .RunAsync([new("d1", "convert.to-webp", a), new("d2", "convert.to-webp", b), new("d3", "convert.to-webp", c)], CancellationToken.None);
+        var results = await ImageJobsCompat.Images(WorkerExe, TimeSpan.FromSeconds(30), parallelism: 3)
+            .RunAsync([new ConversionRequest("d1", "convert.to-webp", a), new ConversionRequest("d2", "convert.to-webp", b), new ConversionRequest("d3", "convert.to-webp", c)], CancellationToken.None);
         Assert.All(results, r => Assert.True(r.Success, r.Message));
         Assert.Equal(3, results.Select(r => r.OutputPath).Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.Contains("same (2).webp", _dir.Names());
@@ -153,7 +153,7 @@ public sealed class BatchTests : IDisposable
     {
         var files = Enumerable.Range(0, 6).Select(i => _dir.CopySample("quadrants-64x48.png", i == 2 ? "boom.png" : $"ok{i}.png")).ToArray();
         var env = new Dictionary<string, string> { ["WINTOOLS_WORKER_FAULT"] = "crash-after-temp", ["WINTOOLS_WORKER_FAULT_MATCH"] = "boom" };
-        var results = await new WorkerClient(WorkerExe, TimeSpan.FromSeconds(30), env, parallelism: 1)
+        var results = await ImageJobsCompat.Images(WorkerExe, TimeSpan.FromSeconds(30), env, parallelism: 1)
             .RunAsync(files.Select((f, i) => new ConversionRequest($"x{i}", "convert.to-jpeg", f)).ToArray(), CancellationToken.None);
         Assert.Equal(ErrorCode.WorkerCrashed, results[2].Error);
         Assert.Equal(5, results.Count(r => r.Success));
@@ -166,8 +166,8 @@ public sealed class BatchTests : IDisposable
     {
         var src = _dir.CopySample("quadrants-64x48.png", "p.png");
         var outDir = Directory.CreateDirectory(Path.Combine(_dir.Path, "out")).FullName;
-        var results = await new WorkerClient(WorkerExe, TimeSpan.FromSeconds(30))
-            .RunAsync([new("o1", "convert.to-jpeg", src, outDir, JpegQuality: 50), new("o2", "resize.percent-50", src, outDir)], CancellationToken.None);
+        var results = await ImageJobsCompat.Images(WorkerExe, TimeSpan.FromSeconds(30))
+            .RunAsync([new ConversionRequest("o1", "convert.to-jpeg", src, outDir, JpegQuality: 50), new ConversionRequest("o2", "resize.percent-50", src, outDir)], CancellationToken.None);
         Assert.All(results, r => Assert.True(r.Success, r.Message));
         Assert.Equal(Path.Combine(outDir, "p.jpg"), results[0].OutputPath);
         Assert.Equal(Path.Combine(outDir, "p (resized 50%).png"), results[1].OutputPath);

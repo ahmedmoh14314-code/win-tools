@@ -125,9 +125,9 @@ public sealed class FeedbackTextTests
     private static readonly Operation ToWebP = OperationCatalog.Convert(ImageFormat.WebP);
 
     private static JobItem Ok(string name, string output, long a = 2_000_000, long b = 500_000) =>
-        new(name, ConversionResult.Ok("id", $@"C:\x\{output}", "00"), a, b);
+        new(name, JobResult.Ok("id", new JobOutput($@"C:\x\{output}", "00")), a, b);
 
-    private static JobItem Fail(string name, ErrorCode code) => new(name, ConversionResult.Fail("id", code, "worker detail C:\\secret\\path"));
+    private static JobItem Fail(string name, ErrorCode code) => new(name, JobResult.Fail("id", code, "worker detail C:\\secret\\path"));
 
     [Fact]
     public void A_single_success_names_the_new_file_and_what_was_done()
@@ -171,9 +171,9 @@ public sealed class FeedbackTextTests
     public void Nothing_to_do_is_not_a_failure()
     {
         var resize = OperationCatalog.Get("resize.box-1920x1080");
-        var m = FeedbackText.For(resize, [new("small.png", ConversionResult.Fail("id", ErrorCode.NothingToDo, "fits"))]);
+        var m = FeedbackText.For(resize, [new("small.png", JobResult.Fail("id", ErrorCode.NothingToDo, "fits"))]);
         Assert.Equal((FeedbackKind.Nothing, "Nothing to change", "Already that size or smaller"), (m.Kind, m.Title, m.Detail));
-        var mixed = FeedbackText.For(resize, [Ok("a.png", "a (1920x1080).png"), new("b.png", ConversionResult.Fail("id", ErrorCode.NothingToDo, "fits"))]);
+        var mixed = FeedbackText.For(resize, [Ok("a.png", "a (1920x1080).png"), new("b.png", JobResult.Fail("id", ErrorCode.NothingToDo, "fits"))]);
         Assert.Equal((FeedbackKind.Success, "1 image of 2 completed", "1 unchanged"), (mixed.Kind, mixed.Title, mixed.Detail));
     }
 
@@ -184,9 +184,9 @@ public sealed class FeedbackTextTests
         var op = OperationCatalog.Get("compress.balanced");
         var m = FeedbackText.For(op,
         [
-            new("a.jpg", ConversionResult.Ok("1", @"C:\x\a (compressed).jpg", "0"), 2_000_000, 500_000),
-            new("b.jpg", ConversionResult.Ok("2", @"C:\x\b (compressed).jpg", "0"), 2_000_000, 1_000_000),
-            new("c.jpg", ConversionResult.Fail("3", ErrorCode.NothingToDo, "")),
+            new("a.jpg", JobResult.Ok("1", new JobOutput(@"C:\x\a (compressed).jpg", "0")), 2_000_000, 500_000),
+            new("b.jpg", JobResult.Ok("2", new JobOutput(@"C:\x\b (compressed).jpg", "0")), 2_000_000, 1_000_000),
+            new("c.jpg", JobResult.Fail("3", ErrorCode.NothingToDo, "")),
         ]);
         Assert.Equal((FeedbackKind.Success, "2 images of 3 completed"), (m.Kind, m.Title));
         Assert.Equal("3.81 MB → 1.43 MB, saved 62% · 1 already optimized", m.Detail);

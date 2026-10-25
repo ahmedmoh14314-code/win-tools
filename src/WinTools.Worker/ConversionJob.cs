@@ -42,6 +42,7 @@ internal static class ConversionJob
         try
         {
             var input = ReadSource(source);
+            var zone = MarkOfTheWeb.ZoneToCarry(source);
             FaultInjection.At("after-read", source);
             hooks?.AfterSourceRead?.Invoke();
             // The format is decided by content, never by the name; the operation must apply to what the file really is.
@@ -66,6 +67,7 @@ internal static class ConversionJob
             var tempPath = OutputNaming.TempPath(source, id, outputDir);
             WriteTemp(tempPath, encoded.Bytes); // CreateNew: an existing file with this name is never touched
             temp = tempPath;
+            if (zone is { } z) MarkOfTheWeb.Apply(tempPath, z); // a rename keeps the stream: the output is never unmarked
             FaultInjection.At("after-temp", source);
             hooks?.AfterTempWritten?.Invoke(tempPath);
 

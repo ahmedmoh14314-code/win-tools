@@ -10,8 +10,9 @@ public enum FeedbackKind { Success, Partial, Failure, Nothing }
 /// <summary>What a toast says: a headline and one line of detail.</summary>
 public sealed record FeedbackMessage(FeedbackKind Kind, string Title, string Detail);
 
-/// <summary>One file of a finished batch: its name, the worker's result and the sizes before and after (bytes).</summary>
-public sealed record JobItem(string SourceName, ConversionResult Result, long? SourceBytes = null, long? OutputBytes = null);
+/// <summary>One request of a finished job: what it was about (a file name), the worker's result and the sizes before
+/// and after (bytes).</summary>
+public sealed record JobItem(string SourceName, JobResult Result, long? SourceBytes = null, long? OutputBytes = null);
 
 /// <summary>
 /// The words shown to the user when a batch ends. Short, plain and actionable: the outcome first, the reason in the
