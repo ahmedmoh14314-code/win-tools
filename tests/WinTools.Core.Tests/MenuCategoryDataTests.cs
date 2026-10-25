@@ -22,10 +22,10 @@ public sealed class MenuCategoryDataTests
     [Fact]
     public void A_new_module_category_takes_its_declared_place_with_its_icon()
     {
-        CapabilityCategory files = new("file", "File", "file", 50); // between Rotate (40) and Tools (90)
+        CapabilityCategory files = new("file", "File", "file", 50); // after Rotate (40); Tools comes second since the wheel PR
         var resolver = new CapabilityResolver([.. ImageCapabilities.Catalog(null), Any("files.sha256", "file")], [.. ImageCapabilities.Categories, files]);
         var menu = RadialMenu.Build(resolver, [@"C:\p\a.png"]);
-        Assert.Equal(["Convert", "Compress", "Resize", "Rotate", "File", "Tools"], menu.Select(g => g.Label));
+        Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Rotate", "File"], menu.Select(g => g.Label));
         Assert.Equal("file", menu.Single(g => g.Label == "File").Category.Icon);
     }
 
@@ -58,6 +58,6 @@ public sealed class MenuCategoryDataTests
     {
         var menu = RadialMenu.Build(CapabilityResolver.Images(null), [@"C:\p\a.jpg"]);
         var view = new MenuNavigator(menu, 96).View(TimeSpan.Zero);
-        Assert.Equal(["convert", "compress", "resize", "rotate", "tools"], view.Categories);
+        Assert.Equal(["convert", "tools", "compress", "resize", "rotate"], view.Categories);
     }
 }

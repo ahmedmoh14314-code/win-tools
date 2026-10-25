@@ -8,32 +8,76 @@ internal sealed record TextFit(int SizePx, string[] Lines, bool Ellipsis);
 /// <summary>
 /// The UI font (Segoe UI, ClearType) at the sizes the surfaces use, and text measurement. Fonts are created once per
 /// pixel size and weight and kept for the life of the process: the set is small (a few sizes per monitor DPI).
-/// Measurement uses a private memory DC. One thread at a time (the UI thread).
+/// Measurement uses a private memory DC, under one lock: the overlay and the toasts draw on different threads.
 /// </summary>
 internal static class Fonts
 {
-    public const uint DT_END_ELLIPSIS = 0x8000, DT_RIGHT = 0x2;
+    public const uint DT_END_ELLIPSIS = 0x8000, DT_RIGHT = 0x2, DT_RTLREADING = 0x20000;
     private const string Face = "Segoe UI";
 
     private static readonly Dictionary<(int, int), nint> Cache = [];
     private static readonly Dictionary<(string, int, int, int, int, bool), TextFit> Fits = [];
     private static nint _measureDc;
 
+    /// <summary>
+    /// One thread at a time: the overlay and the toasts draw on different threads, and one measuring DC with a font
+    /// selected into it (and the caches) shared between them gives wrong widths (seen as a flaky fit test, PR #37).
+    /// </summary>
+    private static readonly Lock Gate = new();
+
     public static nint Get(int sizePx, int weight)
     {
-        if (Cache.TryGetValue((sizePx, weight), out var f)) return f;
-        f = Gdi32.CreateFontW(-sizePx, 0, 0, 0, weight, 0, 0, 0, 1 /* DEFAULT_CHARSET */, 0, 0, 5 /* CLEARTYPE_QUALITY */, 0, Face);
-        Cache[(sizePx, weight)] = f;
-        return f;
+        lock (Gate)
+        {
+            if (Cache.TryGetValue((sizePx, weight), out var f)) return f;
+            f = Gdi32.CreateFontW(-sizePx, 0, 0, 0, weight, 0, 0, 0, 1 /* DEFAULT_CHARSET */, 0, 0, 5 /* CLEARTYPE_QUALITY */, 0, Face);
+            Cache[(sizePx, weight)] = f;
+            return f;
+        }
     }
 
     public static int Width(string text, int sizePx, int weight)
     {
-        if (_measureDc == 0) _measureDc = Gdi32.CreateCompatibleDC(0);
-        var old = Gdi32.SelectObject(_measureDc, Get(sizePx, weight));
-        Ui.GetTextExtentPoint32W(_measureDc, text, text.Length, out var size);
-        Gdi32.SelectObject(_measureDc, old);
-        return size.Cx;
+        lock (Gate)
+        {
+            if (_measureDc == 0) _measureDc = Gdi32.CreateCompatibleDC(0);
+            var old = Gdi32.SelectObject(_measureDc, Get(sizePx, weight));
+            int width;
+            var (drawn, flags) = Prepare(text);
+            if (flags == 0)
+            {
+                Ui.GetTextExtentPoint32W(_measureDc, text, text.Length, out var size);
+                width = size.Cx;
+            }
+            else
+            {
+                // Right-to-left text is measured exactly as it is drawn: the same string and reading order.
+                var rect = new RECT();
+                User32.DrawTextW(_measureDc, drawn, -1, ref rect, User32.DT_SINGLELINE | User32.DT_NOPREFIX | DT_CALCRECT | flags);
+                width = rect.Right - rect.Left;
+            }
+            Gdi32.SelectObject(_measureDc, old);
+            return width;
+        }
+    }
+
+    private const uint DT_CALCRECT = 0x400;
+
+    /// <summary>
+    /// A text as GDI draws it, and the reading-order flag: in a right-to-left language, a text holding a right-to-left
+    /// letter reads right to left, with Latin digits (U+206F NOMINAL DIGIT SHAPES: the values beside it are written with
+    /// them, and Windows' contextual digits would mix both shapes in one line); any other text (a file name, "4032 × 3024
+    /// px") keeps its own left-to-right order. Unchanged in a left-to-right language.
+    /// </summary>
+    public static (string Text, uint Flags) Prepare(string text) =>
+        WinTools.Core.Localization.UiText.IsRightToLeft && HasRightToLeftLetter(text) ? ("\u206F" + text, DT_RTLREADING) : (text, 0u);
+
+    /// <summary>Whether a text holds a Hebrew or Arabic letter (U+0590 to U+08FF and their presentation forms).</summary>
+    private static bool HasRightToLeftLetter(string text)
+    {
+        foreach (var c in text)
+            if (c is >= '\u0590' and <= '\u08FF' or >= '\uFB1D' and <= '\uFDFF' or >= '\uFE70' and <= '\uFEFF') return true;
+        return false;
     }
 
     /// <summary>
@@ -44,10 +88,13 @@ internal static class Fonts
     public static TextFit Fit(string text, int maxWidth, int baseSizePx, int weight, bool twoLines)
     {
         var key = (text, maxWidth, baseSizePx, weight, 0, twoLines);
-        if (Fits.TryGetValue(key, out var fit)) return fit;
-        fit = Compute(text, maxWidth, baseSizePx, weight, twoLines);
-        Fits[key] = fit;
-        return fit;
+        lock (Gate)
+        {
+            if (Fits.TryGetValue(key, out var fit)) return fit;
+            fit = Compute(text, maxWidth, baseSizePx, weight, twoLines);
+            Fits[key] = fit;
+            return fit;
+        }
     }
 
     private static TextFit Compute(string text, int maxWidth, int baseSizePx, int weight, bool twoLines)

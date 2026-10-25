@@ -46,6 +46,36 @@ public static class UiText
     /// <summary>The text for a key when there is one, otherwise <paramref name="fallback"/> (for labels a table may not cover yet).</summary>
     public static string TOr(string key, string fallback) => Get(_language, key) ?? Get(English, key) ?? fallback;
 
+    /// <summary>
+    /// A sentence other code states in English (the password policy, Batch rename's reasons) in the language in use: its
+    /// "say." entry, or the sentence itself when there is none.
+    /// </summary>
+    public static string Say(string english) => TOr("say." + english, english);
+
+    /// <summary>
+    /// A sentence about <paramref name="n"/> things in the language's plural form: "<paramref name="key"/>.one", ".two",
+    /// ".few" (Arabic 3-10), ".many" (Arabic 11-99), else the key itself (CLDR plural rules). Formatted with n.
+    /// </summary>
+    public static string Count(string key, long n)
+    {
+        var hundred = n % 100;
+        var form = n == 1 ? "one" : _language != Arabic ? null : n == 2 ? "two" : hundred is >= 3 and <= 10 ? "few" : hundred is >= 11 and <= 99 ? "many" : null;
+        var chosen = form is not null && Get(_language, key + "." + form) is not null ? key + "." + form : key;
+        return F(chosen, n);
+    }
+
+    /// <summary>
+    /// A fact's value in the language in use when it is a word ("Yes", "None", "stereo") or a list of them; numbers, units,
+    /// names and formats stay as written.
+    /// </summary>
+    public static string Value(string value)
+    {
+        if (Get(_language, "value." + value) is { } whole) return whole;
+        var parts = value.Split(", ");
+        if (parts.Length < 2 || parts.Any(p => Get(_language, "value." + p) is null)) return value;
+        return string.Join(_language == Arabic ? "، " : ", ", parts.Select(p => Get(_language, "value." + p)));
+    }
+
     public static string? Get(string language, string key) => Tables.TryGetValue(language, out var t) && t.TryGetValue(key, out var v) ? v : null;
 
     /// <summary>Every key of a table (for the completeness test).</summary>

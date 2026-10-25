@@ -1,6 +1,7 @@
 <Window x:Class="WinTools.Dialogs.RenameWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:WinTools.Dialogs"
         Width="560" SizeToContent="Height" ResizeMode="NoResize" WindowStyle="ToolWindow"
         ShowInTaskbar="False" Topmost="True" WindowStartupLocation="Manual" Background="{StaticResource Base}"
         UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
@@ -31,9 +32,9 @@
           <ColumnDefinition Width="Auto" />
           <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
-        <TextBlock Text="New name" Style="{StaticResource Label}" />
-        <TextBox x:Name="NewName" Grid.Column="1" AutomationProperties.Name="New name" TextChanged="OnChanged"
-                 ToolTip="Replaces the whole name; leave empty to keep it. With several files, add a number." />
+        <TextBlock Text="{l:T rename.newName}" Style="{StaticResource Label}" />
+        <TextBox x:Name="NewName" Grid.Column="1" AutomationProperties.Name="{l:T rename.newName}" TextChanged="OnChanged"
+                 ToolTip="{l:T rename.newName.tip}" />
       </Grid>
       <Grid>
         <Grid.ColumnDefinitions>
@@ -46,53 +47,53 @@
         <Grid.RowDefinitions>
           <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
         </Grid.RowDefinitions>
-        <TextBlock Text="Add before" Style="{StaticResource Label}" />
-        <TextBox x:Name="Prefix" Grid.Column="1" AutomationProperties.Name="Add before" TextChanged="OnChanged" />
-        <TextBlock Text="Add after" Grid.Column="3" Style="{StaticResource Label}" />
-        <TextBox x:Name="Suffix" Grid.Column="4" AutomationProperties.Name="Add after" TextChanged="OnChanged" />
-        <TextBlock Text="Find" Grid.Row="1" Style="{StaticResource Label}" />
-        <TextBox x:Name="Find" Grid.Row="1" Grid.Column="1" AutomationProperties.Name="Find" TextChanged="OnChanged" />
-        <TextBlock Text="Replace with" Grid.Row="1" Grid.Column="3" Style="{StaticResource Label}" />
-        <TextBox x:Name="Replace" Grid.Row="1" Grid.Column="4" AutomationProperties.Name="Replace with" TextChanged="OnChanged" />
-        <TextBlock Text="Spaces" Grid.Row="2" Style="{StaticResource Label}" />
-        <ComboBox x:Name="Spaces" Grid.Row="2" Grid.Column="1" AutomationProperties.Name="Spaces" SelectionChanged="OnChanged">
-          <ComboBoxItem Content="Keep" IsSelected="True" />
-          <ComboBoxItem Content="Spaces to underscores" />
-          <ComboBoxItem Content="Underscores to spaces" />
+        <TextBlock Text="{l:T rename.before}" Style="{StaticResource Label}" />
+        <TextBox x:Name="Prefix" Grid.Column="1" AutomationProperties.Name="{l:T rename.before}" TextChanged="OnChanged" />
+        <TextBlock Text="{l:T rename.after}" Grid.Column="3" Style="{StaticResource Label}" />
+        <TextBox x:Name="Suffix" Grid.Column="4" AutomationProperties.Name="{l:T rename.after}" TextChanged="OnChanged" />
+        <TextBlock Text="{l:T rename.find}" Grid.Row="1" Style="{StaticResource Label}" />
+        <TextBox x:Name="Find" Grid.Row="1" Grid.Column="1" AutomationProperties.Name="{l:T rename.find}" TextChanged="OnChanged" />
+        <TextBlock Text="{l:T rename.replace}" Grid.Row="1" Grid.Column="3" Style="{StaticResource Label}" />
+        <TextBox x:Name="Replace" Grid.Row="1" Grid.Column="4" AutomationProperties.Name="{l:T rename.replace}" TextChanged="OnChanged" />
+        <TextBlock Text="{l:T rename.spaces}" Grid.Row="2" Style="{StaticResource Label}" />
+        <ComboBox x:Name="Spaces" Grid.Row="2" Grid.Column="1" AutomationProperties.Name="{l:T rename.spaces}" SelectionChanged="OnChanged">
+          <ComboBoxItem Content="{l:T rename.keep}" IsSelected="True" />
+          <ComboBoxItem Content="{l:T rename.toUnderscores}" />
+          <ComboBoxItem Content="{l:T rename.toSpaces}" />
         </ComboBox>
-        <TextBlock Text="Letters" Grid.Row="2" Grid.Column="3" Style="{StaticResource Label}" />
-        <ComboBox x:Name="Case" Grid.Row="2" Grid.Column="4" AutomationProperties.Name="Letters" SelectionChanged="OnChanged">
-          <ComboBoxItem Content="Keep" IsSelected="True" />
-          <ComboBoxItem Content="lower case" />
-          <ComboBoxItem Content="UPPER CASE" />
-          <ComboBoxItem Content="Title Case" />
+        <TextBlock Text="{l:T rename.letters}" Grid.Row="2" Grid.Column="3" Style="{StaticResource Label}" />
+        <ComboBox x:Name="Case" Grid.Row="2" Grid.Column="4" AutomationProperties.Name="{l:T rename.letters}" SelectionChanged="OnChanged">
+          <ComboBoxItem Content="{l:T rename.keep}" IsSelected="True" />
+          <ComboBoxItem Content="{l:T rename.lower}" />
+          <ComboBoxItem Content="{l:T rename.upper}" />
+          <ComboBoxItem Content="{l:T rename.title}" />
         </ComboBox>
-        <CheckBox x:Name="Number" Grid.Row="3" Grid.ColumnSpan="2" Content="Add a number" Foreground="{StaticResource Text}"
+        <CheckBox x:Name="Number" Grid.Row="3" Grid.ColumnSpan="2" Content="{l:T rename.number}" Foreground="{StaticResource Text}"
                   FontFamily="Segoe UI" FontSize="12" VerticalAlignment="Center" Checked="OnChanged" Unchecked="OnChanged" />
         <StackPanel Grid.Row="3" Grid.Column="3" Grid.ColumnSpan="2" Orientation="Horizontal">
-          <TextBlock Text="from" Style="{StaticResource Label}" />
+          <TextBlock Text="{l:T rename.from}" Style="{StaticResource Label}" />
           <TextBox x:Name="Start" Width="70" Text="1" MaxLength="6" AutomationProperties.Name="Number from" TextChanged="OnChanged" />
-          <TextBlock Text="digits" Style="{StaticResource Label}" Margin="12,0,8,0" />
+          <TextBlock Text="{l:T rename.digits}" Style="{StaticResource Label}" Margin="12,0,8,0" />
           <TextBox x:Name="Digits" Width="40" Text="2" MaxLength="1" AutomationProperties.Name="Digits" TextChanged="OnChanged" />
         </StackPanel>
       </Grid>
-      <TextBlock Text="Preview" Style="{StaticResource Label}" Margin="0,12,0,4" />
+      <TextBlock Text="{l:T rename.preview}" Style="{StaticResource Label}" Margin="0,12,0,4" />
       <ListView x:Name="Preview" Height="220" Background="{StaticResource Base}" BorderBrush="{StaticResource Edge}"
                 Foreground="{StaticResource Text}" FontFamily="Segoe UI" FontSize="12" AutomationProperties.Name="Preview">
         <ListView.View>
           <GridView>
-            <GridViewColumn Header="Now" Width="250" DisplayMemberBinding="{Binding From}" />
-            <GridViewColumn Header="After" Width="250" DisplayMemberBinding="{Binding Shown}" />
+            <GridViewColumn Header="{l:T rename.now}" Width="250" DisplayMemberBinding="{Binding From}" />
+            <GridViewColumn Header="{l:T rename.afterCol}" Width="250" DisplayMemberBinding="{Binding Shown}" />
           </GridView>
         </ListView.View>
       </ListView>
       <TextBlock x:Name="Problem" Foreground="{StaticResource Warning}" FontFamily="Segoe UI" FontSize="12" Margin="0,8,0,0"
                  TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
       <TextBlock Foreground="{StaticResource TextSecondary}" FontFamily="Segoe UI" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"
-                 Text="Extensions stay as they are. Nothing is ever overwritten: if a name is taken, nothing is renamed." />
+                 Text="{l:T rename.note}" />
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-        <Button x:Name="Ok" Content="Rename" IsDefault="True" MinWidth="90" Padding="10,4" Margin="0,0,8,0" Click="OnOk" IsEnabled="False" />
-        <Button Content="Cancel" IsCancel="True" MinWidth="80" Padding="10,4" />
+        <Button x:Name="Ok" Content="{l:T rename.go}" IsDefault="True" MinWidth="90" Padding="10,4" Margin="0,0,8,0" Click="OnOk" IsEnabled="False" />
+        <Button Content="{l:T dialog.cancel}" IsCancel="True" MinWidth="80" Padding="10,4" />
       </StackPanel>
     </StackPanel>
   </Border>

@@ -1,6 +1,7 @@
 <Window x:Class="WinTools.Dialogs.PickWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:WinTools.Dialogs"
         Width="300" SizeToContent="Height" MaxHeight="480" ResizeMode="NoResize" WindowStyle="ToolWindow"
         ShowInTaskbar="False" Topmost="True" WindowStartupLocation="Manual" Background="{StaticResource Base}"
         UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
@@ -23,7 +24,7 @@
         </ListBox.ItemTemplate>
       </ListBox>
       <TextBlock Foreground="{StaticResource TextSecondary}" FontFamily="Segoe UI" FontSize="11" Margin="4,8,0,0"
-                 Text="Enter or double-click runs it on the dropped files. Esc cancels." TextWrapping="Wrap" />
+                 Text="{l:T dialog.pick.hint}" TextWrapping="Wrap" />
     </StackPanel>
   </Border>
 </Window>

@@ -51,9 +51,11 @@ public sealed record SecretPrompt(string Title, bool Confirm, bool WhenRequired 
 /// <param name="Prompt">A secret the host asks for before it queues the job (a password); null for none.</param>
 /// <param name="Dialog">A dialog the host shows before it queues the job (<see cref="Jobs.DialogKinds"/>: Batch rename's
 /// rule); its answer is the job's one parameter, <see cref="Jobs.DialogParameters.Name"/>. Null for none.</param>
+/// <param name="Fallback">Offered only when no other module offers facts about the same files (File info: an image has
+/// Image info, so it needs no second one; a .gz file or a mixed selection has no other, so it gets this one).</param>
 public sealed record CapabilityDescriptor(string Id, string Label, string Category, string Module, InputRule Input,
     CapabilityShape Shape, CapabilityOutput Produces, bool LongRunning, object? Payload = null, Feedback.FeedbackWords? Feedback = null,
-    SecretPrompt? Prompt = null, string? Dialog = null)
+    SecretPrompt? Prompt = null, string? Dialog = null, bool Fallback = false)
 {
     /// <summary>The words of the toasts about this command (the module's, so the presenter knows no module).</summary>
     public Feedback.FeedbackWords Words => Feedback ?? WinTools.Core.Feedback.FeedbackWords.From(Label);

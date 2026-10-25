@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using WinTools.Core.Capabilities;
 using WinTools.Core.Feedback;
+using WinTools.Core.Localization;
 using WinTools.Core.Jobs;
 using WinTools.Host.Jobs;
 using WinTools.Windows;
@@ -63,7 +64,7 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
 
     public void Started(CapabilityDescriptor capability, IReadOnlyList<string> paths) => ui.Post(() =>
     {
-        var words = capability.Words; // the module's words: the presenter knows no module (V2 PR 1.4)
+        var words = LocalWords.For(capability); // the module's words, in the language in use: the presenter knows no module (V2 PR 1.4)
         // An instant command (File info, Copy path) leaves a running batch's progress alone (evaluator, PR #18).
         if (!capability.LongRunning) return;
         _batch++;
@@ -71,7 +72,7 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         _done = 0;
         _startedAt = Stopwatch.GetTimestamp();
         var batch = _batch;
-        var title = paths.Count == 1 ? $"{words.Working} {Path.GetFileName(paths[0].TrimEnd(Path.DirectorySeparatorChar))}" : $"{words.Working} {words.Count(paths.Count)}";
+        var title = UiText.F("toast.titleOne", words.Working, paths.Count == 1 ? Path.GetFileName(paths[0].TrimEnd(Path.DirectorySeparatorChar)) : words.Count(paths.Count));
         _ = Task.Delay(ProgressDelay).ContinueWith(_ => ui.Post(() =>
         {
             if (batch != _batch || _done >= _total) return; // finished in the meantime
@@ -89,7 +90,7 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
     public void Finished(CapabilityDescriptor capability, IReadOnlyList<JobItem> items) => ui.Post(() =>
     {
         if (capability.LongRunning) _done = _total;
-        var words = capability.Words;
+        var words = LocalWords.For(capability);
         var progressShowing = toast.Content is { Progress: not null };
         if (capability.Produces == CapabilityOutput.Clipboard && items.Count == 1)
         {
@@ -104,7 +105,7 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         {
             if (!progressShowing || capability.LongRunning) toast.Hide();
             var sections = facts.Take(InfoPanelRenderer.MaxSections)
-                .Select(i => new InfoSection(i.SourceName, [.. i.Result.Facts.Select(f => new InfoRow(f.Label, f.Value, f.Notice))])).ToArray();
+                .Select(i => new InfoSection(i.SourceName, [.. i.Result.Facts.Select(f => new InfoRow(UiText.TOr("fact." + f.Label, f.Label), UiText.Value(f.Value), f.Notice))])).ToArray();
             if (_overlayVisible()) _deferredInfo = (sections, facts.Length - sections.Length);
             else info.Show(sections, facts.Length - sections.Length, _anchor.X, _anchor.Y);
             log.Event("info.show", new { files = facts.Length, shown = sections.Length, deferred = _deferredInfo is not null });
@@ -140,16 +141,14 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
             log.Event("toast", new { kind = "triggerRefused", shown = false, reason = "progressShowing" });
             return;
         }
-        toast.Show(new ToastContent(FeedbackKind.Nothing, $"Release Alt, then press {triggerKey}",
-            "Windows uses Alt with keys for its own shortcuts, so WinTools does not open while Alt is held."), x, y);
+        toast.Show(new ToastContent(FeedbackKind.Nothing, UiText.F("toast.altTitle", triggerKey), UiText.T("toast.altText")), x, y);
         log.Event("toast", new { kind = "triggerRefused", shown = true });
     }
 
     /// <summary>A dialog the user asked for could not be shown (its program is missing or failed to start). Any thread.</summary>
-    public void DialogUnavailable(string what = "the list of commands") => ui.Post(() =>
+    public void DialogUnavailable(string? what = null) => ui.Post(() =>
     {
-        ShowToast(new ToastContent(FeedbackKind.Failure, $"Could not open {what}",
-            "WinTools.Dialogs.exe is missing from this copy or could not start. Nothing was run; reinstall to fix it."));
+        ShowToast(new ToastContent(FeedbackKind.Failure, UiText.F("toast.couldNotOpen", what ?? UiText.T("toast.listOfCommands")), UiText.T("toast.dialogsMissing")));
         sounds.Play(UiSound.Failure);
         log.Event("toast", new { kind = "dialogUnavailable" });
     });
@@ -165,7 +164,7 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
     /// <summary>A drop on a password command while a password window is already open (V2 PR 2.2). Any thread.</summary>
     public void SecretBusy() => ui.Post(() =>
     {
-        ShowToast(new ToastContent(FeedbackKind.Nothing, "A password window is already open", "Finish or cancel it first. Nothing was run for this drop."));
+        ShowToast(new ToastContent(FeedbackKind.Nothing, UiText.T("toast.secretBusy"), UiText.T("toast.secretBusy.text")));
         sounds.Play(UiSound.Nothing);
         log.Event("toast", new { kind = "secretBusy" });
     });
@@ -173,7 +172,7 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
     /// <summary>A password the host's own check refused (V2 PR 2.2); the reason never contains the password. Any thread.</summary>
     public void SecretRefused(string reason) => ui.Post(() =>
     {
-        ShowToast(new ToastContent(FeedbackKind.Failure, "The password was not used", $"{reason} Nothing was run."));
+        ShowToast(new ToastContent(FeedbackKind.Failure, UiText.T("toast.secretRefused"), UiText.F("toast.secretRefused.text", UiText.Say(reason))));
         sounds.Play(UiSound.Failure);
         log.Event("toast", new { kind = "secretRefused" });
     });
@@ -193,14 +192,14 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
     public void Crashed(CapabilityDescriptor capability, int files) => ui.Post(() =>
     {
         if (capability.LongRunning) _done = _total;
-        var words = capability.Words;
-        ShowToast(new ToastContent(FeedbackKind.Failure, $"Could not {words.Verb} {(files == 1 ? $"the {words.Noun}" : words.Count(files))}",
-            "Something went wrong. The originals are unchanged."));
+        var words = LocalWords.For(capability);
+        ShowToast(new ToastContent(FeedbackKind.Failure, files == 1 ? UiText.F("toast.couldNotThe", words.Verb, words.Noun) : UiText.F("toast.couldNot", words.Verb, words.Count(files)),
+            UiText.T("toast.crashed")));
         sounds.Play(UiSound.Failure);
         log.Event("toast", new { kind = "Failure", files });
     });
 
-    private string ProgressText() => _total == 1 ? "Working…" : $"{_done} of {_total}";
+    private string ProgressText() => _total == 1 ? UiText.T("toast.working") : UiText.F("toast.progress", _done, _total);
 
     private double Fraction() => _total == 0 ? 0 : (double)_done / _total;
 

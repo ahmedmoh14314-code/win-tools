@@ -38,6 +38,9 @@ public sealed class CapabilityResolver(IReadOnlyList<CapabilityDescriptor> catal
             if (FileKinds.IdentifyByName(p) is not { } kind) return [];
             kinds.Add(kind);
         }
-        return catalog.Where(c => c.AppliesTo(kinds, paths.Count)).ToArray();
+        var offered = catalog.Where(c => c.AppliesTo(kinds, paths.Count)).ToArray();
+        return offered.Any(c => c.Fallback)
+            ? [.. offered.Where(c => !c.Fallback || !offered.Any(o => o.Module != c.Module && o.Produces == CapabilityOutput.Facts))]
+            : offered;
     }
 }

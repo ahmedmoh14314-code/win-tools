@@ -18,7 +18,7 @@ public static class ImageCapabilities
         new("compress", "Compress", "compress", 20),
         new("resize", "Resize", "resize", 30),
         new("rotate", "Rotate", "rotate", 40),
-        new("tools", "Tools", "tools", 90),
+        new("tools", "Tools", "tools", 11), // Convert, then Tools, then the module's own groups, Actions last (Tangerine's order)
     ];
 
     /// <summary>The image capabilities, with the settings' exact resize when it is not a preset.</summary>

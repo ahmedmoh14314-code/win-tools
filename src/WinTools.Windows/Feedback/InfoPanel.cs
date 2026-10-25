@@ -125,6 +125,7 @@ internal static class InfoPanelRenderer
 
     public static void Draw(Painter p, int w, int h, IReadOnlyList<InfoSection> sections, int more)
     {
+        if (WinTools.Core.Localization.UiText.IsRightToLeft) p.Mirror(w);
         var m = p.S(Margin96);
         var (x, y, cw, ch) = (m, m, w - 2 * m, h - 2 * m);
         var radius = p.S(12);
@@ -179,7 +180,7 @@ internal static class InfoPanelRenderer
         if (more > 0)
         {
             cy += p.S(4);
-            p.Text(more == 1 ? "+1 more file" : $"+{more} more files", left, cy, right, cy + p.S(Footer96 - 6), Palette.TextSecondary, textPx, 400, TextAlign.Left);
+            p.Text(WinTools.Core.Localization.UiText.Count("info.more", more), left, cy, right, cy + p.S(Footer96 - 6), Palette.TextSecondary, textPx, 400, TextAlign.Left);
         }
     }
 }

@@ -29,11 +29,12 @@ public sealed class PdfCapabilitiesTests
     public void One_pdf_gets_split_optimize_rotate_and_info_but_not_merge()
     {
         Assert.Equal(["pdf.split", "pdf.rotate-left", "pdf.rotate-right", "pdf.rotate-180", "pdf.optimize", "pdf.linearize", "pdf.repair", "pdf.info", "pdf.protect", "pdf.unprotect",
-            "files.info", "files.copy-path", "files.rename", "files.copy-name", "files.copy-folder", "files.sha256", "archive.zip"], Ids(@"C:\p\a.pdf"));
+            "files.sha256", "files.copy-path", "files.copy-name", "files.rename", "files.copy-folder", "archive.zip"], Ids(@"C:\p\a.pdf"));
         var menu = RadialMenu.Build(Resolver, [@"C:\p\a.pdf"]);
-        Assert.Equal(["Organize", "Optimize", "Rotate", "Protect", "Tools"], menu.Select(g => g.Label)); // Protect since V2 PR 2.2
-        Assert.Equal(["Smaller (lossless)", "Fast web view", "Repair"], menu[1].Commands.Select(c => c.Label));
-        Assert.Equal(["PDF info", "File info", "Copy path", "Rename files", "Copy name", "More…"], menu[^1].Commands.Select(c => c.Label));
+        Assert.Equal(["Tools", "Organize", "Optimize", "Rotate", "Protect", "Actions"], menu.Select(g => g.Label)); // Protect since V2 PR 2.2; Tools first and Actions since the wheel PR
+        Assert.Equal(["Smaller (lossless)", "Fast web view", "Repair"], menu[2].Commands.Select(c => c.Label));
+        Assert.Equal(["PDF info", "SHA-256", "Folder path"], menu[0].Commands.Select(c => c.Label));
+        Assert.Equal(["Copy path", "Copy name", "Rename files", "Add to ZIP"], menu[^1].Commands.Select(c => c.Label));
     }
 
     [Fact]
@@ -57,7 +58,7 @@ public sealed class PdfCapabilitiesTests
     public void An_image_menu_is_unchanged_by_the_pdf_module()
     {
         Assert.DoesNotContain(Ids(@"C:\p\a.png"), id => id.StartsWith("pdf.", StringComparison.Ordinal));
-        Assert.Equal(["Convert", "Compress", "Resize", "Rotate", "Tools"], RadialMenu.Build(Resolver, [@"C:\p\a.png"]).Select(g => g.Label));
+        Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Rotate", "Actions"], RadialMenu.Build(Resolver, [@"C:\p\a.png"]).Select(g => g.Label));
     }
 
     [Fact]

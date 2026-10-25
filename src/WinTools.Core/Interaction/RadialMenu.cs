@@ -1,4 +1,5 @@
 using WinTools.Core.Capabilities;
+using WinTools.Core.Localization;
 
 namespace WinTools.Core.Interaction;
 
@@ -31,8 +32,17 @@ public static class RadialMenu
             var rest = groups.Skip(RingCapacity - 1).SelectMany(g => g.Commands).ToArray();
             groups = [.. groups.Take(RingCapacity - 1), new MenuGroup(CapabilityCategory.More, CapabilityCategory.More.Label, rest)];
         }
-        return [.. groups.Select(Fit)];
+        return [.. groups.Select(Fit).Select(Localized)];
     }
+
+    /// <summary>A group with its own label and its commands' labels in the language in use (by id, <see cref="UiText"/>);
+    /// a label the tables do not have (a custom size from the settings) stays as declared.</summary>
+    private static MenuGroup Localized(MenuGroup g) =>
+        g with { Label = UiText.TOr("cat." + g.Category.Id, g.Label), Commands = [.. g.Commands.Select(Localized)] };
+
+    private static CapabilityDescriptor Localized(CapabilityDescriptor c) => IsMore(c)
+        ? c with { Label = UiText.TOr("cat.more", c.Label), Payload = (IReadOnlyList<CapabilityDescriptor>)[.. Overflow(c).Select(Localized)] }
+        : c with { Label = UiText.TOr("cmd." + c.Id, c.Label) };
 
     /// <summary>The most sectors one ring shows: more would make each too narrow to aim at during a drag.</summary>
     public const int RingCapacity = 8;
@@ -75,7 +85,7 @@ public static class RadialMenu
         static bool IsFolder(string p) => ReferenceEquals(Files.FileKinds.IdentifyByName(p), Files.FileKinds.Folder);
         if (!paths.Any(IsFolder) || resolver.Resolve(paths).Count > 0) return null;
         var others = paths.Where(p => !IsFolder(p)).ToArray();
-        return others.Length == 0 || resolver.Resolve(others).Count > 0 ? "Not for folders" : null;
+        return others.Length == 0 || resolver.Resolve(others).Count > 0 ? UiText.T("menu.notForFolders") : null;
     }
 
     /// <summary>The menu for what a resolver allows, with that resolver's categories.</summary>

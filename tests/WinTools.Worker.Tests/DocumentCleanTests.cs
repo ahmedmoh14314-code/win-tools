@@ -257,6 +257,6 @@ public sealed class DocumentCleanTests : IDisposable
         var resolver = CapabilityResolver.For(customResizeId: null);
         var tools = RadialMenu.Build(resolver, [@"C:\p\a.docx"]).Single(g => g.Label == "Tools");
         // The document's own commands first; the General Files commands follow them.
-        Assert.Equal(["Document info", "Remove properties"], tools.Commands.Take(2).Select(c => c.Label));
+        Assert.Equal(["Remove properties", "Document info"], tools.Commands.Take(2).Select(c => c.Label)); // the long label first: it fits the first sector
     }
 }

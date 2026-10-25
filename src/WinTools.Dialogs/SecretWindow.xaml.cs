@@ -1,5 +1,6 @@
 using System.Windows;
 using WinTools.Core.Jobs;
+using WinTools.Core.Localization;
 using WinTools.Windows;
 
 namespace WinTools.Dialogs;
@@ -23,9 +24,7 @@ public partial class SecretWindow : Window
         Title = request.Title;
         Heading.Text = request.Title;
         ConfirmPanel.Visibility = request.Confirm ? Visibility.Visible : Visibility.Collapsed;
-        Hint.Text = request.Confirm
-            ? "WinTools keeps the password nowhere. Without it the PDF cannot be opened, so keep it safe."
-            : "The password that opens the PDF. WinTools keeps it nowhere.";
+        Hint.Text = UiText.T(request.Confirm ? "dialog.password.newHint" : "dialog.password.oldHint");
         Loaded += (_, _) =>
         {
             WindowPlacement.NearPoint(this, _request.X, _request.Y);
@@ -45,10 +44,10 @@ public partial class SecretWindow : Window
         var problem = _request.Confirm ? PasswordPolicy.CheckNew(First.Password, UnicodeText.ToFormKC, UnicodeText.ToFormC).Problem
             : PasswordPolicy.CheckExisting(First.Password, UnicodeText.ToFormKC).Problem;
         if (problem is null && _request.Confirm && !string.Equals(First.Password, Second.Password, StringComparison.Ordinal))
-            problem = "The two passwords differ.";
+            problem = UiText.T("dialog.password.differ");
         if (problem is not null)
         {
-            Problem.Text = problem;
+            Problem.Text = UiText.Say(problem);
             Problem.Visibility = Visibility.Visible;
             First.Focus();
             First.SelectAll();

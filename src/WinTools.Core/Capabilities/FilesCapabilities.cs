@@ -32,7 +32,9 @@ public static class FilesCapabilities
     public static bool IsCopy(string capabilityId) => capabilityId is CopyPathId or CopyNameId or CopyFolderId;
 
     /// <summary>Tools, declared as the image module declares it, so the module stands on its own (the first declaration wins).</summary>
-    public static IReadOnlyList<CapabilityCategory> Categories { get; } = [new("tools", "Tools", "tools", 90)];
+    /// <summary>Tools holds the file's information (File info, SHA-256); Actions what to do with the file rather than to it
+    /// (copy its path or name, rename), the third group beside Convert and Tools.</summary>
+    public static IReadOnlyList<CapabilityCategory> Categories { get; } = [new("tools", "Tools", "tools", 11), new("actions", "Actions", "actions", 95)];
 
     private static readonly IReadOnlySet<string> AnyFile = FileKinds.Declared.Where(k => k != FileKinds.Folder).Select(k => k.Id).ToHashSet(StringComparer.Ordinal);
     private static readonly IReadOnlySet<string> AnyFileOrFolder = FileKinds.Declared.Select(k => k.Id).ToHashSet(StringComparer.Ordinal);
@@ -40,19 +42,21 @@ public static class FilesCapabilities
     public static IReadOnlyList<CapabilityDescriptor> Catalog { get; } =
     [
         // In the order a normal user needs them: on an image the ring shows the first ones, the rest go under "More…" (V2 PR 7.2).
+        // A fallback: a file with its own info (Image info, PDF info, Video info...) needs no second one, and its Tools ring
+        // stays narrow enough for its labels; any other file, folder or mixed selection gets it (PR #37 review).
         new(InfoId, "File info", "tools", Module, new InputRule(AnyFileOrFolder), CapabilityShape.PerFile, CapabilityOutput.Facts, LongRunning: false,
-            Feedback: new("Reading", "read", "Read", "Nothing needed doing", "item", "items")),
-        new(CopyPathId, "Copy path", "tools", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Clipboard, LongRunning: false,
-            Feedback: new("Copying", "copy", "Path copied", "Nothing needed doing", "path", "paths")),
-        new(RenameId, "Rename files", "tools", Module, new InputRule(AnyFile), CapabilityShape.Selection, CapabilityOutput.Files, LongRunning: false,
-            Feedback: new("Renaming", "rename", "Renamed", "No name changed", "file", "files", SuccessTitle: "Files renamed", Reasons: RenameReasons),
-            Dialog: Jobs.DialogKinds.Rename),
-        new(CopyNameId, "Copy name", "tools", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Clipboard, LongRunning: false,
-            Feedback: new("Copying", "copy", "Name copied", "Nothing needed doing", "name", "names")),
-        new(CopyFolderId, "Folder path", "tools", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Clipboard, LongRunning: false,
-            Feedback: new("Copying", "copy", "Folder path copied", "Nothing needed doing", "path", "paths")),
+            Feedback: new("Reading", "read", "Read", "Nothing needed doing", "item", "items"), Fallback: true),
         new(Sha256Id, "SHA-256", "tools", Module, new InputRule(AnyFile), CapabilityShape.PerFile, CapabilityOutput.Facts, LongRunning: true,
             Feedback: new("Hashing", "hash", "Hashed", "Nothing needed doing", "file", "files")),
+        new(CopyPathId, "Copy path", "actions", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Clipboard, LongRunning: false,
+            Feedback: new("Copying", "copy", "Path copied", "Nothing needed doing", "path", "paths")),
+        new(CopyNameId, "Copy name", "actions", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Clipboard, LongRunning: false,
+            Feedback: new("Copying", "copy", "Name copied", "Nothing needed doing", "name", "names")),
+        new(RenameId, "Rename files", "actions", Module, new InputRule(AnyFile), CapabilityShape.Selection, CapabilityOutput.Files, LongRunning: false,
+            Feedback: new("Renaming", "rename", "Renamed", "No name changed", "file", "files", SuccessTitle: "Files renamed", Reasons: RenameReasons),
+            Dialog: Jobs.DialogKinds.Rename),
+        new(CopyFolderId, "Folder path", "tools", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Clipboard, LongRunning: false,
+            Feedback: new("Copying", "copy", "Folder path copied", "Nothing needed doing", "path", "paths")),
     ];
 
     /// <summary>What Copy path puts on the clipboard: one path per line, a folder without the drop target's mark.</summary>

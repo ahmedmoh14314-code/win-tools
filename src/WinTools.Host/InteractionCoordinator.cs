@@ -4,6 +4,7 @@ using WinTools.Core.Jobs;
 using WinTools.Core.Feedback;
 using WinTools.Core.Files;
 using WinTools.Core.Interaction;
+using WinTools.Core.Localization;
 using WinTools.Core.Settings;
 using WinTools.Host.Jobs;
 using WinTools.Windows;
@@ -392,7 +393,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         catch (Exception ex)
         {
             _log.Event("secret.error", new { type = ex.GetType().Name });
-            _feedback.DialogUnavailable("the password window");
+            _feedback.DialogUnavailable(UiText.T("toast.passwordWindow"));
         }
     }
 
@@ -407,10 +408,10 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         try
         {
             SecretOutcome outcome;
-            try { outcome = await DialogsClient.Default.AskSecretAsync(new SecretRequest(prompt.Title, prompt.Confirm, x, y)).ConfigureAwait(false); }
+            try { outcome = await DialogsClient.Default.AskSecretAsync(new SecretRequest(UiText.TOr(PromptKey(capability.Id), prompt.Title), prompt.Confirm, x, y)).ConfigureAwait(false); }
             finally { Volatile.Write(ref _secretOpen, 0); }
             _log.Event("secret.ask", new { op = capability.Id, end = outcome.End.ToString() });
-            if (outcome.End == PickEnd.Unavailable) { _feedback.DialogUnavailable("the password window"); return; }
+            if (outcome.End == PickEnd.Unavailable) { _feedback.DialogUnavailable(UiText.T("toast.passwordWindow")); return; }
             if (outcome.End != PickEnd.Picked) return;
             // A new password is used as typed and must already be normalized; an existing one goes as typed, with its
             // NFKC form beside it when that differs, tried second (evaluator, PR 2.2).
@@ -435,7 +436,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         {
             Volatile.Write(ref _secretOpen, 0);
             _log.Event("secret.error", new { type = ex.GetType().Name });
-            _feedback.DialogUnavailable("the password window");
+            _feedback.DialogUnavailable(UiText.T("toast.passwordWindow"));
         }
     }
 
@@ -450,18 +451,18 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         {
             if (paths.Count > RenameRequest.MaxNames)
             {
-                _feedback.Refused("Too many files to rename", $"Batch rename takes at most {RenameRequest.MaxNames:N0} files at a time. Nothing was renamed.");
+                _feedback.Refused(UiText.T("toast.tooMany"), UiText.F("toast.tooMany.text", RenameRequest.MaxNames.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)));
                 return;
             }
             var folder = Path.GetDirectoryName(paths[0]);
             if (paths.Any(p => !string.Equals(Path.GetDirectoryName(p), folder, StringComparison.OrdinalIgnoreCase)))
             {
-                _feedback.Refused("Files from several folders", "Batch rename works on files of one folder. Nothing was renamed.");
+                _feedback.Refused(UiText.T("toast.severalFolders"), UiText.T("toast.severalFolders.text"));
                 return;
             }
-            var outcome = await DialogsClient.Default.AskRenameAsync(new RenameRequest("Batch rename", [.. paths.Select(p => Path.GetFileName(p))], x, y)).ConfigureAwait(false);
+            var outcome = await DialogsClient.Default.AskRenameAsync(new RenameRequest(UiText.T("dialog.rename"), [.. paths.Select(p => Path.GetFileName(p))], x, y)).ConfigureAwait(false);
             _log.Event("rename.ask", new { end = outcome.End.ToString(), files = paths.Count });
-            if (outcome.End == PickEnd.Unavailable) { _feedback.DialogUnavailable("the rename window"); return; }
+            if (outcome.End == PickEnd.Unavailable) { _feedback.DialogUnavailable(UiText.T("toast.renameWindow")); return; }
             if (outcome.End != PickEnd.Picked || RenameRule.Parse(outcome.Rule) is null) return;
             if (_jobs.Enqueue(capability, paths, new Dictionary<string, string>(StringComparer.Ordinal) { [DialogParameters.Name] = outcome.Rule! }) is null)
                 _log.Event("job.refused", new { op = capability.Id, module = capability.Module });
@@ -469,9 +470,17 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         catch (Exception ex)
         {
             _log.Event("rename.error", new { type = ex.GetType().Name });
-            _feedback.DialogUnavailable("the rename window");
+            _feedback.DialogUnavailable(UiText.T("toast.renameWindow"));
         }
     }
+
+    /// <summary>The translated title of a command's password window.</summary>
+    private static string PromptKey(string capabilityId) => capabilityId switch
+    {
+        PdfCapabilities.ProtectId => "dialog.protect",
+        PdfCapabilities.UnprotectId => "dialog.unprotect",
+        _ => "dialog.archivePassword",
+    };
 
     /// <summary>"More…": the commands that did not fit the ring, in a list (the dialogs process); the pick runs on the dropped files.</summary>
     private async Task PickAndRunAsync(IReadOnlyList<CapabilityDescriptor> commands, IReadOnlyList<string> paths, int x, int y)
@@ -480,7 +489,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         // scheduler, the log and the presenter are thread-safe.
         try
         {
-            var request = new PickRequest("More commands", [.. commands.Select(c => new PickItem(c.Id, c.Label))], x, y);
+            var request = new PickRequest(UiText.T("dialog.more"), [.. commands.Select(c => new PickItem(c.Id, c.Label))], x, y);
             var outcome = await DialogsClient.Default.PickAsync(request).ConfigureAwait(false);
             _log.Event("more.pick", new { offered = commands.Count, end = outcome.End.ToString(), chosen = outcome.Id });
             if (outcome.End == PickEnd.Unavailable) _feedback.DialogUnavailable(); // an accepted drop that runs nothing must say so

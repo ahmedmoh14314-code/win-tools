@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using WinTools.Core.Files;
 using WinTools.Core.Jobs;
+using WinTools.Core.Localization;
 
 namespace WinTools.Dialogs;
 
@@ -26,7 +27,7 @@ public partial class RenameWindow : Window
         _request = request;
         InitializeComponent();
         Title = request.Title;
-        Heading.Text = request.Names.Count == 1 ? "Rename 1 file" : $"Rename {request.Names.Count:N0} files";
+        Heading.Text = UiText.Count("rename.heading", request.Names.Count);
         _ready = true;
         Loaded += (_, _) =>
         {
@@ -56,19 +57,19 @@ public partial class RenameWindow : Window
         if (rule is null)
         {
             Preview.ItemsSource = null;
-            Problem.Text = "The number must start at 0 or more, with 1 to 6 digits.";
+            Problem.Text = UiText.T("rename.badNumber");
             Ok.IsEnabled = false;
             return;
         }
         var plan = BatchRename.Plan(_request.Names, rule);
         Preview.ItemsSource = plan.Select(i => new Row(i.From, i.Status switch
         {
-            RenameStatus.Unchanged => "(unchanged)",
+            RenameStatus.Unchanged => UiText.T("rename.unchanged"),
             RenameStatus.Renamed => i.To,
-            _ => $"{i.To}: {i.Problem}",
+            _ => $"{i.To}: {UiText.Say(i.Problem ?? "")}",
         })).ToArray();
         var blocked = plan.FirstOrDefault(i => i.Problem is not null);
-        Problem.Text = blocked is not null ? $"{blocked.From}: {blocked.Problem}." : BatchRename.CanApply(plan) ? "" : "No name would change yet.";
+        Problem.Text = blocked is not null ? $"{blocked.From}: {UiText.Say(blocked.Problem!)}." : BatchRename.CanApply(plan) ? "" : UiText.T("rename.noChange");
         Ok.IsEnabled = BatchRename.CanApply(plan);
     }
 

@@ -18,8 +18,21 @@ internal sealed class Painter : IDisposable
     private readonly Surface _surface;
     private readonly List<TextRun> _texts = [];
     private nint _g;
+    private float _mirrorWidth; // 0: not mirrored
 
     public uint Dpi { get; }
+
+    /// <summary>
+    /// Mirrors everything drawn from now on across a surface <paramref name="width"/> pixels wide: a right-to-left
+    /// language reads a toast or a panel from its right edge (icon and labels on the right). The ring is never mirrored:
+    /// its sectors follow the pointer's direction.
+    /// </summary>
+    public void Mirror(float width)
+    {
+        _mirrorWidth = width;
+        _ = Gdip.GdipTranslateWorldTransform(_g, width, 0, 0);
+        _ = Gdip.GdipScaleWorldTransform(_g, -1, 1, 0);
+    }
 
     public Painter(Surface surface, nint graphics, uint dpi)
     {
@@ -166,7 +179,9 @@ internal sealed class Painter : IDisposable
 
     /// <summary>Queues a text, drawn on one line inside the rectangle (vertically centred), over an opaque area.</summary>
     public void Text(string text, float left, float top, float right, float bottom, Argb colour, int sizePx, int weight = 400, TextAlign align = TextAlign.Centre, bool ellipsis = true) =>
-        _texts.Add(new TextRun(text, left, top, right, bottom, colour, sizePx, weight, align, ellipsis));
+        _texts.Add(_mirrorWidth > 0
+            ? new TextRun(text, _mirrorWidth - right, top, _mirrorWidth - left, bottom, colour, sizePx, weight, align, ellipsis)
+            : new TextRun(text, left, top, right, bottom, colour, sizePx, weight, align, ellipsis));
 
     public void Dispose()
     {
@@ -185,9 +200,13 @@ internal sealed class Painter : IDisposable
             if (old == 0) old = prev;
             _ = Gdi32.SetTextColor(dc, t.Colour.ColorRef);
             var rect = new RECT { Left = (int)Math.Floor(t.Left), Top = (int)Math.Floor(t.Top), Right = (int)Math.Ceiling(t.Right), Bottom = (int)Math.Ceiling(t.Bottom) };
-            var format = User32.DT_SINGLELINE | User32.DT_VCENTER | User32.DT_NOPREFIX | (t.Ellipsis ? Fonts.DT_END_ELLIPSIS : 0)
-                | t.Align switch { TextAlign.Left => 0u, TextAlign.Right => Fonts.DT_RIGHT, _ => User32.DT_CENTER };
-            User32.DrawTextW(dc, t.Text, -1, ref rect, format);
+            // Arabic reads right to left: the side a label starts from follows the language, and the text is prepared as it
+            // is measured (Fonts.Prepare: reading order and digit shapes).
+            var rtl = WinTools.Core.Localization.UiText.IsRightToLeft;
+            var (drawn, reading) = Fonts.Prepare(t.Text);
+            var format = User32.DT_SINGLELINE | User32.DT_VCENTER | User32.DT_NOPREFIX | (t.Ellipsis ? Fonts.DT_END_ELLIPSIS : 0) | reading
+                | (t.Align, rtl) switch { (TextAlign.Left, false) or (TextAlign.Right, true) => 0u, (TextAlign.Right, false) or (TextAlign.Left, true) => Fonts.DT_RIGHT, _ => User32.DT_CENTER };
+            User32.DrawTextW(dc, drawn, -1, ref rect, format);
             _surface.MakeOpaque(rect.Left, rect.Top, rect.Right, rect.Bottom);
         }
         if (old != 0) Gdi32.SelectObject(dc, old);

@@ -127,11 +127,11 @@ public sealed class SubtitleTests
         Assert.Same(FileKinds.Srt, FileKinds.IdentifyByName(@"C:\p\film.SRT"));
         Assert.Same(FileKinds.Vtt, FileKinds.IdentifyByName(@"C:\p\film.vtt"));
         var menu = RadialMenu.Build(resolver, [@"C:\p\film.srt"]);
-        Assert.Equal(["Convert", "Timing", "Tools"], menu.Select(g => g.Label));
+        Assert.Equal(["Convert", "Tools", "Timing", "Actions"], menu.Select(g => g.Label));
         Assert.Equal(["To VTT"], menu[0].Commands.Select(c => c.Label));
-        Assert.Equal(["Earlier 1 s", "Earlier 0.5 s", "Later 0.5 s", "Later 1 s"], menu[1].Commands.Select(c => c.Label));
-        Assert.Contains("Subtitle info", menu[2].Commands.Select(c => c.Label));
-        Assert.Contains("Clean up (UTF-8)", menu[2].Commands.Select(c => c.Label));
+        Assert.Equal(["Earlier 1 s", "Earlier 0.5 s", "Later 0.5 s", "Later 1 s"], menu[2].Commands.Select(c => c.Label));
+        Assert.Contains("Subtitle info", menu[1].Commands.Select(c => c.Label));
+        Assert.Contains("Clean up (UTF-8)", menu[1].Commands.Select(c => c.Label));
         Assert.Equal(["To SRT"], RadialMenu.Build(resolver, [@"C:\p\film.vtt"])[0].Commands.Select(c => c.Label));
         Assert.DoesNotContain(resolver.Resolve([@"C:\p\film.srt", @"C:\p\film.vtt"]), c => c.Id == SubtitleCapabilities.ToVttId);
         Assert.Contains(resolver.Resolve([@"C:\p\film.srt", @"C:\p\film.vtt"]), c => c.Id == SubtitleCapabilities.ShiftLater1Id);

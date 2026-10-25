@@ -24,7 +24,7 @@ public static class SubtitleCapabilities
     [
         new("convert", "Convert", "convert", 10),
         new("timing", "Timing", "timing", 35),
-        new("tools", "Tools", "tools", 90),
+        new("tools", "Tools", "tools", 11), // Convert, then Tools, then the module's own groups, Actions last (Tangerine's order)
     ];
 
     private static readonly IReadOnlySet<string> SrtOnly = new HashSet<string>(StringComparer.Ordinal) { FileKinds.Srt.Id };

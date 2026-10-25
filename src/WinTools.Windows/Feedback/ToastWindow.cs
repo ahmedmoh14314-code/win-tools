@@ -159,6 +159,7 @@ internal static class ToastRenderer
 
     public static void Draw(Painter p, int w, int h, ToastContent content)
     {
+        if (WinTools.Core.Localization.UiText.IsRightToLeft) p.Mirror(w);
         var m = p.S(Margin96);
         var (x, y, cw, ch) = (m, m, w - 2 * m, h - 2 * m);
         var radius = p.S(10);

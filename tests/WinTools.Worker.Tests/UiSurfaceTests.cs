@@ -25,10 +25,12 @@ public sealed partial class UiSurfaceTests
     }
 
     /// <summary>Every ring the menu can show, for single files of each format and mixed selections.</summary>
-    private static IEnumerable<MenuView> AllViews()
+    internal static IEnumerable<MenuView> AllViews()
     {
         // With General Files (V2 PR 1.4): a file no module reads (one category) and a folder.
-        foreach (var names in new[] { new[] { "a.png" }, ["a.jpg"], ["a.webp"], ["a.bmp"], ["a.tif"], ["a.png", "b.jpg"], ["a.png", "b.jpg", "c.webp"], ["notes.txt"], ["holiday\\"] })
+        // Every module since V2: PDF, archives, subtitles, documents, video and audio, and mixed video.
+        foreach (var names in new[] { new[] { "a.png" }, ["a.jpg"], ["a.webp"], ["a.bmp"], ["a.tif"], ["a.png", "b.jpg"], ["a.png", "b.jpg", "c.webp"], ["notes.txt"], ["holiday\\"],
+            ["a.pdf"], ["a.pdf", "b.pdf"], ["a.zip"], ["a.tar.gz"], ["a.gz"], ["a.srt"], ["a.docx"], ["a.mp4"], ["a.gif"], ["a.mp3"], ["a.wav"], ["a.mp4", "b.mov"] })
         {
             var menu = MenuFor(names);
             var nav = new MenuNavigator(menu, 96);
@@ -47,7 +49,10 @@ public sealed partial class UiSurfaceTests
 
     [Theory]
     [MemberData(nameof(Dpis))]
-    public void Every_label_fits_its_box_without_an_ellipsis(uint dpi)
+    public void Every_label_fits_its_box_without_an_ellipsis(uint dpi) => AssertEveryLabelFits(dpi);
+
+    /// <summary>The fit rules for every ring, in the language in use (the Arabic run is <c>ArabicWheelTests</c>).</summary>
+    internal static void AssertEveryLabelFits(uint dpi)
     {
         var renderer = new RadialRenderer();
         var px = (int)Math.Round(RingLabelMetrics.LabelText96 * dpi / 96);
@@ -59,7 +64,7 @@ public sealed partial class UiSurfaceTests
             {
                 if (!top && i == 0) continue; // Back: icon and a short fixed word
                 var fit = Fonts.Fit(view.Labels[i], (int)(2 * boxes[i].HalfWidth), px, RadialRenderer.LabelWeight, twoLines: !top);
-                Assert.False(fit.Ellipsis, $"\"{view.Labels[i]}\" does not fit at {dpi} DPI (box {2 * boxes[i].HalfWidth:0} px)");
+                Assert.False(fit.Ellipsis, $"\"{view.Labels[i]}\" does not fit at {dpi} DPI (box {2 * boxes[i].HalfWidth:0} px; sector {i} of ring: {string.Join(", ", view.Labels)})");
                 Assert.True(fit.SizePx >= Math.Round(11.0 * dpi / 96), $"\"{view.Labels[i]}\" shrank below 11 px at 96 DPI ({fit.SizePx} px at {dpi})");
                 if (top)
                 {
@@ -69,7 +74,7 @@ public sealed partial class UiSurfaceTests
                     var width = Fonts.Width(fit.Lines[0], fit.SizePx, RadialRenderer.LabelWeight);
                     var b = boxes[i];
                     var text = new LabelBox(b.X, b.Y + b.HalfHeight - (line + 2 * s) / 2, width / 2.0, (line + 2 * s) / 2);
-                    Assert.True(text.Reach().Near >= RingLabelMetrics.BandInner96 * s, $"\"{view.Labels[i]}\" reaches {text.Reach().Near:0.0} px from the centre at {dpi} DPI, inside the hub gap");
+                    Assert.True(text.Reach().Near >= RingLabelMetrics.BandInner96 * s, $"\"{view.Labels[i]}\" reaches {text.Reach().Near:0.0} px from the centre at {dpi} DPI, inside the hub gap (ring: {string.Join(", ", view.Labels)})");
                 }
             }
         }
