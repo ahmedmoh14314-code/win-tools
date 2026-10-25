@@ -26,5 +26,6 @@ Template: `template.md`. Numbering is sequential and never reused. Old ADRs are 
 | [ADR-0019](ADR-0019-menu-categories-more-and-dialogs.md) | Menu categories as module data, "More…", the dialogs process, folder inputs | Proposed (V2 PR 1.3) | Evaluator review; More… keyboard focus needs a spike before a module relies on it |
 | [ADR-0020](ADR-0020-general-files-module.md) | General Files: any file is a kind, Tools is shared, Copy path runs in the host | Proposed (V2 PR 1.4) | Evaluator review; Explorer run |
 | [ADR-0021](ADR-0021-settings-schema-2-and-trigger-key-policy.md) | Settings schema 2 in sections; trigger keys stated by their evidence | Proposed (V2 PR 1.5) | Evaluator review; typing-interference spike for F2–F12 and letters |
+| [ADR-0022](ADR-0022-pdf-module-qpdf.md) | The PDF module's structural commands run the official qpdf build in the PDF worker | Proposed (V2 PR 2.1) | Evaluator review; Explorer run |
 
 Decision order recommended: 0002 → 0003 → 0001/0004 (same spike) → 0005 → 0011 → 0007 → 0006 → 0008. 0009 and 0010 can be confirmed any time.
