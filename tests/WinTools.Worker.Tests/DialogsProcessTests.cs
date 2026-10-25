@@ -31,6 +31,27 @@ public sealed class DialogsProcessTests
         return p;
     }
 
+    /// <summary>
+    /// The process is still running after a few seconds and has written nothing to stderr. A crash in its first window
+    /// prints the exception at once, though Windows Error Reporting may keep the process alive for seconds after it (PR
+    /// #37 re-review), so stderr is watched as well as the exit.
+    /// </summary>
+    private static void AssertWaitsForTheUser(Process p)
+    {
+        var errors = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        p.ErrorDataReceived += (_, e) => { if (!string.IsNullOrEmpty(e.Data)) errors.Enqueue(e.Data); };
+        p.BeginErrorReadLine();
+        try
+        {
+            var exited = p.WaitForExit(3000);
+            Assert.True(!exited && errors.IsEmpty, $"exited={exited}: {string.Join(" | ", errors.Take(3))}");
+        }
+        finally
+        {
+            if (!p.HasExited) p.Kill();
+        }
+    }
+
     [Theory]
     [InlineData("en")]
     [InlineData("ar")]
@@ -38,16 +59,7 @@ public sealed class DialogsProcessTests
     {
         var request = WorkerProtocol.Serialize(new PickRequest("Test", [new PickItem("a", "A"), new PickItem("b", "B")], 200, 200));
         using var p = Start(language, request);
-        try
-        {
-            // A window that could not be made ends the process at once (a crash in its first window, PR #37 review).
-            var exited = p.WaitForExit(3000);
-            Assert.False(exited, exited ? $"exit {p.ExitCode}: {p.StandardError.ReadToEnd()}" : "");
-        }
-        finally
-        {
-            if (!p.HasExited) p.Kill();
-        }
+        AssertWaitsForTheUser(p); // a window that could not be made crashes the process (PR #37 review)
     }
 
     [Fact]

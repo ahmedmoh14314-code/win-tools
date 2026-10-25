@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using WinTools.Core.Jobs;
 using WinTools.Core.Localization;
 using WinTools.Core.Settings;
 
@@ -70,5 +71,84 @@ public sealed partial class LocalizationTests
         Assert.True(back.Onboarded);
         Assert.Equal("System", (AppSettings.Defaults with { Language = "fr" }).Normalized().Language);
         Assert.False(AppSettings.Defaults.Onboarded);
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("ar")]
+    public void No_key_is_in_a_table_twice(string language)
+    {
+        // The table loads with the last copy winning, so an edit to the first copy would be lost without a word.
+        using var stream = typeof(UiText).Assembly.GetManifestResourceStream($"WinTools.Core.Localization.Strings.{language}.json")!;
+        var bytes = new byte[stream.Length];
+        stream.ReadExactly(bytes);
+        var reader = new System.Text.Json.Utf8JsonReader(bytes);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        while (reader.Read())
+            if (reader.TokenType == System.Text.Json.JsonTokenType.PropertyName) Assert.True(seen.Add(reader.GetString()!), $"{language}: {reader.GetString()} twice");
+        Assert.True(seen.Count > 100);
+    }
+
+    [Fact]
+    public void Counts_take_the_languages_plural_forms()
+    {
+        try
+        {
+            UiText.Use("ar");
+            Assert.Equal("إعادة تسمية ملف واحد", UiText.Count("rename.heading", 1));
+            Assert.Equal("إعادة تسمية ملفين", UiText.Count("rename.heading", 2));
+            Assert.Equal("إعادة تسمية 5 ملفات", UiText.Count("rename.heading", 5));
+            Assert.Equal("إعادة تسمية 11 ملفًا", UiText.Count("rename.heading", 11));
+            Assert.Equal("إعادة تسمية 100 ملف", UiText.Count("rename.heading", 100));
+            Assert.Equal("إعادة تسمية 1,003 ملفات", UiText.Count("rename.heading", 1003)); // 3-10 by the last two digits
+            UiText.Use("en");
+            Assert.Equal("Rename 1 file", UiText.Count("rename.heading", 1));
+            Assert.Equal("Rename 2 files", UiText.Count("rename.heading", 2));
+            Assert.Equal("Rename 1,000 files", UiText.Count("rename.heading", 1000));
+        }
+        finally { UiText.Use("en"); }
+    }
+
+    [Fact]
+    public void Fact_values_that_are_words_are_translated_and_the_rest_kept()
+    {
+        try
+        {
+            UiText.Use("ar");
+            Assert.Equal("نعم", UiText.Value("Yes"));
+            Assert.Equal("XMP، نص أو تعليقات", UiText.Value("XMP, text or comments"));
+            Assert.Equal("4032 × 3024 px", UiText.Value("4032 × 3024 px"));
+            Assert.Equal("AAC, stereo, 44.1 kHz", UiText.Value("AAC, stereo, 44.1 kHz")); // only whole lists of words
+            UiText.Use("en");
+            Assert.Equal("XMP, text or comments", UiText.Value("XMP, text or comments"));
+        }
+        finally { UiText.Use("en"); }
+    }
+
+    [Fact]
+    public void Every_password_and_rename_problem_reads_in_Arabic()
+    {
+        string?[] problems =
+        [
+            PasswordPolicy.CheckNew("").Problem, PasswordPolicy.CheckExisting("").Problem, PasswordPolicy.CheckExisting(new string('a', 2000)).Problem,
+            PasswordPolicy.CheckNew("a\nb").Problem, PasswordPolicy.CheckNew("a\tb").Problem, PasswordPolicy.CheckNew("a\uD800b").Problem,
+            PasswordPolicy.CheckNew("a\u200Fb").Problem, PasswordPolicy.CheckNew("a\uE000b").Problem, PasswordPolicy.CheckNew("a\uFE0Fb").Problem,
+            PasswordPolicy.CheckNew("a\u200Db").Problem, PasswordPolicy.CheckNew(new string('a', 200)).Problem,
+            PasswordPolicy.CheckNew("x²", s => s.Replace("²", "2", StringComparison.Ordinal), s => s).Problem,
+            PasswordPolicy.CheckNew("ab", _ => "x", _ => "y").Problem, // a canonical difference: marks in another order
+            WinTools.Core.Files.BatchRename.Problem(""), WinTools.Core.Files.BatchRename.Problem(new string('a', 300) + ".txt"),
+            WinTools.Core.Files.BatchRename.Problem("a?.txt"), WinTools.Core.Files.BatchRename.Problem("a."), WinTools.Core.Files.BatchRename.Problem("con.txt"),
+        ];
+        try
+        {
+            UiText.Use("ar");
+            for (var i = 0; i < problems.Length; i++)
+            {
+                var p = problems[i];
+                Assert.True(p is not null, $"case {i} found no problem");
+                Assert.True(UiText.Get(UiText.Arabic, "say." + p) is not null, $"no Arabic for: {p}");
+            }
+        }
+        finally { UiText.Use("en"); }
     }
 }

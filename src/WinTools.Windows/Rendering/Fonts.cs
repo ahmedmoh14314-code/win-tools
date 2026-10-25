@@ -8,7 +8,7 @@ internal sealed record TextFit(int SizePx, string[] Lines, bool Ellipsis);
 /// <summary>
 /// The UI font (Segoe UI, ClearType) at the sizes the surfaces use, and text measurement. Fonts are created once per
 /// pixel size and weight and kept for the life of the process: the set is small (a few sizes per monitor DPI).
-/// Measurement uses a private memory DC. One thread at a time (the UI thread).
+/// Measurement uses a private memory DC, under one lock: the overlay and the toasts draw on different threads.
 /// </summary>
 internal static class Fonts
 {
@@ -42,10 +42,42 @@ internal static class Fonts
         {
             if (_measureDc == 0) _measureDc = Gdi32.CreateCompatibleDC(0);
             var old = Gdi32.SelectObject(_measureDc, Get(sizePx, weight));
-            Ui.GetTextExtentPoint32W(_measureDc, text, text.Length, out var size);
+            int width;
+            var (drawn, flags) = Prepare(text);
+            if (flags == 0)
+            {
+                Ui.GetTextExtentPoint32W(_measureDc, text, text.Length, out var size);
+                width = size.Cx;
+            }
+            else
+            {
+                // Right-to-left text is measured exactly as it is drawn: the same string and reading order.
+                var rect = new RECT();
+                User32.DrawTextW(_measureDc, drawn, -1, ref rect, User32.DT_SINGLELINE | User32.DT_NOPREFIX | DT_CALCRECT | flags);
+                width = rect.Right - rect.Left;
+            }
             Gdi32.SelectObject(_measureDc, old);
-            return size.Cx;
+            return width;
         }
+    }
+
+    private const uint DT_CALCRECT = 0x400;
+
+    /// <summary>
+    /// A text as GDI draws it, and the reading-order flag: in a right-to-left language, a text holding a right-to-left
+    /// letter reads right to left, with Latin digits (U+206F NOMINAL DIGIT SHAPES: the values beside it are written with
+    /// them, and Windows' contextual digits would mix both shapes in one line); any other text (a file name, "4032 × 3024
+    /// px") keeps its own left-to-right order. Unchanged in a left-to-right language.
+    /// </summary>
+    public static (string Text, uint Flags) Prepare(string text) =>
+        WinTools.Core.Localization.UiText.IsRightToLeft && HasRightToLeftLetter(text) ? ("\u206F" + text, DT_RTLREADING) : (text, 0u);
+
+    /// <summary>Whether a text holds a Hebrew or Arabic letter (U+0590 to U+08FF and their presentation forms).</summary>
+    private static bool HasRightToLeftLetter(string text)
+    {
+        foreach (var c in text)
+            if (c is >= '\u0590' and <= '\u08FF' or >= '\uFB1D' and <= '\uFDFF' or >= '\uFE70' and <= '\uFEFF') return true;
+        return false;
     }
 
     /// <summary>

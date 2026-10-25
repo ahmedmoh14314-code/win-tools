@@ -105,7 +105,7 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         {
             if (!progressShowing || capability.LongRunning) toast.Hide();
             var sections = facts.Take(InfoPanelRenderer.MaxSections)
-                .Select(i => new InfoSection(i.SourceName, [.. i.Result.Facts.Select(f => new InfoRow(UiText.TOr("fact." + f.Label, f.Label), f.Value, f.Notice))])).ToArray();
+                .Select(i => new InfoSection(i.SourceName, [.. i.Result.Facts.Select(f => new InfoRow(UiText.TOr("fact." + f.Label, f.Label), UiText.Value(f.Value), f.Notice))])).ToArray();
             if (_overlayVisible()) _deferredInfo = (sections, facts.Length - sections.Length);
             else info.Show(sections, facts.Length - sections.Length, _anchor.X, _anchor.Y);
             log.Event("info.show", new { files = facts.Length, shown = sections.Length, deferred = _deferredInfo is not null });

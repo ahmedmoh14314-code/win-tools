@@ -180,7 +180,7 @@ internal static class InfoPanelRenderer
         if (more > 0)
         {
             cy += p.S(4);
-            p.Text(more == 1 ? WinTools.Core.Localization.UiText.T("info.more1") : WinTools.Core.Localization.UiText.F("info.more", more), left, cy, right, cy + p.S(Footer96 - 6), Palette.TextSecondary, textPx, 400, TextAlign.Left);
+            p.Text(WinTools.Core.Localization.UiText.Count("info.more", more), left, cy, right, cy + p.S(Footer96 - 6), Palette.TextSecondary, textPx, 400, TextAlign.Left);
         }
     }
 }

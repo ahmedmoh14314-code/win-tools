@@ -27,7 +27,7 @@ public partial class RenameWindow : Window
         _request = request;
         InitializeComponent();
         Title = request.Title;
-        Heading.Text = request.Names.Count == 1 ? UiText.T("rename.heading1") : UiText.F("rename.heading", request.Names.Count);
+        Heading.Text = UiText.Count("rename.heading", request.Names.Count);
         _ready = true;
         Loaded += (_, _) =>
         {
