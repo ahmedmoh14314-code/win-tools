@@ -83,7 +83,9 @@ internal static class Program
             var pdf = new JobModuleRunner(PdfJobModule.Instance, new WorkerClient(pdfWorkerPath, PdfTimeout, PdfJobModule.Instance, parallelism: 2), PdfJobModule.Parameters);
             // Archive jobs: one worker (each archive streams through one disk; V2 plan §13).
             var archives = new JobModuleRunner(ArchiveJobModule.Instance, new WorkerClient(archiveWorkerPath, ArchiveTimeout, ArchiveJobModule.Instance, parallelism: 1), ArchiveJobModule.Parameters);
-            var jobs = new JobScheduler([images, files, pdf, archives], log, () => Volatile.Read(ref current), feedback);
+            // Subtitle jobs: the text worker, which also runs File info and SHA-256 (a separate runner, its own module rules).
+            var subtitles = new JobModuleRunner(SubtitleJobModule.Instance, new WorkerClient(textWorkerPath, JobTimeout, SubtitleJobModule.Instance), SubtitleJobModule.Parameters);
+            var jobs = new JobScheduler([images, files, pdf, archives, subtitles], log, () => Volatile.Read(ref current), feedback);
             coordinator = new InteractionCoordinator(log, window, jobs, feedback, sounds, settings);
             using (coordinator)
             {

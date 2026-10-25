@@ -3,7 +3,7 @@ using WinTools.Windows.Native;
 
 namespace WinTools.Windows.Rendering;
 
-internal enum Glyph { Convert, Compress, Resize, Rotate, Tools, Back, Check, Alert, Info, None, Mark, More, Pages, Archive }
+internal enum Glyph { Convert, Compress, Resize, Rotate, Tools, Back, Check, Alert, Info, None, Mark, More, Pages, Archive, Timing }
 
 /// <summary>
 /// The product's line icons, drawn as vectors on a 24-unit grid (stroke 2 units, round caps), so they are crisp at every
@@ -21,6 +21,7 @@ internal static class Icons
         "more" => Glyph.More,
         "pages" => Glyph.Pages,
         "archive" => Glyph.Archive,
+        "timing" => Glyph.Timing,
         _ => Glyph.Tools,
     };
 
@@ -86,6 +87,10 @@ internal static class Icons
                 Poly(P(3, 4), P(21, 4), P(21, 8), P(3, 8), P(3, 4));
                 L(12, 8, 12, 17);
                 L(10.5f, 11, 13.5f, 11); L(10.5f, 14, 13.5f, 14);
+                break;
+            case Glyph.Timing: // a clock face with its hands: when something shows
+                p.StrokeCircle(cx, cy, 8.5f * u, colour, w);
+                L(12, 12, 12, 7); L(12, 12, 15.5f, 14);
                 break;
             case Glyph.More: // three dots: there is more than the ring shows
                 foreach (var x in new[] { 5f, 12f, 19f }) p.FillCircle(P(x, 12).X, P(x, 12).Y, 2f * u, colour);

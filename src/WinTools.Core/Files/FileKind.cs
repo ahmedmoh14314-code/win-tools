@@ -1,7 +1,7 @@
 namespace WinTools.Core.Files;
 
 /// <summary>The broad family a kind of file belongs to; a module usually serves one family.</summary>
-public enum FileFamily { Image, Pdf, Archive, Folder, Other }
+public enum FileFamily { Image, Pdf, Archive, Subtitle, Folder, Other }
 
 /// <summary>
 /// One kind of file the product recognises: a stable id (used in capability rules, settings and logs), its family, a
@@ -32,6 +32,10 @@ public static class FileKinds
     /// <summary>A ZIP archive (V2 PR 5.1). Its worker checks the "PK" signature before reading it.</summary>
     public static FileKind Zip { get; } = new("zip", FileFamily.Archive, "ZIP", [".zip"]);
 
+    /// <summary>SubRip and WebVTT subtitles (V2 PR 7.1). Text formats: the worker decodes and parses them, bounded.</summary>
+    public static FileKind Srt { get; } = new("srt", FileFamily.Subtitle, "SRT", [".srt"]);
+    public static FileKind Vtt { get; } = new("vtt", FileFamily.Subtitle, "WebVTT", [".vtt"]);
+
     /// <summary>A folder. The drop target marks dropped folders with a trailing separator (UX-009, ADR-0019).</summary>
     public static FileKind Folder { get; } = new("folder", FileFamily.Folder, "Folder", []);
 
@@ -39,10 +43,10 @@ public static class FileKinds
     public static FileKind AnyFile { get; } = new("file", FileFamily.Other, "File", []);
 
     /// <summary>Every kind a capability's input rule may name.</summary>
-    public static IReadOnlyList<FileKind> Declared { get; } = [.. All, Pdf, Zip, Folder, AnyFile];
+    public static IReadOnlyList<FileKind> Declared { get; } = [.. All, Pdf, Zip, Srt, Vtt, Folder, AnyFile];
 
     private static readonly Dictionary<string, FileKind> ByExtension =
-        ((IEnumerable<FileKind>)[.. All, Pdf, Zip]).SelectMany(k => k.Extensions.Select(e => (e, k))).ToDictionary(p => p.e, p => p.k, StringComparer.OrdinalIgnoreCase);
+        ((IEnumerable<FileKind>)[.. All, Pdf, Zip, Srt, Vtt]).SelectMany(k => k.Extensions.Select(e => (e, k))).ToDictionary(p => p.e, p => p.k, StringComparer.OrdinalIgnoreCase);
 
     private static readonly Dictionary<string, FileKind>.AlternateLookup<ReadOnlySpan<char>> BySpan = ByExtension.GetAlternateLookup<ReadOnlySpan<char>>();
 
