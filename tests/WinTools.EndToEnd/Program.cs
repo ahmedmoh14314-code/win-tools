@@ -24,6 +24,9 @@ using WinTools.EndToEnd;
 // "zip" (V2 PR 5.1): tests/samples/photos-3.zip with an archive command (default archive.extract; --op archive.test,
 // archive.info): a new folder "photos" holding exactly the archive's tree, or the info panel; the archive unchanged.
 // "tgz" (V2 PR 5.2): the same tree as a PAX "photos.tar.gz" the harness builds, with the same commands and checks.
+// "lockedzip" (V2 PR 5.3): WinRAR's AES-256 sample with an Arabic password (tests/samples/locked-aes256-arabic.zip) as
+// "photos.zip", with Extract (default) or Test: the first run finds it locked, the password dialog must come to the front,
+// the password is typed into it, and the job runs again with it. --password wrong types another: no folder, a toast.
 // "srt" (V2 PR 7.1): an Arabic SRT the harness writes, with a subtitle command (default subtitles.to-vtt; --op
 // subtitles.shift-plus-1000, subtitles.info...): a new subtitle file with the module's name, or the info panel.
 // "docx" (V2 PR 6.1, 6.2): a small Word document the harness builds, with Extract text (default), Document info (--op
@@ -62,6 +65,7 @@ if (Desktop.ButtonsSwapped)
 string probeKey = "F5";
 var triggerKey = "Space";
 var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; string? opArg = null; var batchSize = 12; var animations = "On"; string? hostArg = null; var selectMode = "ctrl-a"; var holdKey = "none"; var settleMs = 250; var pathStyle = "plain"; var expectNothing = false;
+var wrongPassword = false;
 for (var i = 1; i < args.Length; i++)
 {
     switch (args[i])
@@ -79,6 +83,7 @@ for (var i = 1; i < args.Length; i++)
         case "--key": probeKey = args[++i]; break;                   // keyprobe: F2..F12, A..Z or 0..9
         case "--trigger": triggerKey = args[++i]; break;
         case "--expect": expectNothing = args[++i] switch { "copy" => false, "already-optimized" => true, var x => throw new ArgumentException($"--expect {x}") }; break;
+        case "--password": wrongPassword = args[++i] switch { "right" => false, "wrong" => true, var x => throw new ArgumentException($"--password {x}") }; break;
         case "--path-style": pathStyle = args[++i] is "plain" or "unicode" or "long" ? args[i] : throw new ArgumentException($"--path-style {args[i]}"); break;
         case "--animations": animations = args[++i] switch { "on" => "On", "off" => "Off", "system" => "System", var a => throw new ArgumentException($"--animations {a}") }; break;
         default: Console.Error.WriteLine($"Unknown option {args[i]}"); return 64;
@@ -97,6 +102,7 @@ var (sample, sourceName, defaultTarget) = scenario switch
     "pdf" => ("pages-3.pdf", "report.pdf", ImageFormat.Unknown),
     "zip" => ("photos-3.zip", "photos.zip", ImageFormat.Unknown),
     "tgz" => ("", "photos.tar.gz", ImageFormat.Unknown),
+    "lockedzip" => ("locked-aes256-arabic.zip", "photos.zip", ImageFormat.Unknown),
     "srt" => ("", "film.srt", ImageFormat.Unknown),
     "docx" => ("", "report.docx", ImageFormat.Unknown),
     _ => ("quadrants-64x48.png", "photo.png", ImageFormat.Jpeg),
@@ -107,7 +113,7 @@ var target = targetArg is null ? defaultTarget : Enum.Parse<ImageFormat>(targetA
 if (scenario == "photo") opArg ??= "compress.balanced";
 if (opArg is null && scenario is "file" or "folder") opArg = FilesCapabilities.InfoId;
 if (opArg is null && scenario == "pdf") opArg = PdfCapabilities.RotateRightId;
-if (opArg is null && scenario is "zip" or "tgz") opArg = ArchiveCapabilities.ExtractId;
+if (opArg is null && scenario is "zip" or "tgz" or "lockedzip") opArg = ArchiveCapabilities.ExtractId;
 if (opArg is null && scenario == "srt") opArg = SubtitleCapabilities.ToVttId;
 if (opArg is null && scenario == "docx") opArg = DocumentCapabilities.ExtractTextId;
 var op = opArg is not null ? catalog.FirstOrDefault(o => o.Id == opArg) : target == ImageFormat.Unknown ? null : OperationCatalog.Convert(target);
@@ -121,7 +127,7 @@ var outputFormat = op is null || !op.WritesFile ? ImageFormat.Unknown : op.Outpu
 // A PDF command's output is a PDF named by the module (V2 PR 2.1); Split's folder is not driven here (worker tests).
 var pdfFile = scenario == "pdf" && capability is { Module: PdfCapabilities.Module, Produces: CapabilityOutput.File };
 // Extract makes a folder named after the archive.
-var zipFolder = scenario is "zip" or "tgz" && capability?.Id == ArchiveCapabilities.ExtractId;
+var zipFolder = (scenario is "zip" or "tgz" || scenario == "lockedzip" && !wrongPassword) && capability?.Id == ArchiveCapabilities.ExtractId;
 var subtitleFile = scenario == "srt" && capability is { Module: SubtitleCapabilities.Module, Produces: CapabilityOutput.File };
 var documentText = scenario == "docx" && capability?.Id == DocumentCapabilities.ExtractTextId;
 var documentClean = scenario == "docx" && capability?.Id == DocumentCapabilities.RemovePropertiesId;
@@ -195,6 +201,8 @@ if (scenario is "keyprobe" or "keycontrol" && probeKey.Length == 1)
 string HashOf(string path) => isFolder ? string.Join("|", Directory.GetFileSystemEntries(path).Order(StringComparer.Ordinal)) : Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
 // Remove protection (V2 PR 2.2): the sample is first protected with the run's password, by the qpdf next to the harness.
 const string E2ePassword = "سرّ E2E 😀 --x";
+// The locked ZIP's password is WinRAR's sample's (UTF-8 for AES); a wrong one is Arabic too.
+var typedPassword = scenario == "lockedzip" ? (wrongPassword ? "ليست هي 123" : "سرّé1") : E2ePassword;
 string Qpdf(string[] arguments)
 {
     var psi = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "qpdf", "qpdf.exe")) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, CreateNoWindow = true, WorkingDirectory = folder, StandardInputEncoding = new System.Text.UTF8Encoding(false) };
@@ -694,7 +702,8 @@ using (var explorer = opened)
             // A command that asks for a password (V2 PR 2.2): type it into the real dialog, but only once the dialog is in
             // front; never Enter into Explorer, which would open the selected files.
             bool? dialogInFront = null;
-            if (capability?.Prompt is { } prompt && releasedOver == "overlay")
+            // An on-demand prompt (V2 PR 5.3) comes only for a locked archive: never wait for it on a plain one.
+            if (capability?.Prompt is { } prompt && (!prompt.WhenRequired || scenario == "lockedzip") && releasedOver == "overlay")
             {
                 var asked = Stopwatch.GetTimestamp();
                 dialogInFront = false;
@@ -706,8 +715,8 @@ using (var explorer = opened)
                 if (dialogInFront == true)
                 {
                     Thread.Sleep(300);
-                    Desktop.TypeText(E2ePassword);
-                    if (prompt.Confirm) { Desktop.Tap(0x09); Thread.Sleep(100); Desktop.TypeText(E2ePassword); } // Tab to the second box
+                    Desktop.TypeText(typedPassword);
+                    if (prompt.Confirm) { Desktop.Tap(0x09); Thread.Sleep(100); Desktop.TypeText(typedPassword); } // Tab to the second box
                     Thread.Sleep(150);
                     if (Desktop.ForegroundProcessName() == "WinTools.Dialogs") Desktop.Tap(0x0D); // Enter: OK
                     else dialogInFront = false;
@@ -760,6 +769,8 @@ using (var explorer = opened)
             {
                 // Already optimized: the job ends without a file; stop waiting so the toast is still up when it is checked.
                 if (expectNothing && HostLines().Skip(hostLogLines).Any(l => l.Contains("\"ev\":\"job.done\"", StringComparison.Ordinal))) break;
+                // A wrong password: the second run's result ends the wait, so its toast is still up when it is checked.
+                if (wrongPassword && HostLines().Skip(hostLogLines).Any(l => l.Contains("\"error\":\"PasswordIncorrect\"", StringComparison.Ordinal))) break;
                 var produced = (zipFolder ? Directory.GetFileSystemEntries(folder) : Directory.GetFiles(folder)).Where(f => !string.Equals(f, source, StringComparison.OrdinalIgnoreCase)).ToArray();
                 if (produced.Length > 0 && !produced.Any(f => Path.GetFileName(f).StartsWith("~wintools-", StringComparison.Ordinal))) { output = produced.Single(); break; }
                 if (facts && Desktop.VisibleWindowsOf(host.Id, "WinTools.InfoPanel").Count > 0)
@@ -772,15 +783,18 @@ using (var explorer = opened)
                 }
                 Thread.Sleep(100);
             }
-            if (output is not null || expectNothing) (toastShown, focusKept) = WaitForSurface("WinTools.Toast", explorer.Hwnd, TimeSpan.FromSeconds(3));
+            if (output is not null || expectNothing || wrongPassword) (toastShown, focusKept) = WaitForSurface("WinTools.Toast", explorer.Hwnd, TimeSpan.FromSeconds(3));
             Thread.Sleep(300);
             var files = Directory.GetFileSystemEntries(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray(); // the "folder" scenario's source is a folder
             var sourceIntact = (isFolder ? Directory.Exists(source) : File.Exists(source)) && HashOf(source) == sourceHash;
             // An extracted folder: exactly the sample's tree, with its content.
-            bool ZipTreeValid(string dir) => Directory.Exists(dir)
-                && Directory.EnumerateFileSystemEntries(dir, "*", SearchOption.AllDirectories).Select(p => Path.GetRelativePath(dir, p)).Order(StringComparer.Ordinal)
+            bool ZipTreeValid(string dir) => Directory.Exists(dir) && (scenario == "lockedzip"
+                ? Directory.EnumerateFileSystemEntries(dir, "*", SearchOption.AllDirectories).Select(p => Path.GetRelativePath(dir, p)).Order(StringComparer.Ordinal)
+                    .SequenceEqual(["a.txt", "sub", @"sub\big.bin", "tiny.txt"])
+                    && File.ReadAllText(Path.Combine(dir, "a.txt")) == "hello encrypted world\n" && File.ReadAllText(Path.Combine(dir, "tiny.txt")) == "x"
+                : Directory.EnumerateFileSystemEntries(dir, "*", SearchOption.AllDirectories).Select(p => Path.GetRelativePath(dir, p)).Order(StringComparer.Ordinal)
                     .SequenceEqual(["2026", @"2026\a.txt", @"2026\b.txt", "notes.txt"])
-                && File.ReadAllText(Path.Combine(dir, "2026", "a.txt")) == "one\n";
+                    && File.ReadAllText(Path.Combine(dir, "2026", "a.txt")) == "one\n");
             bool SubtitleValid(string file) => File.ReadAllText(file, System.Text.Encoding.UTF8) is var t && t.Contains("مرحبا بكم 😀", StringComparison.Ordinal)
                 && (Path.GetExtension(file) == ".vtt" ? t.StartsWith("WEBVTT", StringComparison.Ordinal) : t.Contains(" --> ", StringComparison.Ordinal));
             // Remove properties: the copy keeps the body and loses the author, title and Office's own properties.
@@ -818,6 +832,7 @@ using (var explorer = opened)
             var cleanFolder = files.SequenceEqual(expectedFiles);
             var menuOpens = ev.Where(e => Ev(e) == "menu.open").Select(e => Data(e).TryGetProperty("group", out var gr) ? gr.GetString() : null).ToArray();
             var menuBacks = ev.Count(e => Ev(e) == "menu.back");
+            var secretAsked = ev.Any(e => Ev(e) == "job.secretNeeded") && ev.Any(e => Ev(e) == "secret.ask");
             var soundsHeld = SoundsHeld(ev);
             bool? refusedLogged = scenario == "alt" ? ev.Any(e => Ev(e) == "trigger.refused") : null;
             bool? overlayShown = scenario == "alt" ? ev.Any(e => Ev(e) == "overlay.show") : null;
@@ -829,6 +844,12 @@ using (var explorer = opened)
                 "photo" or "pdf" when expectNothing => output is null && accepted == 1 && toastShown == true && focusKept == true
                     && ev.Any(e => Ev(e) == "toast" && Data(e).TryGetProperty("kind", out var tk) && tk.GetString() == "Nothing")
                     && ev.Any(e => Ev(e) == "job.result" && Data(e).TryGetProperty("error", out var er) && er.GetString() == "NothingToDo"),
+                // A locked ZIP: the first run asked for nothing, the password window came to the front, the job ran again
+                // with it. Right: the folder or the panel; wrong: nothing, and the toast.
+                "lockedzip" when wrongPassword => output is null && accepted == 1 && dialogInFront == true && secretAsked && toastShown == true && focusKept == true
+                    && ev.Any(e => Ev(e) == "job.result" && Data(e).TryGetProperty("error", out var pe) && pe.GetString() == "PasswordIncorrect"),
+                "lockedzip" when facts => output is null && infoShown && focusKept == true && accepted == 1 && dialogInFront == true && secretAsked,
+                "lockedzip" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1 && dialogInFront == true && secretAsked,
                 "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "file" or "folder" or "pdf" or "zip" or "tgz" or "srt" or "docx" when facts => output is null && infoShown && focusKept == true && accepted == 1,
                 "zip" or "tgz" or "srt" or "docx" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 "pdf" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1 && (capability?.Prompt is null || dialogInFront == true),
@@ -856,7 +877,7 @@ using (var explorer = opened)
                 _ => output is null && accepted == 0 && releasedOver == "overlay" && menuOpens.Length == 0, // unsupported, category
             };
             if (ok) passed++; else exitCode = 1;
-            Record(new { scenario, cycle, op = op?.Id, dialogInFront, releasedOver, releaseAfterMs, hostEnters = enters, hostDrops = drops.Length, hostAccepted = accepted, openMs, ruleHeld, endedOnOverlay, infoShown,
+            Record(new { scenario, cycle, op = op?.Id, dialogInFront, secretAsked, wrongPassword, releasedOver, releaseAfterMs, hostEnters = enters, hostDrops = drops.Length, hostAccepted = accepted, openMs, ruleHeld, endedOnOverlay, infoShown,
                 toastShown, focusKept, soundsHeld, refusedLogged, overlayShown, saved, pathStyle, sourcePathLength = source.Length,
                 startOffset, opensBeforeCentre, levelPushed, categorySeen, menuOpens, menuBacks,
                 triggerAt = $"{at.X},{at.Y}", releaseAt = $"{release.X},{release.Y}", output = output is null ? null : Path.GetFileName(output), outputValid, sourceIntact, cleanFolder, files, ok });

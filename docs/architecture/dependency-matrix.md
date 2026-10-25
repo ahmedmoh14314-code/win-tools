@@ -42,4 +42,5 @@ Alternatives considered for tests: MSTest (MIT) and NUnit (MIT) are equivalent. 
 ## Development tooling outside the build
 - GitHub Actions `actions/checkout` v7.0.1 and `actions/setup-dotnet` v6.0.0 (MIT), pinned by commit SHA in `.github/workflows/ci.yml`.
 - `tests/samples/New-Samples.ps1` uses Windows PowerShell 5.1 and System.Drawing (GDI+), both part of Windows, to regenerate the committed test images with an encoder independent of WIC.
+- `tests/samples/New-EncryptedZipSamples.ps1` uses **WinRAR 6.24** (installed on the developer machine, signed by win.rar GmbH) to write the encrypted ZIP samples, an encoder independent of the worker's decryption (V2 PR 5.3). Its output is committed; nothing in the build or CI needs it, and none of its code ships.
 - `tests/samples/New-WebPSamples.py` uses **Pillow** (HPND licence, with its own libwebp) to write the lossless WebP samples, an encoder independent of SkiaSharp. It is a developer-machine tool only; nothing in the build or CI needs it.

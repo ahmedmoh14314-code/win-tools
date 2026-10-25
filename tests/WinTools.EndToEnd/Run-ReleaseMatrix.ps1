@@ -98,6 +98,8 @@ $rows = @(
     @('zip-extract',          'zip --cycles 2',                                                   'ZIP extract: a new folder with exactly the archive''s tree (V2 PR 5.1)'),
     @('zip-test',             'zip --op archive.test --cycles 1',                                 'ZIP test: the info panel, nothing written'),
     @('tgz-extract',          'tgz --cycles 2',                                                   'TAR.GZ extract: the same tree from a PAX TAR.GZ (V2 PR 5.2)'),
+    @('zip-locked-extract',   'lockedzip --cycles 1',                                             'encrypted ZIP: the dialog after the first run, an Arabic password typed, the tree (V2 PR 5.3)'),
+    @('zip-locked-wrong',     'lockedzip --password wrong --cycles 1',                            'encrypted ZIP, a wrong password: no folder, the toast'),
     @('srt-to-vtt',           'srt --cycles 2',                                                   'Arabic SRT with an emoji to WebVTT (V2 PR 7.1)'),
     @('srt-shift',            'srt --op subtitles.shift-plus-1000 --cycles 1',                    'subtitle timing 1 s later: a new SRT'),
     @('docx-text',            'docx --cycles 2',                                                  'Word text: a new UTF-8 text file (V2 PR 6.1)'),
