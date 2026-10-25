@@ -146,12 +146,20 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
     }
 
     /// <summary>A dialog the user asked for could not be shown (its program is missing or failed to start). Any thread.</summary>
-    public void DialogUnavailable() => ui.Post(() =>
+    public void DialogUnavailable(string what = "the list of commands") => ui.Post(() =>
     {
-        ShowToast(new ToastContent(FeedbackKind.Failure, "Could not open the list of commands",
+        ShowToast(new ToastContent(FeedbackKind.Failure, $"Could not open {what}",
             "WinTools.Dialogs.exe is missing from this copy or could not start. Nothing was run; reinstall to fix it."));
         sounds.Play(UiSound.Failure);
         log.Event("toast", new { kind = "dialogUnavailable" });
+    });
+
+    /// <summary>A password the host's own check refused (V2 PR 2.2); the reason never contains the password. Any thread.</summary>
+    public void SecretRefused(string reason) => ui.Post(() =>
+    {
+        ShowToast(new ToastContent(FeedbackKind.Failure, "The password was not used", $"{reason} Nothing was run."));
+        sounds.Play(UiSound.Failure);
+        log.Event("toast", new { kind = "secretRefused" });
     });
 
     public void Crashed(CapabilityDescriptor capability, int files) => ui.Post(() =>

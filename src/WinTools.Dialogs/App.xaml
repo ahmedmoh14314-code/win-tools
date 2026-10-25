@@ -12,6 +12,7 @@
       <SolidColorBrush x:Key="Green" Color="#22C55E" />
       <SolidColorBrush x:Key="Text" Color="#F4F7F5" />
       <SolidColorBrush x:Key="TextSecondary" Color="#9AA69F" />
+      <SolidColorBrush x:Key="Warning" Color="#F5B54A" />
     </ResourceDictionary>
   </Application.Resources>
 </Application>
