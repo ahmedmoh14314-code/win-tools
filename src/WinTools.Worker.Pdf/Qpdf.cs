@@ -10,14 +10,17 @@ internal sealed record QpdfRun(int ExitCode, string Output, bool TimedOut)
     public const int Success = 0, Errors = 2, Warnings = 3;
 
     public bool Usable => !TimedOut && ExitCode is Success or Warnings;
+
+    /// <summary>Any other code: qpdf itself crashed or could not load (a missing DLL), which says nothing about the PDF.</summary>
+    public bool EngineFailed => !TimedOut && ExitCode is not (Success or Errors or Warnings);
 }
 
 /// <summary>
 /// Runs the bundled qpdf (ADR-0022) as a child of the PDF worker. Arguments go through <see cref="ProcessStartInfo.ArgumentList"/>
-/// only, never through a shell or a command line we assemble; every path is fully qualified, so none can be read as an
-/// option or as qpdf's "@file" argument list. The child gets a private environment (only what Windows needs), the qpdf
-/// folder as its working directory, no window, a time limit, and is killed with its tree when the limit passes. Its
-/// output is read up to <see cref="MaxOutputChars"/> and the rest discarded, so the pipe can never fill.
+/// only, never through a shell or a command line we assemble. The PDF jobs pass only fixed ASCII names relative to their
+/// private work folder, which is the child's working directory, so no user text reaches qpdf at all. The child gets a
+/// private environment (only what Windows needs), no window, a closed standard input, a time limit, and is killed with its
+/// tree when the limit passes. Its output is read up to <see cref="MaxOutputChars"/> and the rest discarded.
 /// </summary>
 internal static class Qpdf
 {
@@ -26,12 +29,15 @@ internal static class Qpdf
     /// <summary>Where the build puts qpdf: a folder of its own next to the worker (its DLLs are found there first).</summary>
     public static string ExecutablePath { get; } = Path.Combine(AppContext.BaseDirectory, "qpdf", "qpdf.exe");
 
-    public static bool IsPresent => File.Exists(ExecutablePath);
+    /// <summary>The files qpdf needs: itself, its library and the Visual C++ runtime it imports (Get-Engines.ps1).</summary>
+    private static readonly string[] Files = ["qpdf.exe", "qpdf30.dll", "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"];
+
+    public static bool IsPresent => Files.All(f => File.Exists(Path.Combine(Path.GetDirectoryName(ExecutablePath)!, f)));
 
     /// <summary>The only environment variables qpdf gets.</summary>
     private static readonly string[] KeptVariables = ["SystemRoot", "windir", "TEMP", "TMP"];
 
-    public static QpdfRun Run(IReadOnlyList<string> arguments, TimeSpan timeout)
+    public static QpdfRun Run(IReadOnlyList<string> arguments, TimeSpan timeout, string? workingDirectory = null)
     {
         foreach (var a in arguments)
             if (a.Length == 0 || a[0] == '@' || a.Contains('\0', StringComparison.Ordinal))
@@ -46,7 +52,7 @@ internal static class Qpdf
             RedirectStandardError = true,
             StandardOutputEncoding = new UTF8Encoding(false),
             StandardErrorEncoding = new UTF8Encoding(false),
-            WorkingDirectory = Path.GetDirectoryName(ExecutablePath)!,
+            WorkingDirectory = workingDirectory ?? Path.GetDirectoryName(ExecutablePath)!,
         };
         foreach (var a in arguments) psi.ArgumentList.Add(a);
         // Only what a Windows program needs to start; nothing of the user's environment reaches the engine.

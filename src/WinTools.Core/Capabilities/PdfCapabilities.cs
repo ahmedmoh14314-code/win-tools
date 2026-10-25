@@ -78,9 +78,49 @@ public static class PdfCapabilities
     {
         RotateRightId => "+90",
         RotateLeftId => "-90",
-        Rotate180Id => "180",
+        Rotate180Id => "+180", // signed: an unsigned angle sets the rotation instead of adding to it (evaluator, PR 2.1)
         _ => null,
     };
+
+    /// <summary>
+    /// The order Merge joins its inputs in: by file name as Explorer sorts names (digits as numbers, case ignored), then by
+    /// full path. The order Explorer hands a drop over in depends on which item was grabbed, so it is not used (evaluator,
+    /// PR 2.1). The output is named after the first file in this order.
+    /// </summary>
+    public static IReadOnlyList<string> MergeOrder(IReadOnlyList<string> inputs) =>
+        [.. inputs.Order(Comparer<string>.Create((a, b) =>
+        {
+            var byName = NaturalCompare(Path.GetFileName(a), Path.GetFileName(b));
+            return byName != 0 ? byName : string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
+        }))];
+
+    /// <summary>"page 2" before "page 10"; otherwise ordinal and case-insensitive.</summary>
+    internal static int NaturalCompare(string a, string b)
+    {
+        int i = 0, j = 0;
+        while (i < a.Length && j < b.Length)
+        {
+            if (char.IsAsciiDigit(a[i]) && char.IsAsciiDigit(b[j]))
+            {
+                int si = i, sj = j;
+                while (i < a.Length && char.IsAsciiDigit(a[i])) i++;
+                while (j < b.Length && char.IsAsciiDigit(b[j])) j++;
+                var na = a.AsSpan(si, i - si).TrimStart('0');
+                var nb = b.AsSpan(sj, j - sj).TrimStart('0');
+                if (na.Length != nb.Length) return na.Length.CompareTo(nb.Length);
+                var digits = na.SequenceCompareTo(nb);
+                if (digits != 0) return digits;
+                continue;
+            }
+            var c = char.ToUpperInvariant(a[i]).CompareTo(char.ToUpperInvariant(b[j]));
+            if (c != 0) return c;
+            i++; j++;
+        }
+        return (a.Length - i).CompareTo(b.Length - j);
+    }
+
+    /// <summary>The name of the private folder one request's qpdf runs in, under the user's temp folder.</summary>
+    public static string WorkFolderName(string requestId) => "wintools-pdf-" + requestId;
 
     /// <summary>
     /// The name of page <paramref name="page"/> of <paramref name="pages"/> inside Split's folder: the source's name and

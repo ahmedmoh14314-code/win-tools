@@ -49,8 +49,10 @@ internal sealed class PdfJobModule : IJobModule
     private static bool FileHoldsUp(JobRequest request, JobResult result)
     {
         if (result.Outputs is not [{ Sha256: { Length: 64 } claimed } output] || result.Facts.Count > 0) return false;
-        // The name first: only a path the naming policy allows is ever opened, whatever the worker claims.
-        var allowed = OutputNaming.CandidatesWithExtension(request.Inputs[0], ".pdf", PdfCapabilities.NameSuffix(request.CapabilityId), request.OutputDirectory);
+        // The name first: only a path the naming policy allows is ever opened, whatever the worker claims. Merge is named
+        // after the first file in its own order, not the drop's.
+        var nameSource = request.CapabilityId == PdfCapabilities.MergeId ? PdfCapabilities.MergeOrder(request.Inputs)[0] : request.Inputs[0];
+        var allowed = OutputNaming.CandidatesWithExtension(nameSource, ".pdf", PdfCapabilities.NameSuffix(request.CapabilityId), request.OutputDirectory);
         if (!allowed.Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
         using var file = new FileStream(output.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
         var head = new byte[5];
@@ -67,17 +69,34 @@ internal sealed class PdfJobModule : IJobModule
             || pages is < 1 or > PdfCapabilities.MaxSplitPages) return false;
         var source = request.Inputs[0];
         if (!OutputNaming.FolderCandidates(source, PdfCapabilities.NameSuffix(PdfCapabilities.SplitId)!, request.OutputDirectory).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
+        // A link is refused before anything is listed, and the listing stops past the expected count, so a forged claim
+        // cannot point the host at a large folder elsewhere (evaluator, PR 2.1).
+        var folder = new DirectoryInfo(output.Path);
+        if (!folder.Exists || folder.LinkTarget is not null || folder.Attributes.HasFlag(FileAttributes.ReparsePoint)) return false;
         var expected = Enumerable.Range(1, pages).Select(p => PdfCapabilities.PageFileName(source, p, pages)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var names = Directory.EnumerateFileSystemEntries(output.Path).Select(Path.GetFileName).ToArray();
-        if (names.Length != pages || !names.All(n => n is not null && expected.Contains(n))) return false;
+        var entries = folder.EnumerateFileSystemInfos().Take(pages + 1).ToArray();
+        if (entries.Length != pages || !entries.All(e => e is FileInfo f && f.LinkTarget is null && expected.Contains(f.Name) && StartsAsPdf(f.FullName))) return false;
         return string.Equals(FolderManifest.HashOf(output.Path), claimed, StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool StartsAsPdf(string path)
+    {
+        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var head = new byte[5];
+        return file.ReadAtLeast(head, head.Length, throwOnEndOfStream: false) == head.Length && head.AsSpan().SequenceEqual("%PDF-"u8);
+    }
+
+    /// <summary>
+    /// What a killed worker may leave: the destination temp (or Split's staging folder, same name), and the private work
+    /// folder under the user's temp folder that holds the copies qpdf read.
+    /// </summary>
     public IEnumerable<string> TempPathsOf(JobRequest request)
     {
-        if (request.Inputs.Count == 0) yield break;
+        if (request.Inputs.Count == 0 || request.Id.Length == 0 || request.Id.Any(c => !char.IsAsciiLetterOrDigit(c))) yield break;
+        yield return Path.Combine(Path.GetTempPath(), PdfCapabilities.WorkFolderName(request.Id));
+        var nameSource = request.CapabilityId == PdfCapabilities.MergeId ? PdfCapabilities.MergeOrder(request.Inputs)[0] : request.Inputs[0];
         string temp;
-        try { temp = OutputNaming.TempPath(request.Inputs[0], request.Id, request.OutputDirectory); }
+        try { temp = OutputNaming.TempPath(nameSource, request.Id, request.OutputDirectory); }
         catch (ArgumentException) { yield break; }
         yield return temp;
     }

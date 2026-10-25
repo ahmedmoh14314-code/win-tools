@@ -11,7 +11,9 @@ namespace WinTools.Worker.Tests;
 /// <summary>Minimal PDFs made here, so the corpus needs no third-party files: N pages of one text line each.</summary>
 internal static class PdfSamples
 {
-    public static byte[] Pages(int n)
+    /// <param name="width">The pages' width in points, so tests can tell one file's pages from another's.</param>
+    /// <param name="rotate">A /Rotate already on every page (scanned and phone PDFs often carry one).</param>
+    public static byte[] Pages(int n, int width = 612, int rotate = 0)
     {
         var objects = new List<string>
         {
@@ -19,7 +21,7 @@ internal static class PdfSamples
             $"<< /Type /Pages /Kids [{string.Join(" ", Enumerable.Range(0, n).Select(i => $"{3 + i} 0 R"))}] /Count {n} >>",
         };
         for (var i = 0; i < n; i++)
-            objects.Add($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Contents {3 + n + i} 0 R >>");
+            objects.Add($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} 792] /Resources << >>{(rotate != 0 ? $" /Rotate {rotate}" : "")} /Contents {3 + n + i} 0 R >>");
         for (var i = 0; i < n; i++)
         {
             var text = $"BT /F1 24 Tf 72 700 Td (Page {i + 1}) Tj ET";
@@ -62,6 +64,20 @@ public sealed class PdfWorkerTests : IDisposable
     }
 
     private string Pdf(string name, int pages) => _dir.Write(name, PdfSamples.Pages(pages));
+
+    /// <summary>Each page's width and /Rotate, in page order, read from qpdf's JSON.</summary>
+    private static (int Width, int Rotate)[] PageShapes(string path)
+    {
+        var json = Qpdf.Run(["--json=2", "--json-key=pages", "--json-key=qpdf", path], TimeSpan.FromSeconds(30));
+        using var doc = System.Text.Json.JsonDocument.Parse(json.Output);
+        var objects = doc.RootElement.GetProperty("qpdf")[1];
+        return [.. doc.RootElement.GetProperty("pages").EnumerateArray().Select(page =>
+        {
+            var dict = objects.GetProperty("obj:" + page.GetProperty("object").GetString()).GetProperty("value");
+            var width = (int)dict.GetProperty("/MediaBox")[2].GetDouble();
+            return (width, dict.TryGetProperty("/Rotate", out var r) ? r.GetInt32() : 0);
+        })];
+    }
 
     private void NoTemporaries() =>
         Assert.DoesNotContain(Directory.EnumerateFileSystemEntries(_dir.Path), e => Path.GetFileName(e).StartsWith("~wintools-", StringComparison.Ordinal));
@@ -168,6 +184,87 @@ public sealed class PdfWorkerTests : IDisposable
         Assert.True(r.Success, r.Message);
         Assert.Equal(Path.Combine(folder, "ملف مهم (rotated right).pdf"), r.OutputPath);
         Assert.Equal(2, PagesOf(r.OutputPath!));
+    }
+
+    [Theory]
+    [InlineData(PdfCapabilities.RotateRightId)]
+    [InlineData(PdfCapabilities.SplitId)]
+    [InlineData(PdfCapabilities.InfoId)]
+    public void A_path_longer_than_260_characters_works(string capability)
+    {
+        // Found by the Explorer run (pdf --path-style long): qpdf cannot open such a path as it is, and the file was
+        // reported as damaged. The worker hands qpdf the extended-length form (\?\).
+        var folder = _dir.Path;
+        while (folder.Length < 240) folder = Path.Combine(folder, "long path segment 0123456789");
+        Directory.CreateDirectory(folder);
+        var source = Path.Combine(folder, "a long file name for the 260 character test report.pdf");
+        File.WriteAllBytes(source, PdfSamples.Pages(2));
+        Assert.True(source.Length > 260);
+        var r = PdfJobs.Run(Request(capability, source));
+        Assert.True(r.Success, r.Message);
+        if (capability == PdfCapabilities.InfoId) Assert.Equal("2", r.Facts.Single(f => f.Label == "Pages").Value);
+        else Assert.True(PdfJobModule.Instance.IsBelievable(Request(capability, source) with { Id = "x" }, r) || r.Outputs.Count == 1);
+    }
+
+    [Fact]
+    public void Rotate_180_adds_to_a_page_that_is_already_turned()
+    {
+        // Evaluator, PR 2.1: an unsigned angle sets the rotation; a page already at 90 ended at 180, a quarter turn.
+        var source = _dir.Write("scan.pdf", PdfSamples.Pages(2, rotate: 90));
+        var r = PdfJobs.Run(Request(PdfCapabilities.Rotate180Id, source));
+        Assert.True(r.Success, r.Message);
+        Assert.All(PageShapes(r.OutputPath!), p => Assert.Equal(270, p.Rotate));
+        var right = PdfJobs.Run(Request(PdfCapabilities.RotateRightId, source));
+        Assert.All(PageShapes(right.OutputPath!), p => Assert.Equal(180, p.Rotate));
+    }
+
+    [Fact]
+    public void Merge_joins_pdfs_in_name_order_whatever_order_they_were_dropped_in()
+    {
+        // Evaluator, PR 2.1: the drop's order depends on which file was grabbed. Merge sorts by name, digits as numbers.
+        var a = _dir.Write("a.pdf", PdfSamples.Pages(1, width: 100));
+        var b2 = _dir.Write("b 2.pdf", PdfSamples.Pages(2, width: 200));
+        var b10 = _dir.Write("b 10.pdf", PdfSamples.Pages(3, width: 300));
+        var request = Request(PdfCapabilities.MergeId, b10, a, b2);
+        var r = PdfJobs.Run(request);
+        Assert.True(r.Success, r.Message);
+        Assert.Equal("a (merged).pdf", Path.GetFileName(r.OutputPath));
+        Assert.Equal([100, 200, 200, 300, 300, 300], PageShapes(r.OutputPath!).Select(p => p.Width));
+        Assert.True(PdfJobModule.Instance.IsBelievable(request, r));
+    }
+
+    [Theory]
+    [InlineData("50%done")]
+    [InlineData("@scans %d -x")]
+    public void A_folder_name_qpdf_could_misread_is_only_a_name(string folderName)
+    {
+        // Evaluator, PR 2.1: qpdf expands the first "%d" of the whole output path, folders included.
+        var folder = Path.Combine(_dir.Path, folderName);
+        Directory.CreateDirectory(folder);
+        var source = Path.Combine(folder, "report.pdf");
+        File.WriteAllBytes(source, PdfSamples.Pages(3));
+        var split = PdfJobs.Run(Request(PdfCapabilities.SplitId, source));
+        Assert.True(split.Success, split.Message);
+        Assert.Equal(Path.Combine(folder, "report (pages)"), split.Outputs.Single().Path);
+        Assert.Equal(3, Directory.GetFiles(split.Outputs.Single().Path).Length);
+        var rotate = PdfJobs.Run(Request(PdfCapabilities.RotateRightId, source));
+        Assert.True(rotate.Success, rotate.Message);
+        Assert.Equal(["report (pages)", "report (rotated right).pdf", "report.pdf"], Directory.GetFileSystemEntries(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Nothing_is_left_in_the_work_folder_or_the_destination_after_any_outcome()
+    {
+        var good = Pdf("good.pdf", 2);
+        var bad = _dir.Write("bad.pdf", PdfSamples.Pages(3)[..200]);
+        var ok = Request(PdfCapabilities.SplitId, good);
+        var fail = Request(PdfCapabilities.RotateRightId, bad);
+        Assert.True(PdfJobs.Run(ok).Success);
+        Assert.False(PdfJobs.Run(fail).Success);
+        Assert.False(Directory.Exists(PdfJobs.WorkFolderOf(ok.Id)));
+        Assert.False(Directory.Exists(PdfJobs.WorkFolderOf(fail.Id)));
+        NoTemporaries();
+        Assert.Contains(PdfJobs.WorkFolderOf(ok.Id), PdfJobModule.Instance.TempPathsOf(ok)); // the host removes it after a kill
     }
 
     [Fact]
