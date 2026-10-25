@@ -63,11 +63,18 @@
 8. **Notices reach the user:** a believed success that carries a notice fact (entries skipped or renamed, links not followed) shows it in the toast.
 
 9. **TAR, TAR.GZ and GZIP (V2 PR 5.2)**, with .NET's own `System.Formats.Tar` and `GZipStream`:
-   - Extract, Test and Archive info read `.tar`, `.tar.gz` and `.tgz`, told by content: the GZIP magic, or a `ustar` header.
+   - Extract, Test and Archive info read `.tar`, `.tar.gz` and `.tgz`, told by content: the GZIP magic, or a `ustar` header. A pre-POSIX (v7) TAR has no `ustar` header and is refused as not an archive.
+   - **`TarReader` trusts its input, so a first pass (`TarGuard`) reads the whole stream before it does**, keeping nothing:
+     - every header's checksum and size field are valid (TAR's only integrity check);
+     - a PAX or GNU long-name header is at most 1 MB (`TarReader` buffers it whole);
+     - the archive ends with its two zero blocks, followed only by zeros, so a TAR cut at a block boundary is caught;
+     - the entry count and the declared size of every entry, kept or not, meet the size and whole-archive rules.
    - Every entry goes through the same checks as a ZIP entry: names, the one budget, limits, never a link or a device.
    - TAR keeps no per-entry packed size, so its bomb rule is the whole-archive one (past 256 MB).
-   - TAR keeps no data check value. GZIP's CRC-32 and length are verified when the stream is read to its end, after the last entry, bounded.
-   - A plain `.gz` gets **Decompress**: `notes.txt.gz` becomes `notes.txt` next to it, without overwriting, under the same limits.
+   - TAR keeps no data check value. For a TAR.GZ, the first pass also compares GZIP's CRC-32 and length with the trailer. `GZipStream` reports a cut-off file as a clean end, so without that a truncated file passes.
+   - **A GZIP file of several members is refused as damaged**: its trailer covers only the last member. This is rare outside `cat a.gz b.gz`.
+   - `TarReader`'s own failures on a hostile header (an overflowing PAX number) are a damaged archive, never a crash.
+   - A plain `.gz` gets **Decompress**: `notes.txt.gz` becomes `notes.txt` next to it, without overwriting, under the same limits. The trailer is checked before the output is kept.
 
 ## Evaluator review
 One round (2026-10-25): one blocker and four majors, three of them reproduced by the reviewer on the built worker. All fixed, with tests that fail on the old code (5 of 19 worker tests).
@@ -89,6 +96,16 @@ One round (2026-10-25): one blocker and four majors, three of them reproduced by
 - **Open:**
   - the central directory is read in full before the entry count is checked (the job's memory cap contains it);
   - an extraction into OneDrive still needs an Explorer check on a synced folder.
+
+**PR 5.2 (TAR) review**, one round (2026-10-25), every finding reproduced on the built worker with the reviewer's own samples:
+- **Blocker:** a GZIP cut short, or missing its trailer, decompressed to a partial file reported as a success.
+- **Majors:**
+  - a TAR cut at a block boundary passed Test;
+  - a damaged header checksum was not checked;
+  - an overflowing PAX number crashed the worker;
+  - a huge PAX or GNU long-name header was buffered whole;
+  - declared sizes of skipped entries escaped the bomb rule.
+- All are fixed by the first pass and the trailer check. `TarWorkerTests` holds each one as its failing input: 4 of 12 fail on the old code.
 
 ## Alternatives considered
 - **`ZipFile.ExtractToDirectory`.** Rejected: no hook for the name policy, the limits or links, and a partial result on failure.

@@ -1,4 +1,5 @@
 using System.Formats.Tar;
+using System.Security.Cryptography;
 using System.IO.Compression;
 using System.Text;
 using WinTools.Core.Capabilities;
@@ -135,6 +136,63 @@ public sealed class TarWorkerTests : IDisposable
         Assert.True(ArchiveJobModule.Instance.IsBelievable(request, r));
         var fake = _dir.Write("fake.gz", "not compressed"u8.ToArray());
         Assert.Equal(ErrorCode.ContentMismatch, ArchiveJobs.Run(Request(ArchiveCapabilities.DecompressId, fake)).Error);
+    }
+
+    // Evaluator, PR 5.2: each finding as its failing input.
+
+    [Fact]
+    public void A_gzip_cut_short_is_damaged_never_a_partial_success()
+    {
+        var full = Path.Combine(_dir.Path, "full.gz");
+        using (var file = System.IO.File.Create(full))
+        using (var gz = new GZipStream(file, CompressionLevel.Optimal))
+            gz.Write(RandomNumberGenerator.GetBytes(200_000));
+        var bytes = System.IO.File.ReadAllBytes(full);
+        var cut = _dir.Write("cut.txt.gz", bytes[..(bytes.Length / 2)]);
+        var trailerless = _dir.Write("notrailer.txt.gz", bytes[..^8]);
+        foreach (var path in new[] { cut, trailerless })
+        {
+            var r = ArchiveJobs.Run(Request(ArchiveCapabilities.DecompressId, path));
+            Assert.Equal(ErrorCode.DecodeFailed, r.Error);
+        }
+        Assert.DoesNotContain(Directory.GetFiles(_dir.Path), f => f.EndsWith(".txt", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_pax_number_that_overflows_is_damage_not_a_crash()
+    {
+        // TarWriter writes uid from the entry itself, so the record goes in under another key and is renamed in the bytes
+        // (the PAX records are entry data: no header checksum covers them).
+        var tar = Tar("pax.tar", false, new PaxTarEntry(TarEntryType.RegularFile, "a.txt", new Dictionary<string, string> { ["zzz"] = "99999999999999999999999" })
+            { DataStream = new MemoryStream("x"u8.ToArray()) });
+        var bytes = System.IO.File.ReadAllBytes(tar);
+        var at = bytes.AsSpan().IndexOf("zzz="u8);
+        Assert.True(at > 0);
+        "uid="u8.CopyTo(bytes.AsSpan(at));
+        System.IO.File.WriteAllBytes(tar, bytes);
+        Assert.Equal(ErrorCode.DecodeFailed, ArchiveJobs.Run(Request(ArchiveCapabilities.TestId, tar)).Error);
+    }
+
+    [Fact]
+    public void A_huge_extended_header_is_refused_before_it_is_buffered()
+    {
+        var tar = Tar("huge.tgz", true, new PaxTarEntry(TarEntryType.RegularFile, "a.txt", new Dictionary<string, string> { ["comment"] = new string('z', 2 << 20) })
+            { DataStream = new MemoryStream("x"u8.ToArray()) });
+        Assert.Equal(ErrorCode.LimitExceeded, ArchiveJobs.Run(Request(ArchiveCapabilities.InfoId, tar)).Error);
+    }
+
+    [Fact]
+    public void A_tar_cut_at_a_block_boundary_or_with_a_bad_checksum_fails_the_test()
+    {
+        var tar = Tar("three.tar", false, Text("a.txt", "one"), Text("b.txt", "two"), Text("c.txt", "three"));
+        var bytes = System.IO.File.ReadAllBytes(tar);
+        var pax = bytes.AsSpan(156, 1)[0] == (byte)'x'; // a PAX writer may put an extended header first
+        var cut = _dir.Write("cut.tar", bytes[..(pax ? 3072 : 1024)]);
+        Assert.Equal(ErrorCode.DecodeFailed, ArchiveJobs.Run(Request(ArchiveCapabilities.TestId, cut)).Error);
+        bytes[1] ^= 0x01; // the first header's name: its checksum no longer matches
+        var damaged = _dir.Write("damaged.tar", bytes);
+        Assert.Equal(ErrorCode.DecodeFailed, ArchiveJobs.Run(Request(ArchiveCapabilities.ExtractId, damaged)).Error);
+        Assert.Empty(Directory.GetDirectories(_dir.Path));
     }
 
     [Fact]

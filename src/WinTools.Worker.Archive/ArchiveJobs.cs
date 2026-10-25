@@ -64,7 +64,9 @@ internal static class ArchiveJobs
             };
         }
         catch (ArchiveFailure ex) { return JobResult.Fail(id, ex.Code, ex.Message); }
-        catch (InvalidDataException) { return JobResult.Fail(id, ErrorCode.DecodeFailed, "The archive is damaged or is not a ZIP file."); }
+        catch (TarRefused ex) { return JobResult.Fail(id, ex.Limit ? ErrorCode.LimitExceeded : ErrorCode.DecodeFailed, ex.Message); }
+        catch (InvalidDataException) { return JobResult.Fail(id, ErrorCode.DecodeFailed, "The archive is damaged."); }
+        catch (EndOfStreamException) { return JobResult.Fail(id, ErrorCode.DecodeFailed, "The archive is cut short."); }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return JobResult.Fail(id, ErrorCode.SourceNotFound, "The file is no longer there."); }
         catch (UnauthorizedAccessException) { return JobResult.Fail(id, ErrorCode.OutputDirectoryNotWritable, "The destination folder is not writable."); }
         catch (PathTooLongException) { return JobResult.Fail(id, ErrorCode.OutputNameInvalid, "A name would be too long."); }
@@ -142,11 +144,20 @@ internal static class ArchiveJobs
                 else if (read >= 2 && head[0] == 0x1F && head[1] == 0x8B)
                 {
                     Kind = Kind.TarGz;
+                    // A first pass checks every header and the GZIP trailer; only then does TarReader read it (evaluator, PR 5.2).
+                    using (var scan = new CheckedGzip(_file, _file.Length))
+                    {
+                        TarGuard.Check(scan, _file.Length);
+                        if (!scan.TrailerMatches()) throw new TarRefused("The archive is damaged or cut short (its GZIP check value does not match).");
+                    }
+                    _file.Position = 0;
                     _tarStream = new GZipStream(_file, CompressionMode.Decompress, leaveOpen: true);
                 }
                 else if (read == 512 && head.AsSpan(257, 5).SequenceEqual("ustar"u8))
                 {
                     Kind = Kind.Tar;
+                    TarGuard.Check(_file, _file.Length);
+                    _file.Position = 0;
                     _tarStream = _file;
                 }
                 else throw new ArchiveFailure(ErrorCode.ContentMismatch, "The file is not a ZIP, TAR or TAR.GZ archive.");
@@ -164,7 +175,7 @@ internal static class ArchiveJobs
         {
             using var reader = new TarReader(_tarStream!, leaveOpen: true);
             var count = 0;
-            while (reader.GetNextEntry(copyData: false) is { } e)
+            while (Next(reader) is { } e)
             {
                 if (++count > ArchiveLimits.MaxEntries) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"The archive has more than {ArchiveLimits.MaxEntries:N0} entries.");
                 var type = e.EntryType;
@@ -184,6 +195,16 @@ internal static class ArchiveJobs
                 int n;
                 while ((n = _tarStream!.Read(rest)) > 0)
                     if ((tail += n) > 16L << 20) throw new ArchiveFailure(ErrorCode.LimitExceeded, "The archive holds unexpected data after its last entry.");
+            }
+        }
+
+        /// <summary>TarReader's own failures on a hostile header (an overflowing PAX number, a bad field) as a damaged archive, never a crash.</summary>
+        private static TarEntry? Next(TarReader reader)
+        {
+            try { return reader.GetNextEntry(copyData: false); }
+            catch (Exception ex) when (ex is OverflowException or FormatException or ArgumentException or EndOfStreamException or InvalidDataException or IOException and not FileNotFoundException)
+            {
+                throw new ArchiveFailure(ErrorCode.DecodeFailed, "A TAR header is damaged.");
             }
         }
 
@@ -332,7 +353,12 @@ internal static class ArchiveJobs
         var pass = ReadAll(source.Entries(), into: null, freeBytes: null, source.Length, ratioRules: true);
         var facts = new List<JobFact>
         {
-            new("Result", source.Kind == Kind.Tar ? "No errors: every entry read in full (TAR keeps no check values)" : "No errors: every file's check value matches"),
+            new("Result", source.Kind switch
+            {
+                Kind.Tar => "No errors: every header checksum matches (TAR keeps no check values for the data)",
+                Kind.TarGz => "No errors: every header checksum and the GZIP check value match",
+                _ => "No errors: every file's check value matches",
+            }),
             new("Checked", $"{pass.Files:N0} files, {FeedbackText.Size(pass.Bytes)}"),
         };
         if (pass.Skipped > 0) facts.Add(new("Not checked", $"{pass.Skipped:N0} entries (links, devices or unsafe names)", Notice: true));
@@ -368,7 +394,7 @@ internal static class ArchiveJobs
                 if (file.ReadAtLeast(head, 2, throwOnEndOfStream: false) < 2 || head[0] != 0x1F || head[1] != 0x8B)
                     throw new ArchiveFailure(ErrorCode.ContentMismatch, "The file is not GZIP-compressed.");
                 file.Position = 0;
-                using var gzip = new GZipStream(file, CompressionMode.Decompress);
+                using var gzip = new CheckedGzip(file, file.Length);
                 using var output = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1 << 16);
                 File.SetAttributes(temp, FileAttributes.Hidden);
                 var buffer = new byte[1 << 16];
@@ -385,6 +411,8 @@ internal static class ArchiveJobs
                     sha.AppendData(buffer, 0, n);
                 }
                 output.Flush(flushToDisk: true);
+                // GZipStream reports a cut-off file as a clean end: the trailer decides (evaluator, PR 5.2, blocker).
+                if (!gzip.TrailerMatches()) throw new ArchiveFailure(ErrorCode.DecodeFailed, "The file is damaged or cut short (its GZIP check value does not match); nothing was kept.");
                 hash = Convert.ToHexStringLower(sha.GetHashAndReset());
             }
             if (zone is { } z) MarkOfTheWeb.Apply(temp, z);
