@@ -25,8 +25,9 @@ using WinTools.EndToEnd;
 // archive.info): a new folder "photos" holding exactly the archive's tree, or the info panel; the archive unchanged.
 // "srt" (V2 PR 7.1): an Arabic SRT the harness writes, with a subtitle command (default subtitles.to-vtt; --op
 // subtitles.shift-plus-1000, subtitles.info...): a new subtitle file with the module's name, or the info panel.
-// "docx" (V2 PR 6.1): a small Word document the harness builds, with Extract text (default) or Document info (--op
-// documents.info): a new "report (text).txt" holding its text, or the info panel; the document unchanged.
+// "docx" (V2 PR 6.1, 6.2): a small Word document the harness builds, with Extract text (default), Document info (--op
+// documents.info) or Remove properties (--op documents.clean): a new "report (text).txt" holding its text, the info
+// panel, or "report (no properties).docx" without its properties; the document unchanged.
 // "file" and "folder" (V2 PR 1.4, UX-009): a text file and a folder, each with File info by default (--op files.sha256
 // for a file): the info panel must appear, nothing may be written. Copy path is not run here: it would overwrite the
 // user's clipboard (unit-tested in FilesModuleTests; manual protocol in docs/testing/release-matrix.md).
@@ -121,13 +122,15 @@ var pdfFile = scenario == "pdf" && capability is { Module: PdfCapabilities.Modul
 var zipFolder = scenario == "zip" && capability?.Id == ArchiveCapabilities.ExtractId;
 var subtitleFile = scenario == "srt" && capability is { Module: SubtitleCapabilities.Module, Produces: CapabilityOutput.File };
 var documentText = scenario == "docx" && capability?.Id == DocumentCapabilities.ExtractTextId;
+var documentClean = scenario == "docx" && capability?.Id == DocumentCapabilities.RemovePropertiesId;
 string? OutputNameFor(string path) => zipFolder ? Path.GetFileNameWithoutExtension(path)
     : subtitleFile ? Path.GetFileName(SubtitleCapabilities.Candidates(capability!.Id, path, null).First())
     : documentText ? Path.GetFileName(DocumentCapabilities.Candidates(path, null).First())
+    : documentClean ? Path.GetFileName(DocumentCapabilities.CleanCandidates(path, null).First())
     : pdfFile ? Path.GetFileName(OutputNaming.CandidatesWithExtension(path, ".pdf", PdfCapabilities.NameSuffix(capability!.Id)).First())
     : outputFormat == ImageFormat.Unknown ? null : Path.GetFileName(OutputNaming.Candidates(path, outputFormat, op!.NameSuffix).First());
-var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "batch" or "edge" || pdfFile || zipFolder || subtitleFile || documentText;
-var expectOutput = producing && (outputFormat != ImageFormat.Unknown || pdfFile || zipFolder || subtitleFile || documentText);
+var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "batch" or "edge" || pdfFile || zipFolder || subtitleFile || documentText || documentClean;
+var expectOutput = producing && (outputFormat != ImageFormat.Unknown || pdfFile || zipFolder || subtitleFile || documentText || documentClean);
 var stamp = DateTime.Now.ToString("HHmmss", System.Globalization.CultureInfo.InvariantCulture);
 var folder = Path.Combine(Path.GetTempPath(), "wintools-e2e", pathStyle == "unicode" ? $"{scenario} مجلد 😀 {stamp}" : $"{scenario}-{stamp}");
 if (pathStyle == "long")
@@ -720,7 +723,17 @@ using (var explorer = opened)
                 && File.ReadAllText(Path.Combine(dir, "2026", "a.txt")) == "one\n";
             bool SubtitleValid(string file) => File.ReadAllText(file, System.Text.Encoding.UTF8) is var t && t.Contains("مرحبا بكم 😀", StringComparison.Ordinal)
                 && (Path.GetExtension(file) == ".vtt" ? t.StartsWith("WEBVTT", StringComparison.Ordinal) : t.Contains(" --> ", StringComparison.Ordinal));
+            // Remove properties: the copy keeps the body and loses the author, title and Office's own properties.
+            bool CleanValid(string file)
+            {
+                using var zip = System.IO.Compression.ZipFile.OpenRead(file);
+                string Part(string name) { using var r = new StreamReader(zip.GetEntry(name)!.Open()); return r.ReadToEnd(); }
+                var props = Part("docProps/core.xml") + Part("docProps/app.xml");
+                return Part("word/document.xml").Contains("تقرير الربع 😀", StringComparison.Ordinal)
+                    && !props.Contains("WinTools E2E", StringComparison.Ordinal) && !props.Contains("تقرير", StringComparison.Ordinal) && !props.Contains("Normal.dotm", StringComparison.Ordinal);
+            }
             var outputValid = output is not null && zipFolder ? ZipTreeValid(output!) : output is not null && subtitleFile ? SubtitleValid(output!)
+                : output is not null && documentClean ? CleanValid(output!)
                 : output is not null && documentText ? File.ReadAllText(output!, System.Text.Encoding.UTF8) == "تقرير الربع 😀\r\nSecond line\r\n" : output is not null && File.ReadAllBytes(output) is var bytes && (pdfFile
                 ? bytes.AsSpan().StartsWith("%PDF-"u8) && bytes.AsSpan(Math.Max(0, bytes.Length - 1024)).IndexOf("%%EOF"u8) >= 0 // a whole PDF
                 : FileSignature.Detect(bytes) == outputFormat && ContainerCheck.IsComplete(bytes, outputFormat, out _)

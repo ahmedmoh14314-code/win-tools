@@ -1,6 +1,6 @@
 # ADR-0025: Office documents are read in house, as archives of XML, with no DTD, no resolver and no macro ever run
 
-- **Status:** Proposed (V2 PR 6.1)
+- **Status:** Proposed (V2 PR 6.1; PR 6.2 adds decision 6)
 - **Date:** 2026-10-25
 - **Deciders:** product owner (V2 plan §9 Documents, §14 document threats)
 - **Related requirements:** V2 plan §9 (DOCX/XLSX/PPTX text and properties), §14 (macros, external links, ZIP and XML bombs)
@@ -31,9 +31,20 @@
    - type, title, author, last saved by, modified;
    - pages and words (Word), slides, sheets;
    - notices for macros (`vbaProject.bin`), embedded objects, and links outside the document (a relationship with `TargetMode="External"`): none is opened.
+6. **Remove properties (V2 PR 6.2)** writes a new `<name> (no properties).<ext>` in the source's own type:
+   - **The property parts are found through the package's relationships** (core, extended and custom properties, transitional or strict) and at their usual `docProps/` names. Each is replaced by its own root element, empty, in its own namespace.
+   - **Every other part is copied byte for byte, in the same order.** Each copy's size and CRC-32 must match what the package declares: `ZipArchive` stops at the declared size without a word, so a part that inflates past it would otherwise be silently cut.
+   - **The copy is checked before it is kept.** It is opened again under every rule above, with the same parts in the same order, each copied part's SHA-256 equal to the source's, and no property left. Then the usual temp, zone and no-overwrite rules apply.
+   - **A signed package (`_xmlsignatures/`) is refused**: the copy would break its signature.
+   - A package with no properties is "nothing to do".
+   - **What it does not remove is said, as a notice:** comment and revision authors (they live in the content), and custom XML data such as SharePoint columns. Office's Document Inspector removes them.
 
 ## Alternatives considered
-- **DocumentFormat.OpenXml 3.5.1** (MIT). It is the right tool for writing (metadata removal is the next slice) and for full fidelity. For reading these few parts it adds a dependency and its own spike without changing what is read. It is reconsidered when the document module writes.
+- **DocumentFormat.OpenXml 3.5.1** (MIT). It is the right tool for full fidelity. For reading these few parts it adds a dependency and its own spike without changing what is read.
+  - It was reconsidered for Remove properties (decision 6) and not taken.
+  - That command edits no content part: it replaces three whole parts and copies every other one byte for byte, which `ZipArchive` does and the check proves.
+  - The SDK would load and save the package, re-serialising parts it does not need to touch.
+  - It stays the candidate when a command must edit content (for example removing comment authors).
 - **Office or LibreOffice automation.** Out of scope for reading; it is the optional, separately approved converter (plan D1).
 
 ## Consequences
@@ -41,7 +52,8 @@
   - headers, footers, footnotes, comments and text boxes in Word;
   - speaker notes in PowerPoint;
   - formulas (their cached values are), merged-cell layout, and sheet names (sheets are numbered) in Excel.
-- Metadata removal and TXT/Markdown/CSV → PDF are later slices (removal writes the package; PDF needs the rendering backend spike, plan D2).
+- TXT/Markdown/CSV → PDF is a later slice (it needs the rendering backend spike, plan D2).
+- Remove properties leaves the names in comments and tracked changes, custom XML data, thumbnails, and the content itself (an author named in the text), and says so. Each part is recompressed, so the copy's size can differ slightly from the original's.
 
 ## Evaluator review
 One round (2026-10-25), reproduced on the built worker with the reviewer's own probe. The four majors and most minors are fixed; each is a test that failed on the old code.
@@ -61,6 +73,19 @@ One round (2026-10-25), reproduced on the built worker with the reviewer's own p
 - The Explorer `docx` scenario passed on the final build (runs of 3/3, 2/2 and 1/1).
 
 ## Evidence / experiments
+`DocumentCleanTests` (9, written first and shown failing to build):
+- properties emptied, every other part the same, and the original unchanged;
+- Excel and PowerPoint;
+- properties at a non-standard name found through the relationships;
+- the notice for comment and revision authors;
+- a signed package refused;
+- no properties, so nothing to do;
+- no overwrite;
+- a part larger than it declares (refused, nothing kept);
+- the menu.
+
+Explorer `docx --op documents.clean` 2/2, with Extract text and Info regressions 1/1 each.
+
 `DocumentWorkerTests` (8 at first, written first and shown failing to build; 18 after the review; 19 with the `app.xml` Office writes, whose vectors made Info fail until PR 6.2's work found it):
 - Word paragraphs with Arabic and an entity;
 - PowerPoint slide order to 10;
