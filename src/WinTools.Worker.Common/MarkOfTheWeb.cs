@@ -10,7 +10,7 @@ namespace WinTools.Worker;
 /// and a custom zone above 4 is carried as restricted. A mark that is present but unreadable counts as the internet zone;
 /// a source on a volume without alternate streams (FAT, exFAT, some shares) cannot have one, and has none.
 /// </summary>
-internal static partial class MarkOfTheWeb
+public static partial class MarkOfTheWeb
 {
     private const string Stream = ":Zone.Identifier";
     private const int MaxStreamBytes = 64 * 1024;
