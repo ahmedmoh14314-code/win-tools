@@ -118,6 +118,14 @@ One round (2026-10-25): one blocker and four majors, three of them reproduced by
 Two minors were fixed as well: a GZIP of something else now says it is not a TAR, and the several-parts message. All five are now tests that fail on the old code (3 of 15); 16 of 16 pass. The reviewer's samples now give `LimitExceeded`, `UnsupportedContent` or `ContentMismatch`, and the valid ones still extract.
 - **Open:** reading twice costs about twice the time (Info on a 400 MB TAR.GZ, 1.8 s). Recorded for the budgets.
 
+**Third round** (focused): no blocker or major.
+- No attempt made the two passes disagree: values with newlines or NULs, wrong lengths, a record cut mid-UTF-8, `x` then `g`, `x` at the end, base-256 sizes, every entry type.
+- 1,300 fuzzed archives gave no crash.
+- **Open minors:**
+  - a GZIP of zeros gets Test's "unexpected data after its end" rather than "not a TAR";
+  - an empty plain `.tar` (only zero blocks) is "not an archive", while the same as `.tgz` is an empty TAR.
+- **Explorer:** the new `tgz` scenario (the ZIP sample's tree as a PAX TAR.GZ) passed: Extract 2/2, Test 1/1; ZIP Extract 1/1 as a regression.
+
 ## Alternatives considered
 - **`ZipFile.ExtractToDirectory`.** Rejected: no hook for the name policy, the limits or links, and a partial result on failure.
 - **SharpCompress for ZIP too.** Not needed for ZIP. It has a steady advisory stream; it is kept for 7z and RAR, behind its own review.
