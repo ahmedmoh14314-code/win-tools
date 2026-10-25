@@ -42,6 +42,7 @@
               <StackPanel Margin="0,0,16,0">
                 <TextBlock Text="Activation key" />
                 <TextBlock Style="{StaticResource Hint}" Text="While dragging files, press this key to open the menu." />
+                <TextBlock Style="{StaticResource Hint}" Text="Only keys that are harmless if they reach Explorer after the drop are offered. F1-F6, F8, F10 and F11 act there (rename, search, delete in some file managers...); letters and digits would open the menu while you hold the mouse in games." />
               </StackPanel>
               <ComboBox x:Name="TriggerKey" Grid.Column="1" Width="120" Height="32" VerticalAlignment="Center" AutomationProperties.Name="Activation key" />
             </Grid>
@@ -169,8 +170,14 @@
     <!-- Footer -->
     <Border Grid.Row="2" BorderBrush="{StaticResource Edge}" BorderThickness="0,1,0,0" Padding="28,10">
       <Grid>
-        <TextBlock x:Name="Footer" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0" />
-        <Button x:Name="Done" Content="Done" HorizontalAlignment="Right" IsDefault="True" IsCancel="True" Background="{StaticResource Green}" Foreground="{StaticResource TextOnGreen}" BorderBrush="{StaticResource Green}" FontWeight="SemiBold" Padding="20,6" />
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <TextBlock x:Name="Footer" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,12,0" TextTrimming="CharacterEllipsis" />
+        <Button x:Name="Reset" Grid.Column="1" Content="Reset to defaults" Margin="0,0,8,0" Padding="14,6" AutomationProperties.Name="Reset settings to their defaults (Start with Windows stays as it is)" />
+        <Button x:Name="Done" Grid.Column="2" Content="Done" HorizontalAlignment="Right" IsDefault="True" IsCancel="True" Background="{StaticResource Green}" Foreground="{StaticResource TextOnGreen}" BorderBrush="{StaticResource Green}" FontWeight="SemiBold" Padding="20,6" />
       </Grid>
     </Border>
   </Grid>

@@ -45,7 +45,7 @@ internal static partial class Desktop
     }
 
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool IsIconic(nint hwnd);
-    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool GetWindowRect(nint hwnd, out RECT rect);
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool GetWindowRect(nint hwnd, out RECT rect);
 
     /// <summary>Whether (x, y) lies inside the window's rectangle, with a margin.</summary>
     public static bool Inside(nint hwnd, int x, int y, int margin) =>
@@ -95,6 +95,21 @@ internal static partial class Desktop
         return found;
     }
 
+    [LibraryImport("user32.dll")] private static partial nint GetKeyboardLayout(uint thread);
+    [LibraryImport("user32.dll", EntryPoint = "MapVirtualKeyExW")] private static partial uint MapVirtualKeyEx(uint code, uint type, nint hkl);
+    [LibraryImport("user32.dll")] private static unsafe partial int ToUnicodeEx(uint vk, uint scan, byte* state, char* buffer, int size, uint flags, nint hkl);
+
+    /// <summary>The character a key types in the keyboard layout of the window's thread (no modifiers), or null.</summary>
+    public static unsafe char? CharOf(int vk, nint hwnd)
+    {
+        var hkl = GetKeyboardLayout(GetWindowThreadProcessId(hwnd, out _));
+        var state = stackalloc byte[256];
+        var buffer = stackalloc char[8];
+        // Flag 4: leave the keyboard state (dead keys) as it is.
+        var n = ToUnicodeEx((uint)vk, MapVirtualKeyEx((uint)vk, 0 /* MAPVK_VK_TO_VSC */, hkl), state, buffer, 8, 4, hkl);
+        return n == 1 ? buffer[0] : null;
+    }
+
     public static nint RootAt(int x, int y) => GetAncestor(WindowFromPoint(new POINT { X = x, Y = y }), 2 /* GA_ROOT */);
 
     public static void MoveTo(int x, int y)
@@ -121,12 +136,18 @@ internal static partial class Desktop
     /// <summary>Releases every key and button the harness may hold, each on its own: one failing never skips the rest.</summary>
     public static void ReleaseAll()
     {
-        foreach (var release in new Action[] { () => KeyUp(VkControl), () => KeyUp(VkShift), () => KeyUp(VkAlt), () => Tap(VkEscape), () => KeyUp(VkSpace), LeftUp })
+        foreach (var release in new Action[] { () => KeyUp(VkControl), () => KeyUp(VkShift), () => KeyUp(VkAlt), () => Tap(VkEscape), () => KeyUp(VkSpace), () => KeyUp(TriggerVk), () => { if (ProbeVk != 0) KeyUp(ProbeVk); }, LeftUp })
         {
             try { release(); }
             catch (InvalidOperationException) { } // SendInput refused (secure desktop, lock screen): nothing more can be done from here
         }
     }
+    /// <summary>The run's trigger key when it is not Space (--trigger), released with the rest.</summary>
+    public static int TriggerVk { get; set; } = VkSpace;
+
+    /// <summary>SPIKE: the keyprobe/keycontrol key (0 when none), released with the rest.</summary>
+    public static int ProbeVk { get; set; }
+
     public static void KeyDown(int vk) => Key(vk, 0);
     public static void KeyUp(int vk) => Key(vk, 0x0002);
     public static void Tap(int vk, int holdMs = 40) { KeyDown(vk); Thread.Sleep(holdMs); KeyUp(vk); }
