@@ -38,7 +38,7 @@ public static class FeedbackText
             var item = items[0];
             if (item.Result.Success)
                 // A believed success may carry a notice the user must see (entries skipped or renamed in an archive).
-                return new(FeedbackKind.Success, $"{OutputName(item)} created", Join(Join(words.Done, Sizes(words, item)), item.Result.Facts.FirstOrDefault(f => f.Notice)?.Value));
+                return new(FeedbackKind.Success, $"{OutputName(item)} created", Join(Join(words.Done, Sizes(words, item)), Notices(item)));
             if (item.Result.Error == ErrorCode.NothingToDo)
                 return new(FeedbackKind.Nothing, "Nothing to change", words.NothingReason);
             return new(FeedbackKind.Failure, $"Could not {words.Verb} {item.SourceName}", Reason(item.Result.Error, words));
@@ -176,6 +176,10 @@ public static class FeedbackText
     }
 
     private static string Join(string a, string? b) => b is null ? a : $"{a} · {b}";
+
+    /// <summary>Every notice a believed success carries (skipped and renamed entries), or null.</summary>
+    private static string? Notices(JobItem item) =>
+        item.Result.Facts.Where(f => f.Notice).Select(f => f.Value).ToArray() is { Length: > 0 } n ? string.Join(" · ", n) : null;
 
     public static string Size(long bytes) => bytes switch
     {
