@@ -192,7 +192,7 @@ public partial class MainWindow : Window
         var families = new (string Module, string Key)[]
         {
             ("images", "family.images"), ("pdf", "family.pdf"), ("documents", "family.documents"), ("archive", "family.archives"),
-            ("subtitles", "family.subtitles"), ("video", "family.video"), ("audio", "family.audio"), ("files", "family.files"),
+            ("subtitles", "family.subtitles"), ("media", "family.video"), ("media", "family.audio"), ("files", "family.files"),
         };
         foreach (var (module, key) in families.Where(f => modules.Contains(f.Module)))
             Families.Children.Add(new Border

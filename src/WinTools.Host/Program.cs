@@ -26,6 +26,9 @@ internal static class Program
     /// <summary>Per-request limit of the archive worker: extracting or zipping gigabytes on a slow disk takes a while.</summary>
     private static readonly TimeSpan ArchiveTimeout = TimeSpan.FromMinutes(30);
 
+    /// <summary>Per-request limit of the media worker: encoding a long video takes a while (the engine's own limit is 55 min).</summary>
+    private static readonly TimeSpan MediaTimeout = TimeSpan.FromMinutes(60);
+
     /// <summary>How long the exit waits for cancelled jobs: the workers' 1 s grace plus temp cleanup.</summary>
     private static readonly TimeSpan ExitGrace = TimeSpan.FromSeconds(3);
 
@@ -58,6 +61,7 @@ internal static class Program
         var textWorkerPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.Text.exe");
         var pdfWorkerPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.Pdf.exe");
         var archiveWorkerPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.Archive.exe");
+        var mediaWorkerPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.Media.exe");
         // The image worker is required; without the General Files worker the host still runs, and those commands fail
         // with a plain reason (the worker client reports a worker that cannot start).
         if (!File.Exists(workerPath))
@@ -98,7 +102,9 @@ internal static class Program
             // Subtitle jobs: the text worker, which also runs File info and SHA-256 (a separate runner, its own module rules).
             var subtitles = new JobModuleRunner(SubtitleJobModule.Instance, new WorkerClient(textWorkerPath, JobTimeout, SubtitleJobModule.Instance), SubtitleJobModule.Parameters);
             var documents = new JobModuleRunner(DocumentJobModule.Instance, new WorkerClient(textWorkerPath, JobTimeout, DocumentJobModule.Instance), DocumentJobModule.Parameters);
-            var jobs = new JobScheduler([images, files, pdf, archives, subtitles, documents], log, () => Volatile.Read(ref current), feedback);
+            // Media jobs: one worker at a time (an encode already uses every core; ADR-0028).
+            var media = new JobModuleRunner(MediaJobModule.Instance, new WorkerClient(mediaWorkerPath, MediaTimeout, MediaJobModule.Instance, parallelism: 1), MediaJobModule.Parameters);
+            var jobs = new JobScheduler([images, files, pdf, archives, subtitles, documents, media], log, () => Volatile.Read(ref current), feedback);
             coordinator = new InteractionCoordinator(log, window, jobs, feedback, sounds, settings);
             using (coordinator)
             {

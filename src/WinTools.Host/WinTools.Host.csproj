@@ -19,6 +19,7 @@
     <ProjectReference Include="..\WinTools.Worker.Pdf\WinTools.Worker.Pdf.csproj" />
     <!-- The Archives module's worker (V2 PR 5.1), the same way. -->
     <ProjectReference Include="..\WinTools.Worker.Archive\WinTools.Worker.Archive.csproj" />
+    <ProjectReference Include="..\WinTools.Worker.Media\WinTools.Worker.Media.csproj" />
     <!-- The settings window (WPF) is a separate program: built first and copied next to the host by CopySettingsApp, but
          never referenced, so the host's runtimeconfig does not name the WPF framework and WPF never loads into it. -->
     <ProjectReference Include="..\WinTools.Settings\WinTools.Settings.csproj" ReferenceOutputAssembly="false" Private="false" />

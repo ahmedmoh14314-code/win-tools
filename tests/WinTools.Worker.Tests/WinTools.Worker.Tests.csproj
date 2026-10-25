@@ -15,6 +15,7 @@
     <ProjectReference Include="..\..\src\WinTools.Worker.Text\WinTools.Worker.Text.csproj" />
     <ProjectReference Include="..\..\src\WinTools.Worker.Pdf\WinTools.Worker.Pdf.csproj" />
     <ProjectReference Include="..\..\src\WinTools.Worker.Archive\WinTools.Worker.Archive.csproj" />
+    <ProjectReference Include="..\..\src\WinTools.Worker.Media\WinTools.Worker.Media.csproj" />
     <ProjectReference Include="..\..\src\WinTools.Host\WinTools.Host.csproj" />
     <None Include="..\samples\*.png;..\samples\*.jpg;..\samples\*.bmp;..\samples\*.tif;..\samples\*.webp;..\samples\locked-*.zip" Link="samples\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

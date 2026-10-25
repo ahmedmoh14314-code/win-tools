@@ -8,6 +8,7 @@
     <Project Path="src/WinTools.Worker.Common/WinTools.Worker.Common.csproj" />
     <Project Path="src/WinTools.Worker.Pdf/WinTools.Worker.Pdf.csproj" />
     <Project Path="src/WinTools.Worker.Archive/WinTools.Worker.Archive.csproj" />
+    <Project Path="src/WinTools.Worker.Media/WinTools.Worker.Media.csproj" />
     <Project Path="src/WinTools.Settings/WinTools.Settings.csproj" />
     <Project Path="src/WinTools.Dialogs/WinTools.Dialogs.csproj" />
   </Folder>
