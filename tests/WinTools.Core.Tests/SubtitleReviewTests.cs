@@ -38,7 +38,7 @@ public sealed class SubtitleReviewTests
 
     [Theory]
     [InlineData("مرحبا بكم في الفيلم الجديد")]
-    [InlineData("- «هيا بنا»\n- «إلى أين؟» …لا… – حسنا")] // Arabic quotes and dashes are neutral
+    [InlineData("- «هيا بنا إلى السوق»\n- «إلى أين؟ إلى البيت» …لا… – حسنا، الآن")] // Arabic quotes and dashes are neutral
     [InlineData("الحلقة 12: ما بعد النهاية (الجزء الثاني)")]
     public void Unambiguous_arabic_in_windows_1256_is_read(string text)
     {
@@ -46,6 +46,29 @@ public sealed class SubtitleReviewTests
         Assert.True(decoded is not null, why);
         Assert.Equal(text, decoded.Text);
         Assert.Equal("Windows-1256 (Arabic)", decoded.EncodingName);
+    }
+
+    // Third look, PR 7.1: KOI8-R puts lower-case Cyrillic on the bytes 1256 uses for Arabic letters, and all-caps Russian
+    // or Greek and Thai can too. Arabic is recognised by its definite article, which garbage hardly ever forms.
+    [Theory]
+    [InlineData(20866, "Да, мы едем завтра.\nСейчас? Ладно.\nМама сказала, что всё хорошо.\nЯ жду тебя уже 20 минут.")]
+    [InlineData(1251, "ПРИВЕТ, МАША! КАК ДЕЛА? [МУЗЫКА] ХОРОШО, СПАСИБО.")]
+    [InlineData(1253, "ΓΕΙΑ ΣΟΥ, ΜΑΡΙΑ! ΤΙ ΚΑΝΕΙΣ; ΚΑΛΑ, ΕΥΧΑΡΙΣΤΩ.")]
+    [InlineData(874, "สวัสดีครับ คุณสมชาย! วันนี้อากาศดีมาก")]
+    public void Text_that_only_looks_like_arabic_bytes_is_refused(int codePage, string text)
+    {
+        var bytes = CodePages.Get(codePage).GetBytes(text);
+        Assert.Null(SubtitleEncoding.TryDecode(bytes, out _));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Utf16_without_a_bom_is_refused_not_read_as_utf8(bool bigEndian)
+    {
+        var bytes = (bigEndian ? Encoding.BigEndianUnicode : Encoding.Unicode).GetBytes("1\n00:00:01,000 --> 00:00:02,000\nhello\n");
+        Assert.Null(SubtitleEncoding.TryDecode(bytes, out var why));
+        Assert.Contains("UTF-16", why, StringComparison.Ordinal);
     }
 
     [Fact]

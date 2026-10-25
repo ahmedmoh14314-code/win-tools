@@ -84,7 +84,7 @@ public sealed class SubtitleTests
     [Fact]
     public void Encodings_are_told_apart_by_bom_strict_utf8_and_arabic_runs()
     {
-        var arabic = "مرحبا بكم في الفيلم";
+        var arabic = "مرحبا بكم في الفيلم الجديد"; // 1256 is read when the article is as common as in prose (third look)
         var e1256 = CodePages.Get(1256).GetBytes(arabic);
         var western = "Café crème à la française, déjà vu";
         var e1252 = CodePages.Get(1252).GetBytes(western);

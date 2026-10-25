@@ -34,6 +34,7 @@ public sealed class SubtitleWorkerTests : IDisposable
         var vtt = File.ReadAllText(r.OutputPath!, Encoding.UTF8);
         Assert.StartsWith("WEBVTT\n\n", vtt, StringComparison.Ordinal);
         Assert.Contains("مرحبا بكم في الفيلم", vtt, StringComparison.Ordinal);
+        Assert.Contains(r.Facts, f => f is { Label: "Read as", Notice: true } && f.Value.Contains("1256", StringComparison.Ordinal)); // said in the toast
         Assert.Equal(before, Hash(source));
         Assert.True(SubtitleJobModule.Instance.IsBelievable(request, r));
     }
