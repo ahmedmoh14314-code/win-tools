@@ -1,0 +1,40 @@
+diff --git a/src/WinTools.Core/Interaction/RadialMenu.cs b/src/WinTools.Core/Interaction/RadialMenu.cs
+index 51aa3f7..15cb98c 100644
+--- a/src/WinTools.Core/Interaction/RadialMenu.cs
++++ b/src/WinTools.Core/Interaction/RadialMenu.cs
+@@ -42,9 +42,11 @@ public static IReadOnlyList<MenuGroup> Build(IReadOnlyList<CapabilityDescriptor>
+     /// <summary>A category ring is Back plus its commands; beyond that, the last command sector is "More…".</summary>
+     private static MenuGroup Fit(MenuGroup group)
+     {
+-        if (group.Commands.Count <= RingCapacity - 1) return group;
+-        var shown = group.Commands.Take(RingCapacity - 2).ToArray();
+-        var rest = group.Commands.Skip(RingCapacity - 2).ToArray();
++        // SPIKE ONLY (spike/dialog-focus): overflow at 3 commands so a real drop can reach More….
++        var limit = Environment.GetEnvironmentVariable("WINTOOLS_SPIKE_MORE") == "1" ? 3 : RingCapacity - 1;
++        if (group.Commands.Count <= limit) return group;
++        var shown = group.Commands.Take(limit - 1).ToArray();
++        var rest = group.Commands.Skip(limit - 1).ToArray();
+         var more = new CapabilityDescriptor(MoreId, "More…", group.Category.Id, "menu", new InputRule(new HashSet<string>()), // never resolved: it only carries the overflow
+             CapabilityShape.Selection, CapabilityOutput.Facts, LongRunning: false, Payload: rest);
+         return group with { Commands = [.. shown, more] };
+diff --git a/tests/WinTools.EndToEnd/Program.cs b/tests/WinTools.EndToEnd/Program.cs
+index 7535879..9cfe368 100644
+--- a/tests/WinTools.EndToEnd/Program.cs
++++ b/tests/WinTools.EndToEnd/Program.cs
+@@ -114,7 +114,7 @@
+ // Every module, as the host resolves them: the ring positions the harness aims at must be the host's.
+ var resolver = CapabilityResolver.For(new AppSettings().CustomResizeId());
+ var capability = resolver.Catalog.FirstOrDefault(c => c.Id == (opArg ?? op?.Id));
+-if (opArg is not null && capability is null) { Console.Error.WriteLine($"Unknown operation {opArg}"); return 64; }
++if (opArg is not null && opArg != RadialMenu.MoreId && capability is null) { Console.Error.WriteLine($"Unknown operation {opArg}"); return 64; } // SPIKE: menu.more
+ var facts = op is { WritesFile: false } || capability?.Produces == CapabilityOutput.Facts; // the info panel, no file
+ var sourceFormat = FormatHint.FromPath(sourceName);
+ var outputFormat = op is null || !op.WritesFile ? ImageFormat.Unknown : op.OutputFormat(sourceFormat);
+@@ -207,6 +207,7 @@
+ var batchHashes = batchSources.ToDictionary(f => f, HashOf);
+ // The drop target marks a folder with a trailing separator (ADR-0019); the menu is built from the paths as marked.
+ var menu = RadialMenu.Build(resolver, [.. batchSources.Select(f => isFolder ? f + Path.DirectorySeparatorChar : f)]);
++if (opArg == RadialMenu.MoreId) capability = menu.SelectMany(g => g.Commands).First(RadialMenu.IsMore); // SPIKE ONLY
+ var groupIndex = capability is null ? -1 : menu.ToList().FindIndex(g => g.Commands.Any(c => c.Id == capability.Id));
+ var commandIndex = groupIndex < 0 ? -1 : menu[groupIndex].Commands.ToList().FindIndex(c => c.Id == capability!.Id);
+ if ((producing || facts) && capability is not null && groupIndex < 0) { Console.Error.WriteLine($"{capability.Id} is not offered for {sourceName}"); return 4; }

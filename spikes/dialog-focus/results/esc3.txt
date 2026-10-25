@@ -1,0 +1,6 @@
+﻿    0.1s  WindowsTerminal | CASCADIA_HOSTING_WINDOW_CLASS | focus=Windows.UI.Input.InputSite.WindowClass
+    2.9s  explorer | CabinetWClass | focus=DirectUIHWND
+    7.0s  ESC sent while WinTools.Dialogs was in front
+    7.0s  WinTools.Dialogs | HwndWrapper[WinTools.Dialogs;;021f15bd-5206-4821-be0a-525684a1b3d9] | focus=HwndWrapper[WinTools.Dialogs;;021f15bd-5206-4821-be0a-525684a1b3d9]
+    7.1s  explorer | CabinetWClass | focus=DirectUIHWND
+   10.4s  WindowsTerminal | CASCADIA_HOSTING_WINDOW_CLASS | focus=Windows.UI.Input.InputSite.WindowClass
