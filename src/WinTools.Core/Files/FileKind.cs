@@ -32,6 +32,11 @@ public static class FileKinds
     /// <summary>A ZIP archive (V2 PR 5.1). Its worker checks the "PK" signature before reading it.</summary>
     public static FileKind Zip { get; } = new("zip", FileFamily.Archive, "ZIP", [".zip"]);
 
+    /// <summary>TAR, TAR.GZ and single-file GZIP (V2 PR 5.2). ".tar.gz" is recognised before ".gz" (<see cref="ByExtensionOf"/>).</summary>
+    public static FileKind Tar { get; } = new("tar", FileFamily.Archive, "TAR", [".tar"]);
+    public static FileKind TarGz { get; } = new("tgz", FileFamily.Archive, "TAR.GZ", [".tgz"]);
+    public static FileKind Gzip { get; } = new("gz", FileFamily.Archive, "GZIP", [".gz"]);
+
     /// <summary>SubRip and WebVTT subtitles (V2 PR 7.1). Text formats: the worker decodes and parses them, bounded.</summary>
     public static FileKind Srt { get; } = new("srt", FileFamily.Subtitle, "SRT", [".srt"]);
     public static FileKind Vtt { get; } = new("vtt", FileFamily.Subtitle, "WebVTT", [".vtt"]);
@@ -48,10 +53,10 @@ public static class FileKinds
     public static FileKind AnyFile { get; } = new("file", FileFamily.Other, "File", []);
 
     /// <summary>Every kind a capability's input rule may name.</summary>
-    public static IReadOnlyList<FileKind> Declared { get; } = [.. All, Pdf, Zip, Srt, Vtt, Docx, Xlsx, Pptx, Folder, AnyFile];
+    public static IReadOnlyList<FileKind> Declared { get; } = [.. All, Pdf, Zip, Tar, TarGz, Gzip, Srt, Vtt, Docx, Xlsx, Pptx, Folder, AnyFile];
 
     private static readonly Dictionary<string, FileKind> ByExtension =
-        ((IEnumerable<FileKind>)[.. All, Pdf, Zip, Srt, Vtt, Docx, Xlsx, Pptx]).SelectMany(k => k.Extensions.Select(e => (e, k))).ToDictionary(p => p.e, p => p.k, StringComparer.OrdinalIgnoreCase);
+        ((IEnumerable<FileKind>)[.. All, Pdf, Zip, Tar, TarGz, Gzip, Srt, Vtt, Docx, Xlsx, Pptx]).SelectMany(k => k.Extensions.Select(e => (e, k))).ToDictionary(p => p.e, p => p.k, StringComparer.OrdinalIgnoreCase);
 
     private static readonly Dictionary<string, FileKind>.AlternateLookup<ReadOnlySpan<char>> BySpan = ByExtension.GetAlternateLookup<ReadOnlySpan<char>>();
 
@@ -69,6 +74,7 @@ public static class FileKinds
     /// <summary>The kind the extension names, or null when no kind claims it (none, or an unknown one).</summary>
     public static FileKind? ByExtensionOf(string path)
     {
+        if (path.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase)) return TarGz; // the double extension names the archive, not the GZIP
         var ext = Path.GetExtension(path.AsSpan());
         return ext.Length > 0 && BySpan.TryGetValue(ext, out var kind) ? kind : null;
     }

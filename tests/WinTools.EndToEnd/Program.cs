@@ -23,6 +23,7 @@ using WinTools.EndToEnd;
 // pdf.optimize, pdf.linearize, pdf.info...): a new PDF with the command's name, or the info panel; the source unchanged.
 // "zip" (V2 PR 5.1): tests/samples/photos-3.zip with an archive command (default archive.extract; --op archive.test,
 // archive.info): a new folder "photos" holding exactly the archive's tree, or the info panel; the archive unchanged.
+// "tgz" (V2 PR 5.2): the same tree as a PAX "photos.tar.gz" the harness builds, with the same commands and checks.
 // "srt" (V2 PR 7.1): an Arabic SRT the harness writes, with a subtitle command (default subtitles.to-vtt; --op
 // subtitles.shift-plus-1000, subtitles.info...): a new subtitle file with the module's name, or the info panel.
 // "docx" (V2 PR 6.1, 6.2): a small Word document the harness builds, with Extract text (default), Document info (--op
@@ -95,6 +96,7 @@ var (sample, sourceName, defaultTarget) = scenario switch
     "folder" => ("", "holiday photos", ImageFormat.Unknown),
     "pdf" => ("pages-3.pdf", "report.pdf", ImageFormat.Unknown),
     "zip" => ("photos-3.zip", "photos.zip", ImageFormat.Unknown),
+    "tgz" => ("", "photos.tar.gz", ImageFormat.Unknown),
     "srt" => ("", "film.srt", ImageFormat.Unknown),
     "docx" => ("", "report.docx", ImageFormat.Unknown),
     _ => ("quadrants-64x48.png", "photo.png", ImageFormat.Jpeg),
@@ -105,7 +107,7 @@ var target = targetArg is null ? defaultTarget : Enum.Parse<ImageFormat>(targetA
 if (scenario == "photo") opArg ??= "compress.balanced";
 if (opArg is null && scenario is "file" or "folder") opArg = FilesCapabilities.InfoId;
 if (opArg is null && scenario == "pdf") opArg = PdfCapabilities.RotateRightId;
-if (opArg is null && scenario == "zip") opArg = ArchiveCapabilities.ExtractId;
+if (opArg is null && scenario is "zip" or "tgz") opArg = ArchiveCapabilities.ExtractId;
 if (opArg is null && scenario == "srt") opArg = SubtitleCapabilities.ToVttId;
 if (opArg is null && scenario == "docx") opArg = DocumentCapabilities.ExtractTextId;
 var op = opArg is not null ? catalog.FirstOrDefault(o => o.Id == opArg) : target == ImageFormat.Unknown ? null : OperationCatalog.Convert(target);
@@ -119,11 +121,11 @@ var outputFormat = op is null || !op.WritesFile ? ImageFormat.Unknown : op.Outpu
 // A PDF command's output is a PDF named by the module (V2 PR 2.1); Split's folder is not driven here (worker tests).
 var pdfFile = scenario == "pdf" && capability is { Module: PdfCapabilities.Module, Produces: CapabilityOutput.File };
 // Extract makes a folder named after the archive.
-var zipFolder = scenario == "zip" && capability?.Id == ArchiveCapabilities.ExtractId;
+var zipFolder = scenario is "zip" or "tgz" && capability?.Id == ArchiveCapabilities.ExtractId;
 var subtitleFile = scenario == "srt" && capability is { Module: SubtitleCapabilities.Module, Produces: CapabilityOutput.File };
 var documentText = scenario == "docx" && capability?.Id == DocumentCapabilities.ExtractTextId;
 var documentClean = scenario == "docx" && capability?.Id == DocumentCapabilities.RemovePropertiesId;
-string? OutputNameFor(string path) => zipFolder ? Path.GetFileNameWithoutExtension(path)
+string? OutputNameFor(string path) => zipFolder ? (path.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ? Path.GetFileName(path)[..^".tar.gz".Length] : Path.GetFileNameWithoutExtension(path))
     : subtitleFile ? Path.GetFileName(SubtitleCapabilities.Candidates(capability!.Id, path, null).First())
     : documentText ? Path.GetFileName(DocumentCapabilities.Candidates(path, null).First())
     : documentClean ? Path.GetFileName(DocumentCapabilities.CleanCandidates(path, null).First())
@@ -149,6 +151,22 @@ var source = Path.Combine(folder, sourceName);
 var isFolder = scenario == "folder";
 if (isFolder) { Directory.CreateDirectory(source); File.WriteAllText(Path.Combine(source, "inside.txt"), "a file in the dropped folder"); }
 else if (sample.Length > 0) File.Copy(Path.Combine(AppContext.BaseDirectory, "samples", sample), source);
+else if (scenario == "tgz")
+{
+    // The same tree as photos-3.zip, as a PAX TAR.GZ (V2 PR 5.2), so the extracted tree is checked the same way.
+    using var zip = System.IO.Compression.ZipFile.OpenRead(Path.Combine(AppContext.BaseDirectory, "samples", "photos-3.zip"));
+    using var file = File.Create(source);
+    using var gz = new System.IO.Compression.GZipStream(file, System.IO.Compression.CompressionLevel.Optimal);
+    using var tar = new System.Formats.Tar.TarWriter(gz, System.Formats.Tar.TarEntryFormat.Pax, leaveOpen: false);
+    foreach (var e in zip.Entries)
+    {
+        if (e.FullName.EndsWith('/')) { tar.WriteEntry(new System.Formats.Tar.PaxTarEntry(System.Formats.Tar.TarEntryType.Directory, e.FullName)); continue; }
+        using var data = new MemoryStream();
+        using (var s = e.Open()) s.CopyTo(data);
+        data.Position = 0;
+        tar.WriteEntry(new System.Formats.Tar.PaxTarEntry(System.Formats.Tar.TarEntryType.RegularFile, e.FullName) { DataStream = data });
+    }
+}
 else if (scenario == "docx")
 {
     using var zip = System.IO.Compression.ZipFile.Open(source, System.IO.Compression.ZipArchiveMode.Create);
@@ -766,8 +784,8 @@ using (var explorer = opened)
                 "photo" or "pdf" when expectNothing => output is null && accepted == 1 && toastShown == true && focusKept == true
                     && ev.Any(e => Ev(e) == "toast" && Data(e).TryGetProperty("kind", out var tk) && tk.GetString() == "Nothing")
                     && ev.Any(e => Ev(e) == "job.result" && Data(e).TryGetProperty("error", out var er) && er.GetString() == "NothingToDo"),
-                "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "file" or "folder" or "pdf" or "zip" or "srt" or "docx" when facts => output is null && infoShown && focusKept == true && accepted == 1,
-                "zip" or "srt" or "docx" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
+                "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "file" or "folder" or "pdf" or "zip" or "tgz" or "srt" or "docx" when facts => output is null && infoShown && focusKept == true && accepted == 1,
+                "zip" or "tgz" or "srt" or "docx" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 "pdf" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 // Corner: the trigger really was off-centre and deep in a sector, nothing opened before the centre was

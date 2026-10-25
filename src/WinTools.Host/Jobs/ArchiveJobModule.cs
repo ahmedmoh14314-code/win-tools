@@ -40,6 +40,7 @@ internal sealed class ArchiveJobModule : IJobModule
                     request.Inputs.Count == 1 && result.Outputs.Count == 0 && JobFacts.AreShowable(result.Facts),
                 ArchiveCapabilities.ZipId => ZipHoldsUp(request, result),
                 ArchiveCapabilities.ExtractId => request.Inputs.Count == 1 && ExtractHoldsUp(request, result),
+                ArchiveCapabilities.DecompressId => request.Inputs.Count == 1 && DecompressHoldsUp(request, result),
                 _ => false,
             };
         }
@@ -56,6 +57,15 @@ internal sealed class ArchiveJobModule : IJobModule
         var head = new byte[4];
         if (file.ReadAtLeast(head, 4, throwOnEndOfStream: false) != 4 || head[0] != 'P' || head[1] != 'K') return false;
         file.Position = 0;
+        return string.Equals(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(file)), claimed, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Decompress: one file under an allowed name whose SHA-256 is the one the worker validated (any content).</summary>
+    private static bool DecompressHoldsUp(JobRequest request, JobResult result)
+    {
+        if (result.Outputs is not [{ Sha256: { Length: 64 } claimed } output] || result.Facts.Count > 0) return false;
+        if (!ArchiveCapabilities.Candidates(ArchiveCapabilities.DecompressId, request.Inputs, request.OutputDirectory).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
+        using var file = new FileStream(output.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
         return string.Equals(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(file)), claimed, StringComparison.OrdinalIgnoreCase);
     }
 
