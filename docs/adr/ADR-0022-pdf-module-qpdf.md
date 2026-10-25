@@ -39,7 +39,10 @@
      3. A staging folder is created in the destination with `CreateDirectoryW`, which fails if the name exists, so a planted folder or junction cannot receive the pages. It must also be a plain, empty folder.
      4. The pages are copied in as `<name> - page NN.pdf` and marked.
      5. The folder is renamed to the first free `<name> (pages)`, with a short retry while an indexer or antivirus holds a page.
-   - A failure deletes whatever was written, and the work folder is always removed. A killed worker leaves only deterministic names, which the host removes: the destination temp (file or folder) and the work folder.
+   - A failure deletes whatever was written, and the work folder is removed after every job, retried for about two seconds while an antivirus holds a file.
+   - A killed worker leaves only deterministic names, which the host removes: the destination temp (file or folder) and the work folder.
+   - If the host itself dies, nobody is left to remove them. Each job therefore first sweeps work folders older than 6 hours (no job runs that long; the host stops one at 10 minutes), because they hold copies of the user's documents.
+   - **Space (second review):** the copies and qpdf's output need about twice the inputs on the temp drive. That is checked before copying, keeping 2 GB free, and a Merge reads at most 2 GB in all.
 5. **The host believes a success only from the disk:**
    - the allowed name;
    - a `%PDF-` header;
@@ -49,7 +52,7 @@
    The manifest keeps a 2,000-page split within one 64 KB protocol line.
 6. **Menu:**
    - "Organize" (Merge, Split into pages) is the module's own category. Rotate (Left, Right, 180°) and Tools (PDF info) are shared with the image module.
-   - Merge needs two PDFs or more (at most 200). It joins them **in name order as Explorer sorts names** (digits as numbers, case ignored), not in the drop's order, which depends on which file was grabbed (evaluator, PR 2.1). The output is named after the first file in that order, and the host checks it the same way.
+   - Merge needs two PDFs or more (at most 200). It joins them **in name order** (runs of ASCII digits as numbers, case ignored; close to Explorer's sort, not identical), not in the drop's order, which depends on which file was grabbed (evaluator, PR 2.1). The output is named after the first file in that order, and the host checks it the same way.
    - A selection with any non-PDF gets no PDF command.
    - At most two PDF workers run at once.
 7. **Rotate adds to a page's rotation:** `+90`, `-90` and `+180`. An unsigned `180` would set the rotation, so a scanned page already at 90° ended a quarter turn off (evaluator, PR 2.1: blocker).

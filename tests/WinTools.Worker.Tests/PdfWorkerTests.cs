@@ -126,7 +126,7 @@ public sealed class PdfWorkerTests : IDisposable
     }
 
     [Fact]
-    public void Merge_joins_pdfs_in_the_order_given()
+    public void Merge_joins_pdfs_into_one_with_every_page()
     {
         var a = Pdf("a.pdf", 3);
         var b = Pdf("b.pdf", 2);
@@ -265,6 +265,46 @@ public sealed class PdfWorkerTests : IDisposable
         Assert.False(Directory.Exists(PdfJobs.WorkFolderOf(fail.Id)));
         NoTemporaries();
         Assert.Contains(PdfJobs.WorkFolderOf(ok.Id), PdfJobModule.Instance.TempPathsOf(ok)); // the host removes it after a kill
+    }
+
+    [Fact]
+    public void A_work_folder_left_by_a_dead_host_is_swept_and_one_in_use_is_left_alone()
+    {
+        // Second review, PR 2.1: a work folder holds copies of the user's documents; if the host dies, nobody else removes it.
+        var stale = PdfJobs.WorkFolderOf(Guid.NewGuid().ToString("N"));
+        var fresh = PdfJobs.WorkFolderOf(Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(stale);
+        File.WriteAllText(Path.Combine(stale, "in-001.pdf"), "a copy");
+        Directory.SetCreationTimeUtc(stale, DateTime.UtcNow - TimeSpan.FromHours(7));
+        Directory.CreateDirectory(fresh); // another worker's job, running now
+        try
+        {
+            Assert.True(PdfJobs.Run(Request(PdfCapabilities.InfoId, Pdf("a.pdf", 1))).Success);
+            Assert.False(Directory.Exists(stale));
+            Assert.True(Directory.Exists(fresh));
+        }
+        finally
+        {
+            if (Directory.Exists(stale)) Directory.Delete(stale, recursive: true);
+            if (Directory.Exists(fresh)) Directory.Delete(fresh, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void A_folder_already_under_the_work_name_is_neither_used_nor_deleted()
+    {
+        var request = Request(PdfCapabilities.RotateRightId, Pdf("a.pdf", 1));
+        var squatter = PdfJobs.WorkFolderOf(request.Id);
+        Directory.CreateDirectory(squatter);
+        File.WriteAllText(Path.Combine(squatter, "out.pdf"), "not the job's");
+        try
+        {
+            var r = PdfJobs.Run(request);
+            Assert.False(r.Success);
+            Assert.Equal("not the job's", File.ReadAllText(Path.Combine(squatter, "out.pdf")));
+            Assert.Equal(["a.pdf"], _dir.Names());
+        }
+        finally { Directory.Delete(squatter, recursive: true); }
     }
 
     [Fact]

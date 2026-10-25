@@ -83,13 +83,17 @@ public static class PdfCapabilities
     };
 
     /// <summary>
-    /// The order Merge joins its inputs in: by file name as Explorer sorts names (digits as numbers, case ignored), then by
-    /// full path. The order Explorer hands a drop over in depends on which item was grabbed, so it is not used (evaluator,
-    /// PR 2.1). The output is named after the first file in this order.
+    /// The order Merge joins its inputs in: by file name, with runs of ASCII digits compared as numbers and case ignored
+    /// ("page 2" before "page 10"), then by full path. Close to Explorer's own sort, not identical (punctuation and
+    /// non-ASCII digits differ). The order Explorer hands a drop over in depends on which item was grabbed, so it is not
+    /// used (evaluator, PR 2.1). The output is named after the first file in this order.
     /// </summary>
     public static IReadOnlyList<string> MergeOrder(IReadOnlyList<string> inputs) =>
         [.. inputs.Order(Comparer<string>.Create((a, b) =>
         {
+            // The name without its extension first, so "report" comes before "report 1" whatever the extension's dot sorts as.
+            var byStem = NaturalCompare(Path.GetFileNameWithoutExtension(a), Path.GetFileNameWithoutExtension(b));
+            if (byStem != 0) return byStem;
             var byName = NaturalCompare(Path.GetFileName(a), Path.GetFileName(b));
             return byName != 0 ? byName : string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
         }))];

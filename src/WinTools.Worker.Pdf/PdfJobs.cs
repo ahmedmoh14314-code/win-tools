@@ -42,6 +42,34 @@ internal static class PdfJobs
     /// <summary>The private folder one request's qpdf runs in; the host removes it too if the worker is killed.</summary>
     public static string WorkFolderOf(string requestId) => Path.Combine(Path.GetTempPath(), PdfCapabilities.WorkFolderName(requestId));
 
+    /// <summary>The most a Merge may read in all (each input is also limited to <see cref="MaxInputBytes"/>).</summary>
+    public const long MaxTotalInputBytes = 2L << 30;
+
+    /// <summary>Free space the temp drive keeps after a job's copies and qpdf's output (second review, PR 2.1).</summary>
+    public const long TempFreeSpaceReserve = 2L << 30;
+
+    /// <summary>A work folder this old is a leftover: no job runs anywhere near this long (the host stops one at 10 minutes).</summary>
+    internal static readonly TimeSpan StaleAfter = TimeSpan.FromHours(6);
+
+    /// <summary>
+    /// Removes work folders an earlier worker could not (its host died, or an antivirus held a file): they hold copies of
+    /// the user's documents. Only folders with this module's name pattern and older than <see cref="StaleAfter"/>, so a
+    /// job running in another worker is never touched (second review, PR 2.1).
+    /// </summary>
+    internal static void SweepStaleWorkFolders()
+    {
+        try
+        {
+            foreach (var dir in new DirectoryInfo(Path.GetTempPath()).EnumerateDirectories(PdfCapabilities.WorkFolderName("*")))
+            {
+                var id = dir.Name[PdfCapabilities.WorkFolderName("").Length..];
+                if (id.Length is 0 or > 64 || id.Any(c => !char.IsAsciiLetterOrDigit(c)) || dir.LinkTarget is not null) continue;
+                if (DateTime.UtcNow - dir.CreationTimeUtc > StaleAfter) DeleteFolder(dir.FullName);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
     public static JobResult Run(JobRequest request)
     {
         var id = request.Id;
@@ -55,11 +83,18 @@ internal static class PdfJobs
         if (!Qpdf.IsPresent) return JobResult.Fail(id, ErrorCode.Internal, "The PDF engine is missing from the WinTools folder. Reinstall WinTools.");
         var single = request.CapabilityId != PdfCapabilities.MergeId;
         if (single && request.Inputs.Count != 1) return JobResult.Fail(id, ErrorCode.InvalidRequest, "One file per request.");
+        SweepStaleWorkFolders();
         var work = WorkFolderOf(id);
+        // Created exclusively: a folder already under this name is not ours, and is neither used nor deleted.
+        switch (ExclusiveDirectory.Create(work))
+        {
+            case CreateOutcome.Created: break;
+            case CreateOutcome.NotWritable: return JobResult.Fail(id, ErrorCode.Internal, "The temporary folder cannot be written to.");
+            default: return JobResult.Fail(id, ErrorCode.Internal, "Something else is using this job's work folder.");
+        }
         try
         {
-            if (Directory.Exists(work) || File.Exists(work)) throw new PdfFailure(ErrorCode.Internal, "A previous job's work folder is in the way.");
-            Directory.CreateDirectory(work);
+            EnsureTempSpace(request, work);
             return request.CapabilityId switch
             {
                 PdfCapabilities.InfoId => Info(id, request.Inputs[0], work),
@@ -83,6 +118,28 @@ internal static class PdfJobs
         {
             DeleteFolder(work);
         }
+    }
+
+    /// <summary>
+    /// The copies and qpdf's output need about twice the inputs on the temp drive. That is checked before anything is
+    /// copied, with <see cref="TempFreeSpaceReserve"/> left over, so a job never fills the drive for everything else; and a
+    /// Merge reads at most <see cref="MaxTotalInputBytes"/> in all (second review, PR 2.1).
+    /// </summary>
+    private static void EnsureTempSpace(JobRequest request, string work)
+    {
+        long total = 0;
+        foreach (var input in request.Inputs)
+        {
+            var info = new FileInfo(input);
+            if (info.Exists) total += info.Length;
+        }
+        if (total > MaxTotalInputBytes && request.CapabilityId == PdfCapabilities.MergeId)
+            throw new PdfFailure(ErrorCode.LimitExceeded, $"Merge reads at most {MaxTotalInputBytes >> 30} GB in all; these PDFs are larger.");
+        long free;
+        try { free = new DriveInfo(Path.GetPathRoot(work)!).AvailableFreeSpace; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { return; } // cannot ask: the copy itself reports a full drive
+        if (free - 2 * total < TempFreeSpaceReserve)
+            throw new PdfFailure(ErrorCode.DiskFull, $"The temporary drive needs about {FeedbackText.Size(2 * total + TempFreeSpaceReserve)} free for this; free some space and try again.");
     }
 
     /// <summary>One source, copied into the work folder: its own path (for names and zone), the copy qpdf reads, facts.</summary>
@@ -321,7 +378,12 @@ internal static class PdfJobs
         // The destination's staging folder: created exclusively (an existing folder or junction of that name is refused),
         // hidden until it has its final name, removed on any failure.
         var staging = OutputNaming.TempPath(path, request.Id, request.OutputDirectory);
-        if (!ExclusiveDirectory.TryCreate(staging)) throw new PdfFailure(ErrorCode.Internal, "A previous job's folder is in the way.");
+        switch (ExclusiveDirectory.Create(staging))
+        {
+            case CreateOutcome.Created: break;
+            case CreateOutcome.NotWritable: throw new PdfFailure(ErrorCode.OutputDirectoryNotWritable, "The destination folder is not writable.");
+            default: throw new PdfFailure(ErrorCode.Internal, "Something else is using this job's folder in the destination.");
+        }
         var committed = false;
         try
         {
@@ -415,23 +477,26 @@ internal static class PdfJobs
     private static string Size(long bytes) =>
         bytes < 1024 ? FeedbackText.Size(bytes) : string.Create(CultureInfo.InvariantCulture, $"{FeedbackText.Size(bytes)} ({bytes:N0} bytes)");
 
-    /// <summary>Deletes a file we wrote; an indexer or antivirus may hold it for a moment, so this retries briefly.</summary>
+    /// <summary>
+    /// Deletes a file we wrote; an indexer or antivirus may hold it for a moment, so this retries for about two seconds. A
+    /// work folder that still cannot go is removed by the next job's sweep.
+    /// </summary>
     private static void DeleteFile(string path)
     {
-        for (var attempt = 1; attempt <= 3; attempt++)
+        for (var attempt = 1; attempt <= 8; attempt++)
         {
             try { File.Delete(path); return; }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Thread.Sleep(100); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Thread.Sleep(250); }
         }
     }
 
-    /// <summary>Deletes a folder we created, with its contents (a junction inside is removed, never followed).</summary>
+    /// <summary>Deletes a folder we created, with its contents (a junction inside is removed, never followed); retried as above.</summary>
     private static void DeleteFolder(string path)
     {
-        for (var attempt = 1; attempt <= 3; attempt++)
+        for (var attempt = 1; attempt <= 8; attempt++)
         {
             try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); return; }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Thread.Sleep(100); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Thread.Sleep(250); }
         }
     }
 }

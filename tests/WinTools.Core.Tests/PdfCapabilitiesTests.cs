@@ -80,6 +80,24 @@ public sealed class PdfCapabilitiesTests
     public void An_extension_that_could_change_the_folder_or_the_name_is_refused(string extension) =>
         Assert.Throws<ArgumentException>(() => OutputNaming.CandidatesWithExtension(@"C:\p\a.pdf", extension).First());
 
+    [Theory]
+    [InlineData("page 2.pdf", "page 10.pdf")]
+    [InlineData("a.pdf", "B.pdf")]
+    [InlineData("scan 9.pdf", "scan 10.pdf")]
+    [InlineData("x 0099.pdf", "x 100.pdf")]
+    [InlineData("report.pdf", "report 1.pdf")]
+    [InlineData("12345678901234567890123.pdf", "123456789012345678901234.pdf")]
+    public void Merge_orders_names_with_numbers_as_people_read_them(string first, string second)
+    {
+        Assert.True(PdfCapabilities.NaturalCompare(Path.GetFileNameWithoutExtension(first), Path.GetFileNameWithoutExtension(second)) < 0);
+        Assert.True(PdfCapabilities.NaturalCompare(Path.GetFileNameWithoutExtension(second), Path.GetFileNameWithoutExtension(first)) > 0);
+        Assert.Equal([@"C:\p\" + first, @"C:\q\" + second], PdfCapabilities.MergeOrder([@"C:\q\" + second, @"C:\p\" + first]));
+    }
+
+    [Fact]
+    public void Merge_order_is_total_for_equal_names_in_different_folders() =>
+        Assert.Equal([@"C:\a\x.pdf", @"C:\b\x.pdf"], PdfCapabilities.MergeOrder([@"C:\b\x.pdf", @"C:\a\x.pdf"]));
+
     [Fact]
     public void Every_rotate_command_has_a_rotation_and_a_suffix()
     {
