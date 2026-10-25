@@ -148,15 +148,15 @@ public sealed class SettingsHardeningTests : IDisposable
     }
 
     [Theory]
-    [InlineData("{\"schema\":2,\"trigger\":{\"key\":\"F5\"}}")]
-    [InlineData("{\"triggerKey\":\"A\"}")]
-    public void A_refused_trigger_key_is_reported_with_its_reason(string json)
+    [InlineData("{\"schema\":2,\"trigger\":{\"key\":\"F5\"}}", "F5")]
+    [InlineData("{\"triggerKey\":\"A\"}", "A")]
+    public void A_refused_trigger_key_is_reported_with_its_reason(string json, string key)
     {
         File.WriteAllText(PathOf, json);
         var store = new SettingsStore(PathOf);
         Assert.Equal("Space", store.Load().TriggerKey);
         Assert.Contains("trigger key", store.LastLoad, StringComparison.Ordinal);
-        Assert.Contains("Explorer", store.LastLoad, StringComparison.Ordinal); // the policy's reason, not just "invalid"
+        Assert.Contains(TriggerKeyPolicy.Judge(key).Reason!, store.LastLoad, StringComparison.Ordinal); // the policy's reason, not just "invalid"
     }
 }
 
