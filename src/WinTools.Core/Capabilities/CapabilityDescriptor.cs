@@ -31,6 +31,12 @@ public sealed record InputRule(IReadOnlySet<string> Kinds, int MinCount = 1, int
 }
 
 /// <summary>
+/// A secret a command needs before it runs (V2 PR 2.2, ADR-0026): the dialog's title, and whether the secret is new and
+/// typed twice. The host asks the dialogs process for it after the drop and passes it to this job only.
+/// </summary>
+public sealed record SecretPrompt(string Title, bool Confirm);
+
+/// <summary>
 /// One command the radial menu can offer, as the resolver and the menu see it, whatever module provides it (ADR-0007,
 /// V2 plan §5). The module keeps its own description of the work in <see cref="Payload"/> (the image module: its
 /// <see cref="Operation"/>), unwrapped only through the module (<see cref="ImageCapabilities.TryOperationOf"/>).
@@ -40,8 +46,10 @@ public sealed record InputRule(IReadOnlySet<string> Kinds, int MinCount = 1, int
 /// <param name="Module">The module that owns the command ("images").</param>
 /// <param name="LongRunning">The job shows progress rather than finishing at once.</param>
 /// <param name="Feedback">What the user is told about it; null gives words made from the label.</param>
+/// <param name="Prompt">A secret the host asks for before it queues the job (a password); null for none.</param>
 public sealed record CapabilityDescriptor(string Id, string Label, string Category, string Module, InputRule Input,
-    CapabilityShape Shape, CapabilityOutput Produces, bool LongRunning, object? Payload = null, Feedback.FeedbackWords? Feedback = null)
+    CapabilityShape Shape, CapabilityOutput Produces, bool LongRunning, object? Payload = null, Feedback.FeedbackWords? Feedback = null,
+    SecretPrompt? Prompt = null)
 {
     /// <summary>The words of the toasts about this command (the module's, so the presenter knows no module).</summary>
     public Feedback.FeedbackWords Words => Feedback ?? WinTools.Core.Feedback.FeedbackWords.From(Label);

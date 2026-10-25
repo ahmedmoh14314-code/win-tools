@@ -54,6 +54,8 @@ public enum ErrorCode
     PasswordRequired,
     /// <summary>The input is beyond one of the module's limits (pages, entries, sizes), named in the message (V2 PR 2.1).</summary>
     LimitExceeded,
+    /// <summary>The password given does not open the document (V2 PR 2.2); never reported as damage.</summary>
+    PasswordIncorrect,
 }
 
 /// <summary>The worker's answer. Success carries the final output path; failure carries a code and a short message.</summary>

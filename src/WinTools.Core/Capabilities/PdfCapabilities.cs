@@ -16,6 +16,7 @@ public static class PdfCapabilities
     public const string InfoId = "pdf.info", MergeId = "pdf.merge", SplitId = "pdf.split";
     public const string RotateRightId = "pdf.rotate-right", RotateLeftId = "pdf.rotate-left", Rotate180Id = "pdf.rotate-180";
     public const string OptimizeId = "pdf.optimize", LinearizeId = "pdf.linearize", RepairId = "pdf.repair";
+    public const string ProtectId = "pdf.protect", UnprotectId = "pdf.unprotect";
 
     /// <summary>The least an optimized copy must save to be kept: otherwise the PDF is reported as already optimized.</summary>
     public const double MinOptimizeSaving = 0.01;
@@ -30,6 +31,7 @@ public static class PdfCapabilities
         new("organize", "Organize", "pages", 15),
         new("optimize", "Optimize", "compress", 25),
         new("rotate", "Rotate", "rotate", 40),
+        new("protect", "Protect", "protect", 60),
         new("tools", "Tools", "tools", 90),
     ];
 
@@ -57,6 +59,13 @@ public static class PdfCapabilities
             LongRunning: true, Feedback: new("Repairing", "repair", "Repaired (best effort: check the pages)", "No damage found", "PDF", "PDFs")),
         new(InfoId, "PDF info", "tools", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.Facts,
             LongRunning: false, Feedback: Words("Reading", "read", "Read")),
+        // V2 PR 2.2 (ADR-0026): the password is asked for after the drop and reaches qpdf only on its stdin.
+        new(ProtectId, "Protect…", "protect", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File,
+            LongRunning: true, Feedback: new("Protecting", "protect", "Protected with a password", "Already protected", "PDF", "PDFs"),
+            Prompt: new("Protect with a password", Confirm: true)),
+        new(UnprotectId, "Remove protection…", "protect", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File,
+            LongRunning: true, Feedback: new("Removing the protection of", "remove the protection of", "Protection removed", "Not protected", "PDF", "PDFs"),
+            Prompt: new("Remove the password", Confirm: false)),
     ];
 
     /// <summary>The text added to an output's name ("report (merged).pdf"), or the folder's for Split ("report (pages)").</summary>
@@ -70,6 +79,8 @@ public static class PdfCapabilities
         OptimizeId => "optimized",
         LinearizeId => "fast web view",
         RepairId => "repaired",
+        ProtectId => "protected",
+        UnprotectId => "unprotected",
         _ => null,
     };
 
