@@ -13,7 +13,8 @@ public sealed class GeneralFilesTests
 {
     private static readonly CapabilityResolver Resolver = CapabilityResolver.For(customResizeId: null);
     private static string[] Ids(params string[] paths) => [.. Resolver.Resolve(paths).Select(c => c.Id)];
-    private static readonly string[] General = ["files.info", "files.sha256", "files.copy-path"];
+    // Add to ZIP (V2 PR 5.1) accepts any file or folder too and comes last in Tools.
+    private static readonly string[] General = ["files.info", "files.sha256", "files.copy-path", "archive.zip"];
 
     [Theory]
     [InlineData(@"C:\p\notes.xyz")]
@@ -32,7 +33,7 @@ public sealed class GeneralFilesTests
     }
 
     [Fact]
-    public void A_folder_gets_info_and_copy_path_but_no_hash() => Assert.Equal(["files.info", "files.copy-path"], Ids(@"C:\p\holiday\"));
+    public void A_folder_gets_info_and_copy_path_but_no_hash() => Assert.Equal(["files.info", "files.copy-path", "archive.zip"], Ids(@"C:\p\holiday\"));
 
     [Fact]
     public void An_image_keeps_v1s_five_categories_and_gets_the_general_commands_under_tools()
@@ -41,13 +42,13 @@ public sealed class GeneralFilesTests
         // module shares Tools, as categories are designed to be shared (ADR-0019).
         var menu = RadialMenu.Build(Resolver, [@"C:\p\a.png"]);
         Assert.Equal(["Convert", "Compress", "Resize", "Rotate", "Tools"], menu.Select(g => g.Label));
-        Assert.Equal(["Remove metadata", "Image info", "File info", "SHA-256", "Copy path"], menu[^1].Commands.Select(c => c.Label));
+        Assert.Equal(["Remove metadata", "Image info", "File info", "SHA-256", "Copy path", "Add to ZIP"], menu[^1].Commands.Select(c => c.Label));
     }
 
     [Fact]
     public void A_mixed_selection_gets_only_what_every_item_allows()
     {
-        Assert.Equal(["files.info", "files.copy-path"], Ids(@"C:\p\a.png", @"C:\p\holiday\"));
+        Assert.Equal(["files.info", "files.copy-path", "archive.zip"], Ids(@"C:\p\a.png", @"C:\p\holiday\"));
         Assert.Equal(General, Ids(@"C:\p\a.png", @"C:\p\notes.txt"));
     }
 

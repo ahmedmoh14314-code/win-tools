@@ -83,6 +83,15 @@ public sealed class PdfWorkerTests : IDisposable
         Assert.DoesNotContain(Directory.EnumerateFileSystemEntries(_dir.Path), e => Path.GetFileName(e).StartsWith("~wintools-", StringComparison.Ordinal));
 
     [Fact]
+    public void Only_a_file_qpdf_could_not_open_is_tried_again_never_a_damaged_one()
+    {
+        // Seen on a CI machine: a valid copy reported "damaged" while something held it; qpdf names that case itself.
+        Assert.True(new QpdfRun(QpdfRun.Errors, "", false, "qpdf: open in-001.pdf: Permission denied").CouldNotOpen);
+        Assert.False(new QpdfRun(QpdfRun.Errors, "", false, "WARNING: in-001.pdf: file is damaged").CouldNotOpen);
+        Assert.False(new QpdfRun(QpdfRun.Success, "3", false, "qpdf: open x").CouldNotOpen);
+    }
+
+    [Fact]
     public void The_bundled_qpdf_is_the_pinned_version()
     {
         Assert.True(Qpdf.IsPresent, Qpdf.ExecutablePath);
