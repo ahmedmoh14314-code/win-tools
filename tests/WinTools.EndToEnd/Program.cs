@@ -193,6 +193,26 @@ if (scenario is "keyprobe" or "keycontrol" && probeKey.Length == 1)
     File.WriteAllText(Path.Combine(folder, $"{char.ToUpperInvariant(probeKey[0])}{char.ToUpperInvariant(probeKey[0])} probe.txt"), "type-ahead target");
 // A folder's "hash" is its listing: a dropped folder must keep its contents.
 string HashOf(string path) => isFolder ? string.Join("|", Directory.GetFileSystemEntries(path).Order(StringComparer.Ordinal)) : Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+// Remove protection (V2 PR 2.2): the sample is first protected with the run's password, by the qpdf next to the harness.
+const string E2ePassword = "سرّ E2E 😀 --x";
+string Qpdf(string[] arguments)
+{
+    var psi = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "qpdf", "qpdf.exe")) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, CreateNoWindow = true, WorkingDirectory = folder, StandardInputEncoding = new System.Text.UTF8Encoding(false) };
+    psi.ArgumentList.Add("@-"); // the password on stdin, as the product passes it
+    using var p = Process.Start(psi)!;
+    foreach (var a in arguments) p.StandardInput.Write(a + "\n");
+    p.StandardInput.Close();
+    p.StandardOutput.ReadToEnd();
+    p.WaitForExit(30_000);
+    return p.ExitCode.ToString(System.Globalization.CultureInfo.InvariantCulture);
+}
+if (capability?.Id == PdfCapabilities.UnprotectId)
+{
+    var plain = Path.Combine(folder, "plain-copy.pdf");
+    File.Move(source, plain);
+    if (Qpdf([plain, "--encrypt", $"--user-password={E2ePassword}", "--owner-password=e2e-owner", "--bits=256", "--", source]) != "0") { Console.Error.WriteLine("could not protect the sample"); return 5; }
+    File.Delete(plain);
+}
 var sourceHash = HashOf(source);
 var outputName = OutputNameFor(source);
 // Batch: the source plus copies with Unicode names, all selected with Ctrl+A and dragged together.
@@ -671,6 +691,28 @@ using (var explorer = opened)
                 Desktop.LeftUp();
             }
             if (heldVk != 0) { Thread.Sleep(40); Desktop.KeyUp(heldVk); }
+            // A command that asks for a password (V2 PR 2.2): type it into the real dialog, but only once the dialog is in
+            // front; never Enter into Explorer, which would open the selected files.
+            bool? dialogInFront = null;
+            if (capability?.Prompt is { } prompt && releasedOver == "overlay")
+            {
+                var asked = Stopwatch.GetTimestamp();
+                dialogInFront = false;
+                while (Stopwatch.GetElapsedTime(asked) < TimeSpan.FromSeconds(8))
+                {
+                    if (Desktop.ForegroundProcessName() == "WinTools.Dialogs") { dialogInFront = true; break; }
+                    Thread.Sleep(100);
+                }
+                if (dialogInFront == true)
+                {
+                    Thread.Sleep(300);
+                    Desktop.TypeText(E2ePassword);
+                    if (prompt.Confirm) { Desktop.Tap(0x09); Thread.Sleep(100); Desktop.TypeText(E2ePassword); } // Tab to the second box
+                    Thread.Sleep(150);
+                    if (Desktop.ForegroundProcessName() == "WinTools.Dialogs") Desktop.Tap(0x0D); // Enter: OK
+                    else dialogInFront = false;
+                }
+            }
             if (scenario == "alt")
             {
                 Thread.Sleep(40);
@@ -754,6 +796,9 @@ using (var explorer = opened)
                 : output is not null && documentClean ? CleanValid(output!)
                 : output is not null && documentText ? File.ReadAllText(output!, System.Text.Encoding.UTF8) == "تقرير الربع 😀\r\nSecond line\r\n" : output is not null && File.ReadAllBytes(output) is var bytes && (pdfFile
                 ? bytes.AsSpan().StartsWith("%PDF-"u8) && bytes.AsSpan(Math.Max(0, bytes.Length - 1024)).IndexOf("%%EOF"u8) >= 0 // a whole PDF
+                    // Protect: it needs a password, and the one typed opens it; Remove protection: not encrypted at all.
+                    && (capability?.Id != PdfCapabilities.ProtectId || Qpdf(["--requires-password", output!]) == "0" && Qpdf([$"--password={E2ePassword}", "--requires-password", output!]) == "3")
+                    && (capability?.Id != PdfCapabilities.UnprotectId || Qpdf(["--requires-password", output!]) == "2")
                 : FileSignature.Detect(bytes) == outputFormat && ContainerCheck.IsComplete(bytes, outputFormat, out _)
                     && (!strip || bytes.AsSpan().IndexOf(metadataMarker) < 0)); // the comment is gone
             double? saved = op is { Kind: OperationKind.Compress } && output is not null ? Math.Round(1 - (double)new FileInfo(output).Length / new FileInfo(source).Length, 4) : null;
@@ -786,7 +831,7 @@ using (var explorer = opened)
                     && ev.Any(e => Ev(e) == "job.result" && Data(e).TryGetProperty("error", out var er) && er.GetString() == "NothingToDo"),
                 "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "file" or "folder" or "pdf" or "zip" or "tgz" or "srt" or "docx" when facts => output is null && infoShown && focusKept == true && accepted == 1,
                 "zip" or "tgz" or "srt" or "docx" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
-                "pdf" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
+                "pdf" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1 && (capability?.Prompt is null || dialogInFront == true),
                 "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 // Corner: the trigger really was off-centre and deep in a sector, nothing opened before the centre was
                 // reached, then exactly the wanted category opened and the wanted command ran.
@@ -811,7 +856,7 @@ using (var explorer = opened)
                 _ => output is null && accepted == 0 && releasedOver == "overlay" && menuOpens.Length == 0, // unsupported, category
             };
             if (ok) passed++; else exitCode = 1;
-            Record(new { scenario, cycle, op = op?.Id, releasedOver, releaseAfterMs, hostEnters = enters, hostDrops = drops.Length, hostAccepted = accepted, openMs, ruleHeld, endedOnOverlay, infoShown,
+            Record(new { scenario, cycle, op = op?.Id, dialogInFront, releasedOver, releaseAfterMs, hostEnters = enters, hostDrops = drops.Length, hostAccepted = accepted, openMs, ruleHeld, endedOnOverlay, infoShown,
                 toastShown, focusKept, soundsHeld, refusedLogged, overlayShown, saved, pathStyle, sourcePathLength = source.Length,
                 startOffset, opensBeforeCentre, levelPushed, categorySeen, menuOpens, menuBacks,
                 triggerAt = $"{at.X},{at.Y}", releaseAt = $"{release.X},{release.Y}", output = output is null ? null : Path.GetFileName(output), outputValid, sourceIntact, cleanFolder, files, ok });

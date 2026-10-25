@@ -93,6 +93,8 @@ $rows = @(
     @('folder-info',          'folder --cycles 2',                                                'a dropped folder: File info, its contents unchanged (UX-009)'),
     @('pdf-rotate',           'pdf --cycles 2',                                                   'PDF rotate right: a new PDF, the original unchanged (V2 PR 2.1)'),
     @('pdf-info',             'pdf --op pdf.info --cycles 1',                                     'PDF info: the info panel, nothing written'),
+    @('pdf-protect',          'pdf --op pdf.protect --cycles 1',                                  'Protect: the password typed twice in the dialog; the copy needs it (V2 PR 2.2)'),
+    @('pdf-unprotect',        'pdf --op pdf.unprotect --cycles 1',                                'Remove protection with the right password: the copy is not encrypted'),
     @('zip-extract',          'zip --cycles 2',                                                   'ZIP extract: a new folder with exactly the archive''s tree (V2 PR 5.1)'),
     @('zip-test',             'zip --op archive.test --cycles 1',                                 'ZIP test: the info panel, nothing written'),
     @('tgz-extract',          'tgz --cycles 2',                                                   'TAR.GZ extract: the same tree from a PAX TAR.GZ (V2 PR 5.2)'),

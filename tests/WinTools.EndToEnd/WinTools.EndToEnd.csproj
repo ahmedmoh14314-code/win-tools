@@ -13,6 +13,20 @@
     <ProjectReference Include="..\..\src\WinTools.Core\WinTools.Core.csproj" />
     <ProjectReference Include="..\..\src\WinTools.Host\WinTools.Host.csproj" />
     <ProjectReference Include="..\..\src\WinTools.Worker\WinTools.Worker.csproj" />
+    <!-- The dialogs process next to the harness's host, as next to the product's (the pick list, the password window). -->
+    <ProjectReference Include="..\..\src\WinTools.Dialogs\WinTools.Dialogs.csproj" ReferenceOutputAssembly="false" Private="false" />
     <None Include="..\samples\*.png;..\samples\*.jpg;..\samples\*.bmp;..\samples\*.tif;..\samples\*.webp;..\samples\*.pdf;..\samples\*.zip" Link="samples\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="CopyDialogsApp" AfterTargets="Build">
+    <MSBuild Projects="..\..\src\WinTools.Dialogs\WinTools.Dialogs.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" ItemName="_DialogsTarget" />
+    </MSBuild>
+    <PropertyGroup>
+      <_DialogsDir>%(_DialogsTarget.RootDir)%(_DialogsTarget.Directory)</_DialogsDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_DialogsFiles Include="$(_DialogsDir)WinTools.Dialogs.exe;$(_DialogsDir)WinTools.Dialogs.dll;$(_DialogsDir)WinTools.Dialogs.runtimeconfig.json;$(_DialogsDir)WinTools.Dialogs.deps.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_DialogsFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('%(FullPath)')" />
+  </Target>
 </Project>
