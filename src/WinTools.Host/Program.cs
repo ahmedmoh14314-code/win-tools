@@ -22,6 +22,9 @@ internal static class Program
     /// <summary>Per-request limit of the PDF worker: a merge of many files runs one qpdf per file, each limited in the worker.</summary>
     private static readonly TimeSpan PdfTimeout = TimeSpan.FromMinutes(10);
 
+    /// <summary>Per-request limit of the archive worker: extracting or zipping gigabytes on a slow disk takes a while.</summary>
+    private static readonly TimeSpan ArchiveTimeout = TimeSpan.FromMinutes(30);
+
     /// <summary>How long the exit waits for cancelled jobs: the workers' 1 s grace plus temp cleanup.</summary>
     private static readonly TimeSpan ExitGrace = TimeSpan.FromSeconds(3);
 
@@ -43,6 +46,7 @@ internal static class Program
         var workerPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.exe");
         var textWorkerPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.Text.exe");
         var pdfWorkerPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.Pdf.exe");
+        var archiveWorkerPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.Archive.exe");
         // The image worker is required; without the General Files worker the host still runs, and those commands fail
         // with a plain reason (the worker client reports a worker that cannot start).
         if (!File.Exists(workerPath))
@@ -77,7 +81,9 @@ internal static class Program
                     text => CopyTextAsync(window, text)), FilesJobModule.Parameters);
             // PDF jobs: at most two workers (each runs qpdf, which can use a lot of memory on a large file; V2 plan §13).
             var pdf = new JobModuleRunner(PdfJobModule.Instance, new WorkerClient(pdfWorkerPath, PdfTimeout, PdfJobModule.Instance, parallelism: 2), PdfJobModule.Parameters);
-            var jobs = new JobScheduler([images, files, pdf], log, () => Volatile.Read(ref current), feedback);
+            // Archive jobs: one worker (each archive streams through one disk; V2 plan §13).
+            var archives = new JobModuleRunner(ArchiveJobModule.Instance, new WorkerClient(archiveWorkerPath, ArchiveTimeout, ArchiveJobModule.Instance, parallelism: 1), ArchiveJobModule.Parameters);
+            var jobs = new JobScheduler([images, files, pdf, archives], log, () => Volatile.Read(ref current), feedback);
             coordinator = new InteractionCoordinator(log, window, jobs, feedback, sounds, settings);
             using (coordinator)
             {
