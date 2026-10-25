@@ -250,6 +250,67 @@ public sealed class PdfWorkerTests : IDisposable
     }
 
     [Fact]
+    public void Optimize_keeps_a_smaller_lossless_copy_and_says_when_there_is_nothing_to_gain()
+    {
+        var source = Pdf("big.pdf", 300); // uncompressed content streams: a lossless rewrite saves a lot
+        var before = Hash(source);
+        var request = Request(PdfCapabilities.OptimizeId, source);
+        var r = PdfJobs.Run(request);
+        Assert.True(r.Success, r.Message);
+        Assert.Equal("big (optimized).pdf", Path.GetFileName(r.OutputPath));
+        Assert.True(new FileInfo(r.OutputPath!).Length < new FileInfo(source).Length * 0.9);
+        Assert.Equal(300, PagesOf(r.OutputPath!));
+        Assert.True(PdfJobModule.Instance.IsBelievable(request, r));
+        Assert.Equal(before, Hash(source));
+        var again = PdfJobs.Run(Request(PdfCapabilities.OptimizeId, r.OutputPath!)); // already as small as qpdf makes it
+        Assert.Equal(ErrorCode.NothingToDo, again.Error);
+        Assert.Equal(["big (optimized).pdf", "big.pdf"], _dir.Names());
+    }
+
+    [Fact]
+    public void Fast_web_view_linearizes_once()
+    {
+        var source = Pdf("a.pdf", 4);
+        var r = PdfJobs.Run(Request(PdfCapabilities.LinearizeId, source));
+        Assert.True(r.Success, r.Message);
+        Assert.Equal("a (fast web view).pdf", Path.GetFileName(r.OutputPath));
+        Assert.Contains("no linearization errors", Qpdf.Run(["--check-linearization", r.OutputPath!], TimeSpan.FromSeconds(30)).Output, StringComparison.Ordinal);
+        Assert.Equal(4, PagesOf(r.OutputPath!));
+        Assert.Equal(ErrorCode.NothingToDo, PdfJobs.Run(Request(PdfCapabilities.LinearizeId, r.OutputPath!)).Error);
+        NoTemporaries();
+    }
+
+    [Fact]
+    public void Repair_rebuilds_a_broken_cross_reference_table_and_leaves_a_sound_file_alone()
+    {
+        var whole = Encoding.ASCII.GetString(PdfSamples.Pages(3));
+        var at = whole.LastIndexOf("startxref\n", StringComparison.Ordinal) + "startxref\n".Length;
+        var broken = whole[..at] + "999999\n%%EOF\n"; // the table's offset points nowhere
+        var damaged = _dir.Write("damaged.pdf", Encoding.ASCII.GetBytes(broken));
+        var request = Request(PdfCapabilities.RepairId, damaged);
+        var r = PdfJobs.Run(request);
+        Assert.True(r.Success, r.Message);
+        Assert.Equal("damaged (repaired).pdf", Path.GetFileName(r.OutputPath));
+        Assert.Equal(QpdfRun.Success, Qpdf.Run(["--check", r.OutputPath!], TimeSpan.FromSeconds(30)).ExitCode);
+        Assert.Equal(3, PagesOf(r.OutputPath!));
+        Assert.True(PdfJobModule.Instance.IsBelievable(request, r));
+        Assert.Equal(ErrorCode.NothingToDo, PdfJobs.Run(Request(PdfCapabilities.RepairId, r.OutputPath!)).Error); // sound now
+    }
+
+    [Fact]
+    public void Repair_refuses_a_protected_pdf_and_fails_cleanly_on_one_beyond_repair()
+    {
+        var plain = Pdf("plain.pdf", 1);
+        var locked = Path.Combine(_dir.Path, "locked.pdf");
+        Assert.True(Qpdf.Run([plain, "--encrypt", "--user-password=u", "--owner-password=o", "--bits=256", "--", locked], TimeSpan.FromSeconds(30)).Usable);
+        Assert.Equal(ErrorCode.PasswordRequired, PdfJobs.Run(Request(PdfCapabilities.RepairId, locked)).Error);
+        var hopeless = _dir.Write("hopeless.pdf", "%PDF-1.7\nnothing else"u8.ToArray());
+        var r = PdfJobs.Run(Request(PdfCapabilities.RepairId, hopeless));
+        Assert.False(r.Success);
+        Assert.Equal(["hopeless.pdf", "locked.pdf", "plain.pdf"], _dir.Names());
+    }
+
+    [Fact]
     public async Task The_real_worker_process_runs_a_job_the_host_believes()
     {
         var source = Pdf("a.pdf", 2);

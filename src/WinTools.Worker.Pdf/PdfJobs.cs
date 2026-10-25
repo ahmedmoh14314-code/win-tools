@@ -51,6 +51,9 @@ internal static class PdfJobs
                 PdfCapabilities.InfoId => Info(id, request.Inputs[0]),
                 PdfCapabilities.MergeId => Merge(request),
                 PdfCapabilities.SplitId => Split(request),
+                PdfCapabilities.OptimizeId => Optimize(request),
+                PdfCapabilities.LinearizeId => Linearize(request),
+                PdfCapabilities.RepairId => Repair(request),
                 _ when PdfCapabilities.RotationOf(request.CapabilityId) is { } angle => Rotate(request, angle),
                 _ => JobResult.Fail(id, ErrorCode.UnsupportedOperation, "This worker does not run that command."),
             };
@@ -155,10 +158,55 @@ internal static class PdfJobs
     }
 
     /// <summary>
-    /// Runs qpdf with <paramref name="arguments"/> plus a temporary output, checks that the output is a PDF qpdf can open
-    /// with <paramref name="expectedPages"/> pages, marks it, and moves it to the first free name.
+    /// A lossless rewrite (V2 PR 2.3): object streams, every stream compressed, Flate streams recompressed at the highest
+    /// level. Images and content are not touched, so nothing visible changes. The copy is kept only when it saves at least
+    /// <see cref="PdfCapabilities.MinOptimizeSaving"/> and <see cref="PdfCapabilities.MinOptimizeSavingBytes"/>; otherwise the
+    /// PDF is reported as already optimized and nothing is written.
     /// </summary>
-    private static JobResult WriteOne(JobRequest request, Source zoneSource, List<string> arguments, int expectedPages, string nameSource)
+    private static JobResult Optimize(JobRequest request)
+    {
+        var source = Inspect(request.Inputs[0]);
+        var (pages, _) = Open(source);
+        var least = Math.Max(PdfCapabilities.MinOptimizeSavingBytes, (long)Math.Ceiling(source.Length * PdfCapabilities.MinOptimizeSaving));
+        return WriteOne(request, source, ["--object-streams=generate", "--compress-streams=y", "--recompress-flate", "--compression-level=9", source.Path],
+            pages, request.Inputs[0], written => source.Length - written >= least ? null : "A lossless rewrite would not make it smaller.");
+    }
+
+    /// <summary>Fast web view (linearization, V2 PR 2.3); a file that already has it is left alone.</summary>
+    private static JobResult Linearize(JobRequest request)
+    {
+        var source = Inspect(request.Inputs[0]);
+        var (pages, repaired) = Open(source);
+        var check = Qpdf.Run(["--check-linearization", source.Path], QpdfTimeout);
+        if (!repaired && check.Usable && check.Output.Contains("no linearization errors", StringComparison.Ordinal))
+            return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "The PDF is already set up for fast web view.");
+        return WriteOne(request, source, ["--linearize", source.Path], pages, request.Inputs[0]);
+    }
+
+    /// <summary>
+    /// Repair (V2 PR 2.3): qpdf reads a damaged file by reconstructing its cross-reference table, and the rewrite has a
+    /// clean structure. Best effort: what was lost in the damage stays lost. A file qpdf reads without any warning is
+    /// reported as undamaged and nothing is written.
+    /// </summary>
+    private static JobResult Repair(JobRequest request)
+    {
+        var source = Inspect(request.Inputs[0]);
+        var password = Qpdf.Run(["--requires-password", source.Path], QpdfTimeout);
+        if (password is { TimedOut: false, ExitCode: QpdfRun.Success })
+            throw new PdfFailure(ErrorCode.PasswordRequired, "The PDF is protected with a password. Remove the protection first.");
+        var check = Qpdf.Run(["--check", source.Path], QpdfTimeout);
+        if (check.TimedOut) throw new PdfFailure(ErrorCode.WorkerTimeout, "The PDF took too long to check.");
+        if (check.ExitCode == QpdfRun.Success) return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "qpdf found no damage to repair.");
+        return WriteOne(request, source, [source.Path], expectedPages: null, request.Inputs[0]);
+    }
+
+    /// <summary>
+    /// Runs qpdf with <paramref name="arguments"/> plus a temporary output, checks that the output is a PDF qpdf can open
+    /// with <paramref name="expectedPages"/> pages (any number for a repair), marks it, and moves it to the first free
+    /// name. <paramref name="notWorthIt"/> may turn a valid result down by its size (Optimize), with the reason.
+    /// </summary>
+    private static JobResult WriteOne(JobRequest request, Source zoneSource, List<string> arguments, int? expectedPages, string nameSource,
+        Func<long, string?>? notWorthIt = null)
     {
         Destination(request, nameSource);
         var temp = OutputNaming.TempPath(nameSource, request.Id, request.OutputDirectory);
@@ -171,8 +219,10 @@ internal static class PdfJobs
             if (!run.Usable) throw new PdfFailure(ErrorCode.EncodeFailed, "The PDF engine could not write the result.");
             File.SetAttributes(temp, FileAttributes.Hidden); // not a result until it has its final name
             var check = Qpdf.Run(["--show-npages", temp], QpdfTimeout);
-            if (!check.Usable || !int.TryParse(check.Output.AsSpan().Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var got) || got != expectedPages)
+            if (!check.Usable || !int.TryParse(check.Output.AsSpan().Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var got) || got < 1
+                || expectedPages is { } expected && got != expected)
                 throw new PdfFailure(ErrorCode.OutputValidationFailed, "The result did not check out; nothing was saved.");
+            if (notWorthIt?.Invoke(new FileInfo(temp).Length) is { } reason) return JobResult.Fail(request.Id, ErrorCode.NothingToDo, reason);
             if (zoneSource.Zone is { } z) MarkOfTheWeb.Apply(temp, z);
             File.SetAttributes(temp, FileAttributes.Normal);
             var hash = Sha256Of(temp);

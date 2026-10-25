@@ -1,6 +1,6 @@
 # ADR-0022: The PDF module's structural commands run the official qpdf build in the PDF worker
 
-- **Status:** Proposed (V2 PR 2.1)
+- **Status:** Proposed (V2 PR 2.1; PR 2.3 adds decision 8)
 - **Date:** 2026-10-25
 - **Deciders:** product owner (V2 plan §7, §9; unattended-session authorisation to fetch official engine releases)
 - **Related requirements:** V2 plan §9 (PDF), §10 PR 2.1, §14 (PDF threats); ADR-0005 (output safety), ADR-0018 (job contract)
@@ -46,6 +46,16 @@
    - A selection with any non-PDF gets no PDF command.
    - At most two PDF workers run at once.
 7. **Failure wording follows the module's noun:** "The PDF is damaged or incomplete", not the image module's sentences (`FeedbackText.Reason(error, words)`).
+
+8. **Optimize, Fast web view, Repair (V2 PR 2.3)** sit in their own "Optimize" category.
+   - **Smaller (lossless):** `--object-streams=generate --compress-streams=y --recompress-flate --compression-level=9`. No image is re-encoded, so nothing visible changes. qpdf's `--optimize-images` is not used: it re-encodes images as JPEG, which is lossy.
+     - The copy is kept only when it saves at least 1 % and 1 KB. Otherwise the result is "Already optimized" and nothing is written.
+     - It is never promised to shrink a file. A generated 300-page PDF went from 68.9 KB to 39.5 KB; the same file again saved nothing.
+   - **Fast web view:** `--linearize`. A file that already passes `--check-linearization` is left alone ("already set up").
+   - **Repair:** a rewrite of a file that `--check` flags. qpdf rebuilds a damaged cross-reference table on reading.
+     - It is labelled best effort: content lost in the damage stays lost.
+     - A file that `--check` passes is reported as having no damage, and nothing is written.
+     - A protected file is refused before the check.
 
 ## Alternatives considered
 - **PDFium for these commands.** It cannot write encrypted files, and its provenance spike (V8 and XFA off, a reproducible build) is still to come. qpdf is the right engine for structure; PDFium comes in Stage 3 for rendering only.

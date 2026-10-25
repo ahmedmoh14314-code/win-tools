@@ -10,7 +10,7 @@ namespace WinTools.Host.Jobs;
 /// what the module allows, re-checked from the disk:
 /// <list type="bullet">
 /// <item>PDF info: facts within <see cref="JobFacts"/>' bounds that name the type, and no file.</item>
-/// <item>Merge and Rotate: one file, under a name the naming policy allows for this source and command, that starts as a
+/// <item>Merge, Rotate, Optimize, Fast web view and Repair: one file, under a name the naming policy allows for this source and command, that starts as a
 /// PDF and whose SHA-256 is the one the worker validated.</item>
 /// <item>Split: one folder, under an allowed name, holding exactly the page files the worker reported (the manifest hash
 /// over every file name and hash), each named as Split names pages.</item>
@@ -38,6 +38,7 @@ internal sealed class PdfJobModule : IJobModule
                 PdfCapabilities.InfoId => request.Inputs.Count == 1 && result.Outputs.Count == 0 && JobFacts.AreShowable(result.Facts) && result.Facts.Any(f => f.Label == "Type"),
                 PdfCapabilities.SplitId => request.Inputs.Count == 1 && SplitHoldsUp(request, result),
                 PdfCapabilities.MergeId => request.Inputs.Count >= 2 && FileHoldsUp(request, result),
+                PdfCapabilities.OptimizeId or PdfCapabilities.LinearizeId or PdfCapabilities.RepairId => request.Inputs.Count == 1 && FileHoldsUp(request, result),
                 _ when PdfCapabilities.RotationOf(request.CapabilityId) is not null => request.Inputs.Count == 1 && FileHoldsUp(request, result),
                 _ => false,
             };
