@@ -38,21 +38,50 @@
    - devices, pipes and sockets;
    - encrypted entries, which fail the job with `PasswordRequired`, since .NET cannot decrypt them. A password dialog is a later PR.
 5. **Limits (`ArchiveLimits`, D13), counted on bytes as they decompress:**
-   - 100,000 entries;
+   - 100,000 files **and folders created**, implicit parent folders included (a small archive of nested folder names must not create millions of folders);
    - 20 GB in all;
-   - an entry beyond 200:1 past 1 MB is a bomb;
+   - an entry beyond 200:1 past 1 MB is a bomb, **and so is the whole archive beyond 200:1 of its own size**. Declared sizes can lie, and entries can share one stored stream;
    - extraction stops before the drive has less than 2 GB free.
+   - A file and a folder of the same name keep the first one; the other is skipped and reported.
    - The archive itself may be at most 4 GB.
    - Each file's CRC-32 and length are checked against the directory. Any mismatch fails the whole job.
 6. **Output safety (ADR-0005):**
    - Extraction writes into a staging folder created exclusively in the destination (`CreateDirectoryW`) and hidden until the whole archive succeeded; then it is renamed to the first free name.
-   - Add to ZIP writes an exclusive temporary file, reads it back (every entry decompressed and checked), and renames it without overwriting.
-   - Links and online-only files are skipped and never followed or downloaded. The ZIP being written is never added to itself.
+   - Add to ZIP **lists everything first**:
+     - A file that is online only, in use, or in a folder that cannot be read fails the job with the reason, with nothing written. No archive silently lacks a file the user asked for.
+     - The same goes for a tree deeper than 32 levels, more than 100,000 files or more than 20 GB.
+     - Only real links (symbolic links and junctions) are left out, and the toast says how many. OneDrive's files carry a reparse point too and are packed like any other.
+     - Files are opened shared for reading only, so a file being written is never packed torn.
+   - It then writes an exclusive temporary file, reads it back (every entry decompressed and checked, **without the bomb rules**, since these are the user's own files), and renames it without overwriting.
+   - The ZIP being written, and other jobs' temporaries, are never added.
    - Every output carries the strictest Mark-of-the-Web zone of its sources (D5).
 7. **The host believes:**
    - an extraction from its **shape** on disk: one SHA-256 over every relative path and file size, with no link anywhere. The content is not read again (it may be 20 GB), because the worker checked each file's CRC-32 as it wrote it;
    - a ZIP from its name, `PK` signature and SHA-256;
    - Info and Test from bounded facts.
+
+8. **Notices reach the user:** a believed success that carries a notice fact (entries skipped or renamed, links not followed) shows it in the toast.
+
+## Evaluator review
+One round (2026-10-25): one blocker and four majors, three of them reproduced by the reviewer on the built worker. All fixed, with tests that fail on the old code (5 of 19 worker tests).
+- **Blocker:** Add to ZIP dropped files it could not read (links, files in use, and every OneDrive file inside a folder, because they carry a reparse point) and still said "ZIP created".
+- **Majors:**
+  - the read-back check applied the bomb rules to the user's own compressible files;
+  - overlapping entries cheated the per-entry ratio;
+  - folders were not counted (a folder bomb);
+  - OneDrive's reparse points made a finished extraction unbelievable.
+- **Minors fixed:**
+  - a file and a folder of the same name;
+  - COM0 and LPT0 (one list shared with `PathPolicy`);
+  - depth in Add to ZIP;
+  - an unreadable subfolder's reason;
+  - the host's walk bounded by the limit;
+  - a longer rename backoff;
+  - torn reads;
+  - other jobs' temporaries.
+- **Open:**
+  - the central directory is read in full before the entry count is checked (the job's memory cap contains it);
+  - an extraction into OneDrive still needs an Explorer check on a synced folder.
 
 ## Alternatives considered
 - **`ZipFile.ExtractToDirectory`.** Rejected: no hook for the name policy, the limits or links, and a partial result on failure.

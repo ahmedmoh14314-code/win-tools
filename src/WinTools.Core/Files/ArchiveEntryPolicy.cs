@@ -22,13 +22,6 @@ public static class ArchiveEntryPolicy
 {
     public const int MaxComponentLength = 255, MaxDepth = 32;
 
-    private static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
-        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "COM¹", "COM²", "COM³",
-        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "LPT¹", "LPT²", "LPT³",
-    };
-
     public static EntryVerdict Judge(string? entryName)
     {
         if (string.IsNullOrEmpty(entryName)) return Refuse("The entry has no name.");
@@ -52,7 +45,7 @@ public static class ArchiveEntryPolicy
             });
             if (cleaned != part) renamed = true;
             var stem = cleaned.Split('.')[0].TrimEnd(' ');
-            if (Reserved.Contains(stem)) { cleaned = "_" + cleaned; renamed = true; }
+            if (PathPolicy.IsDeviceName(stem)) { cleaned = "_" + cleaned; renamed = true; } // the same list PathPolicy refuses (COM0, LPT0 too)
             if (cleaned.Length > MaxComponentLength) return Refuse("A part of the name is longer than 255 characters.");
             parts.Add(cleaned);
         }
@@ -89,4 +82,55 @@ public static class ArchiveLimits
 
     /// <summary>Whether <paramref name="written"/> bytes from an entry of <paramref name="compressed"/> bytes is beyond the ratio.</summary>
     public static bool IsBomb(long written, long compressed) => written > RatioAfterBytes && written > Math.Max(compressed, 1) * MaxRatio;
+
+    /// <summary>
+    /// The same rule for the whole archive: everything written against the archive's own size. Entries may declare any
+    /// compressed size, or share one stored stream (overlapping entries), so the per-entry rule alone can be cheated
+    /// (evaluator, PR 5.1).
+    /// </summary>
+    public static bool IsArchiveBomb(long totalWritten, long archiveBytes) => IsBomb(totalWritten, archiveBytes);
+
+    /// <summary>
+    /// Counts what an extraction creates, files and folders alike (implicit parent folders included), against
+    /// <see cref="MaxEntries"/>: a small archive of nested folder names must not create millions of folders (evaluator,
+    /// PR 5.1). Also tells a file from a folder of the same name.
+    /// </summary>
+    public sealed class Budget(int max = MaxEntries)
+    {
+        private readonly HashSet<string> _folders = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _files = new(StringComparer.OrdinalIgnoreCase);
+
+        public int Created => _folders.Count + _files.Count;
+
+        /// <summary>Records a folder and its parents; false when that would pass the limit or a file has that name.</summary>
+        public bool AddFolder(string relative) => AddParents(relative, includeSelf: true);
+
+        /// <summary>Records a file and its parent folders; false past the limit, or when a folder or file has that name.</summary>
+        public bool AddFile(string relative)
+        {
+            if (_folders.Contains(relative) || _files.Contains(relative) || !AddParents(relative, includeSelf: false)) return false;
+            if (Created + 1 > max) return false;
+            _files.Add(relative);
+            return true;
+        }
+
+        /// <summary>Whether a name is already a file (the extractor then picks "name (1)").</summary>
+        public bool IsFile(string relative) => _files.Contains(relative);
+
+        private bool AddParents(string relative, bool includeSelf)
+        {
+            var parts = relative.Split('\\');
+            var count = includeSelf ? parts.Length : parts.Length - 1;
+            var path = "";
+            for (var i = 0; i < count; i++)
+            {
+                path = i == 0 ? parts[0] : path + "\\" + parts[i];
+                if (_files.Contains(path)) return false; // a file stands where a folder must go
+                if (_folders.Contains(path)) continue;
+                if (Created + 1 > max) return false;
+                _folders.Add(path);
+            }
+            return true;
+        }
+    }
 }

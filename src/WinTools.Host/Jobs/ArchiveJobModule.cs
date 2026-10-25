@@ -1,5 +1,6 @@
 using System.Globalization;
 using WinTools.Core.Capabilities;
+using WinTools.Core.Files;
 using WinTools.Core.Jobs;
 using WinTools.Core.Output;
 
@@ -47,7 +48,9 @@ internal sealed class ArchiveJobModule : IJobModule
 
     private static bool ZipHoldsUp(JobRequest request, JobResult result)
     {
-        if (result.Outputs is not [{ Sha256: { Length: 64 } claimed } output] || result.Facts.Count > 0) return false;
+        // The only fact a ZIP may carry is how many links were not followed, which the toast shows.
+        if (result.Outputs is not [{ Sha256: { Length: 64 } claimed } output]) return false;
+        if (result.Facts.Count > 0 && !(result.Facts is [{ Label: "Skipped", Notice: true }] && JobFacts.AreShowable(result.Facts))) return false;
         if (!ArchiveCapabilities.Candidates(ArchiveCapabilities.ZipId, request.Inputs, request.OutputDirectory).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
         using var file = new FileStream(output.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
         var head = new byte[4];
@@ -62,9 +65,11 @@ internal sealed class ArchiveJobModule : IJobModule
         if (result.Facts.FirstOrDefault(f => f.Label == "Files") is not { } files
             || !int.TryParse(files.Value, NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var count) || count < 0) return false;
         if (!ArchiveCapabilities.Candidates(ArchiveCapabilities.ExtractId, request.Inputs, request.OutputDirectory).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
+        // Only a real link is refused: OneDrive marks the files it syncs with a reparse point, and they are data. The walk
+        // stops past what an extraction may create, so a forged claim cannot send the host through a huge tree.
         var folder = new DirectoryInfo(output.Path);
-        if (!folder.Exists || folder.LinkTarget is not null || folder.Attributes.HasFlag(FileAttributes.ReparsePoint)) return false;
-        return string.Equals(FolderManifest.ShapeOf(output.Path), claimed, StringComparison.OrdinalIgnoreCase);
+        if (!folder.Exists || folder.LinkTarget is not null) return false;
+        return string.Equals(FolderManifest.ShapeOf(output.Path, ArchiveLimits.MaxEntries + 1), claimed, StringComparison.OrdinalIgnoreCase);
     }
 
     public IEnumerable<string> TempPathsOf(JobRequest request)

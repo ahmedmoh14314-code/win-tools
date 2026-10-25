@@ -23,11 +23,13 @@ public static class FolderManifest
     /// The shape of a folder tree (V2 PR 5.1): one SHA-256 over every entry's relative path, and each file's size, in
     /// ordinal order. Extraction can write 20 GB; the host checks the tree it finds is the one the worker reported without
     /// reading it all again. Null when the tree holds a link or junction, or more than <paramref name="maxEntries"/> entries.
+    /// Only a real link counts: OneDrive marks its files with a reparse point too, and they are ordinary data (evaluator,
+    /// PR 5.1).
     /// </summary>
     public static string? ShapeOf(string folder, int maxEntries = 200_000)
     {
         var root = new DirectoryInfo(folder);
-        if (!root.Exists || root.LinkTarget is not null || root.Attributes.HasFlag(FileAttributes.ReparsePoint)) return null;
+        if (!root.Exists || root.LinkTarget is not null) return null;
         var lines = new List<string>();
         var pending = new Stack<DirectoryInfo>([root]);
         while (pending.Count > 0)
@@ -35,7 +37,7 @@ public static class FolderManifest
             var dir = pending.Pop();
             foreach (var e in dir.EnumerateFileSystemInfos())
             {
-                if (e.LinkTarget is not null || e.Attributes.HasFlag(FileAttributes.ReparsePoint)) return null;
+                if (e.LinkTarget is not null) return null;
                 if (lines.Count >= maxEntries) return null;
                 var relative = Path.GetRelativePath(root.FullName, e.FullName).Replace('\\', '/');
                 if (e is DirectoryInfo d) { lines.Add(relative + "/"); pending.Push(d); }
