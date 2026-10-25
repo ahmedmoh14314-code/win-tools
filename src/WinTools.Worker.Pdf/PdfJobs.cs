@@ -75,7 +75,18 @@ internal static class PdfJobs
         var id = request.Id;
         if (id is not { Length: > 0 and <= 64 } || id.Any(c => !char.IsAsciiLetterOrDigit(c)))
             return JobResult.Fail("invalid", ErrorCode.InvalidRequest, "Request id must be 1-64 ASCII letters or digits.");
-        if (request.Parameters is { Count: > 0 }) return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters.");
+        // Only Protect and Remove protection take a parameter: the password, checked again here (ADR-0026). Its text never
+        // appears in a message.
+        string? password = null;
+        if (request.CapabilityId is PdfCapabilities.ProtectId or PdfCapabilities.UnprotectId)
+        {
+            if (request.Parameters is not { Count: 1 } p || !p.TryGetValue(PasswordPolicy.ParameterName, out var given))
+                return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command needs a password and nothing else.");
+            var check = PasswordPolicy.Check(given);
+            if (!check.Ok) return JobResult.Fail(id, ErrorCode.InvalidRequest, $"The password was refused: {check.Problem}");
+            password = check.Password!;
+        }
+        else if (request.Parameters is { Count: > 0 }) return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters.");
         if (request.Inputs.Count == 0 || !request.Inputs.All(PathPolicy.IsSupported) || request.Inputs.Any(Path.EndsInDirectorySeparator))
             return JobResult.Fail(id, ErrorCode.InvalidRequest, "Every input must be a supported file path.");
         if (request.OutputDirectory is { } od && !PathPolicy.IsSupported(Path.Combine(od, "x.pdf")))
@@ -103,6 +114,8 @@ internal static class PdfJobs
                 PdfCapabilities.OptimizeId => Optimize(request, work),
                 PdfCapabilities.LinearizeId => Linearize(request, work),
                 PdfCapabilities.RepairId => Repair(request, work),
+                PdfCapabilities.ProtectId => Protect(request, password!, work),
+                PdfCapabilities.UnprotectId => Unprotect(request, password!, work),
                 _ when PdfCapabilities.RotationOf(request.CapabilityId) is { } angle => Rotate(request, angle, work),
                 _ => JobResult.Fail(id, ErrorCode.UnsupportedOperation, "This worker does not run that command."),
             };
@@ -223,6 +236,111 @@ internal static class PdfJobs
     }
 
     private static bool RequiresPassword(Source source, string work) => Q(work, "--requires-password", source.Copy) is { TimedOut: false, ExitCode: QpdfRun.Success };
+
+    /// <summary>One qpdf run with its arguments on stdin (a password among them), retried like <see cref="Q"/>.</summary>
+    private static QpdfRun QS(string work, params string[] arguments)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var run = Qpdf.RunWithArgumentsOnStdin(arguments, QpdfTimeout, work);
+            if (!run.CouldNotOpen || attempt == 5) return run;
+            Thread.Sleep(200 * attempt);
+        }
+    }
+
+    /// <summary>qpdf's <c>--requires-password</c> (silent): 0 another password is needed, 2 not encrypted, 3 the one given (or none) opens it.</summary>
+    private const int PasswordNeeded = 0, NotEncrypted = 2, PasswordOpens = 3;
+
+    private static int PasswordStatus(string work, string file, string? password)
+    {
+        var run = password is null ? Q(work, "--requires-password", file) : QS(work, $"--password={password}", "--requires-password", file);
+        if (run.TimedOut) throw new PdfFailure(ErrorCode.WorkerTimeout, "The PDF took too long to read.");
+        return run.ExitCode is PasswordNeeded or NotEncrypted or PasswordOpens ? run.ExitCode
+            : throw new PdfFailure(run.EngineFailed ? ErrorCode.Internal : ErrorCode.DecodeFailed, "The PDF is damaged and could not be read.");
+    }
+
+    private static int PagesWith(string work, string file, string? password)
+    {
+        var run = password is null ? Q(work, "--show-npages", file) : QS(work, $"--password={password}", "--show-npages", file);
+        return run.Usable && int.TryParse(run.Output.AsSpan().Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var pages) && pages > 0 ? pages : -1;
+    }
+
+    /// <summary>
+    /// Protect (V2 PR 2.2, ADR-0026): AES-256 with the user's password to open it, a random owner password that is kept
+    /// nowhere, and no restrictions (the owner's decision). A PDF that is already encrypted is left alone. The copy must
+    /// need a password, open with this one, and have every page.
+    /// </summary>
+    private static JobResult Protect(JobRequest request, string password, string work)
+    {
+        var source = Stage(request.Inputs[0], work, "in-001.pdf");
+        if (PasswordStatus(work, source.Copy, null) != NotEncrypted)
+            return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "The PDF is already encrypted (protected, or restricted by its author).");
+        var (pages, _) = Open(source, work);
+        Destination(request, request.Inputs[0]);
+        const string produced = "out.pdf";
+        var owner = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(24));
+        var run = QS(work, source.Copy, "--encrypt", $"--user-password={password}", $"--owner-password={owner}", "--bits=256", "--", produced);
+        if (run.TimedOut) throw new PdfFailure(ErrorCode.WorkerTimeout, "The PDF took too long to process.");
+        if (!run.Usable) throw new PdfFailure(run.EngineFailed ? ErrorCode.Internal : ErrorCode.EncodeFailed, "The PDF engine could not write the result.");
+        if (PasswordStatus(work, produced, null) != PasswordNeeded || PasswordStatus(work, produced, password) != PasswordOpens
+            || PagesWith(work, produced, password) != pages)
+            throw new PdfFailure(ErrorCode.OutputValidationFailed, "The result did not check out; nothing was saved.");
+        return CommitFile(request, Path.Combine(work, produced), source.Zone, request.Inputs[0]);
+    }
+
+    /// <summary>
+    /// Remove protection (V2 PR 2.2, ADR-0026): only for a PDF that needs a password to open, and only with a password
+    /// that opens it. An author's restrictions are never removed (the owner's decision): a PDF that opens without a
+    /// password is refused, and so is one with restrictions unless the password given is the owner's (qpdf would drop
+    /// them with the open password alone). A wrong password is <see cref="ErrorCode.PasswordIncorrect"/>, never damage.
+    /// </summary>
+    private static JobResult Unprotect(JobRequest request, string password, string work)
+    {
+        var source = Stage(request.Inputs[0], work, "in-001.pdf");
+        switch (PasswordStatus(work, source.Copy, null))
+        {
+            case NotEncrypted: return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "The PDF is not protected.");
+            case PasswordOpens: return JobResult.Fail(request.Id, ErrorCode.UnsupportedContent, "The PDF opens without a password; its restrictions were set by its author, and WinTools does not remove them.");
+        }
+        if (PasswordStatus(work, source.Copy, password) != PasswordOpens)
+            return JobResult.Fail(request.Id, ErrorCode.PasswordIncorrect, "The password does not open the PDF.");
+        if (HasRestrictions(work, source.Copy, password) is var (restricted, ownerMatched) && restricted && !ownerMatched)
+            return JobResult.Fail(request.Id, ErrorCode.UnsupportedContent, "The PDF also has restrictions set by its author; only its owner password removes them, and WinTools does not remove them with the open password.");
+        var pages = PagesWith(work, source.Copy, password);
+        if (pages < 1) throw new PdfFailure(ErrorCode.DecodeFailed, "The PDF is damaged and could not be read.");
+        Destination(request, request.Inputs[0]);
+        const string produced = "out.pdf";
+        var run = QS(work, $"--password={password}", "--decrypt", source.Copy, produced);
+        if (run.TimedOut) throw new PdfFailure(ErrorCode.WorkerTimeout, "The PDF took too long to process.");
+        if (!run.Usable) throw new PdfFailure(run.EngineFailed ? ErrorCode.Internal : ErrorCode.EncodeFailed, "The PDF engine could not write the result.");
+        if (PasswordStatus(work, produced, null) != NotEncrypted || PagesWith(work, produced, null) != pages)
+            throw new PdfFailure(ErrorCode.OutputValidationFailed, "The result did not check out; nothing was saved.");
+        return CommitFile(request, Path.Combine(work, produced), source.Zone, request.Inputs[0]);
+    }
+
+    /// <summary>
+    /// Whether the author restricted anything (any capability off), and whether the password given is the owner's, from
+    /// qpdf's JSON of the encryption. That JSON carries no password: the key only with --show-encryption-key, which is
+    /// never passed, and no recovered user password for AES-256 (checked, PR 2.2). It is read and dropped, never logged.
+    /// </summary>
+    private static (bool Restricted, bool OwnerMatched) HasRestrictions(string work, string file, string password)
+    {
+        var run = QS(work, $"--password={password}", "--json=2", "--json-key=encrypt", file);
+        if (!run.Usable) throw new PdfFailure(ErrorCode.DecodeFailed, "The PDF is damaged and could not be read.");
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(run.Output);
+            var encrypt = doc.RootElement.GetProperty("encrypt");
+            var restricted = encrypt.GetProperty("capabilities").EnumerateObject().Any(c => c.Value.ValueKind == System.Text.Json.JsonValueKind.False);
+            var owner = encrypt.TryGetProperty("ownerpasswordmatched", out var o) && o.ValueKind == System.Text.Json.JsonValueKind.True;
+            return (restricted, owner);
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            // Not knowing means not removing: the safe answer is "restricted".
+            return (true, false);
+        }
+    }
 
     private static JobResult Info(string id, string path, string work)
     {
