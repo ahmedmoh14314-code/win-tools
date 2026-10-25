@@ -23,6 +23,8 @@ using WinTools.EndToEnd;
 // pdf.optimize, pdf.linearize, pdf.info...): a new PDF with the command's name, or the info panel; the source unchanged.
 // "zip" (V2 PR 5.1): tests/samples/photos-3.zip with an archive command (default archive.extract; --op archive.test,
 // archive.info): a new folder "photos" holding exactly the archive's tree, or the info panel; the archive unchanged.
+// "srt" (V2 PR 7.1): an Arabic SRT the harness writes, with a subtitle command (default subtitles.to-vtt; --op
+// subtitles.shift-plus-1000, subtitles.info...): a new subtitle file with the module's name, or the info panel.
 // "file" and "folder" (V2 PR 1.4, UX-009): a text file and a folder, each with File info by default (--op files.sha256
 // for a file): the info panel must appear, nothing may be written. Copy path is not run here: it would overwrite the
 // user's clipboard (unit-tested in FilesModuleTests; manual protocol in docs/testing/release-matrix.md).
@@ -90,6 +92,7 @@ var (sample, sourceName, defaultTarget) = scenario switch
     "folder" => ("", "holiday photos", ImageFormat.Unknown),
     "pdf" => ("pages-3.pdf", "report.pdf", ImageFormat.Unknown),
     "zip" => ("photos-3.zip", "photos.zip", ImageFormat.Unknown),
+    "srt" => ("", "film.srt", ImageFormat.Unknown),
     _ => ("quadrants-64x48.png", "photo.png", ImageFormat.Jpeg),
 };
 // The host runs with default settings, so the harness sees the same menu.
@@ -99,6 +102,7 @@ if (scenario == "photo") opArg ??= "compress.balanced";
 if (opArg is null && scenario is "file" or "folder") opArg = FilesCapabilities.InfoId;
 if (opArg is null && scenario == "pdf") opArg = PdfCapabilities.RotateRightId;
 if (opArg is null && scenario == "zip") opArg = ArchiveCapabilities.ExtractId;
+if (opArg is null && scenario == "srt") opArg = SubtitleCapabilities.ToVttId;
 var op = opArg is not null ? catalog.FirstOrDefault(o => o.Id == opArg) : target == ImageFormat.Unknown ? null : OperationCatalog.Convert(target);
 // Every module, as the host resolves them: the ring positions the harness aims at must be the host's.
 var resolver = CapabilityResolver.For(new AppSettings().CustomResizeId());
@@ -111,11 +115,13 @@ var outputFormat = op is null || !op.WritesFile ? ImageFormat.Unknown : op.Outpu
 var pdfFile = scenario == "pdf" && capability is { Module: PdfCapabilities.Module, Produces: CapabilityOutput.File };
 // Extract makes a folder named after the archive.
 var zipFolder = scenario == "zip" && capability?.Id == ArchiveCapabilities.ExtractId;
+var subtitleFile = scenario == "srt" && capability is { Module: SubtitleCapabilities.Module, Produces: CapabilityOutput.File };
 string? OutputNameFor(string path) => zipFolder ? Path.GetFileNameWithoutExtension(path)
+    : subtitleFile ? Path.GetFileName(SubtitleCapabilities.Candidates(capability!.Id, path, null).First())
     : pdfFile ? Path.GetFileName(OutputNaming.CandidatesWithExtension(path, ".pdf", PdfCapabilities.NameSuffix(capability!.Id)).First())
     : outputFormat == ImageFormat.Unknown ? null : Path.GetFileName(OutputNaming.Candidates(path, outputFormat, op!.NameSuffix).First());
-var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "batch" or "edge" || pdfFile || zipFolder;
-var expectOutput = producing && (outputFormat != ImageFormat.Unknown || pdfFile || zipFolder);
+var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "batch" or "edge" || pdfFile || zipFolder || subtitleFile;
+var expectOutput = producing && (outputFormat != ImageFormat.Unknown || pdfFile || zipFolder || subtitleFile);
 var stamp = DateTime.Now.ToString("HHmmss", System.Globalization.CultureInfo.InvariantCulture);
 var folder = Path.Combine(Path.GetTempPath(), "wintools-e2e", pathStyle == "unicode" ? $"{scenario} مجلد 😀 {stamp}" : $"{scenario}-{stamp}");
 if (pathStyle == "long")
@@ -134,6 +140,7 @@ var source = Path.Combine(folder, sourceName);
 var isFolder = scenario == "folder";
 if (isFolder) { Directory.CreateDirectory(source); File.WriteAllText(Path.Combine(source, "inside.txt"), "a file in the dropped folder"); }
 else if (sample.Length > 0) File.Copy(Path.Combine(AppContext.BaseDirectory, "samples", sample), source);
+else if (scenario == "srt") File.WriteAllText(source, "1\r\n00:00:01,000 --> 00:00:02,500\r\nمرحبا بكم 😀\r\n\r\n2\r\n00:00:03,000 --> 00:00:04,000\r\nإلى اللقاء\r\n\r\n");
 else File.WriteAllText(source, "plain text, not an image");
 // Remove metadata on a JPEG: give the copy a comment segment right after SOI, which the allow-list must drop.
 var metadataMarker = "wintools-e2e comment"u8.ToArray();
@@ -695,7 +702,9 @@ using (var explorer = opened)
                 && Directory.EnumerateFileSystemEntries(dir, "*", SearchOption.AllDirectories).Select(p => Path.GetRelativePath(dir, p)).Order(StringComparer.Ordinal)
                     .SequenceEqual(["2026", @"2026\a.txt", @"2026\b.txt", "notes.txt"])
                 && File.ReadAllText(Path.Combine(dir, "2026", "a.txt")) == "one\n";
-            var outputValid = output is not null && zipFolder ? ZipTreeValid(output!) : output is not null && File.ReadAllBytes(output) is var bytes && (pdfFile
+            bool SubtitleValid(string file) => File.ReadAllText(file, System.Text.Encoding.UTF8) is var t && t.Contains("مرحبا بكم 😀", StringComparison.Ordinal)
+                && (Path.GetExtension(file) == ".vtt" ? t.StartsWith("WEBVTT", StringComparison.Ordinal) : t.Contains(" --> ", StringComparison.Ordinal));
+            var outputValid = output is not null && zipFolder ? ZipTreeValid(output!) : output is not null && subtitleFile ? SubtitleValid(output!) : output is not null && File.ReadAllBytes(output) is var bytes && (pdfFile
                 ? bytes.AsSpan().StartsWith("%PDF-"u8) && bytes.AsSpan(Math.Max(0, bytes.Length - 1024)).IndexOf("%%EOF"u8) >= 0 // a whole PDF
                 : FileSignature.Detect(bytes) == outputFormat && ContainerCheck.IsComplete(bytes, outputFormat, out _)
                     && (!strip || bytes.AsSpan().IndexOf(metadataMarker) < 0)); // the comment is gone
@@ -727,8 +736,8 @@ using (var explorer = opened)
                 "photo" or "pdf" when expectNothing => output is null && accepted == 1 && toastShown == true && focusKept == true
                     && ev.Any(e => Ev(e) == "toast" && Data(e).TryGetProperty("kind", out var tk) && tk.GetString() == "Nothing")
                     && ev.Any(e => Ev(e) == "job.result" && Data(e).TryGetProperty("error", out var er) && er.GetString() == "NothingToDo"),
-                "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "file" or "folder" or "pdf" or "zip" when facts => output is null && infoShown && focusKept == true && accepted == 1,
-                "zip" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
+                "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "file" or "folder" or "pdf" or "zip" or "srt" when facts => output is null && infoShown && focusKept == true && accepted == 1,
+                "zip" or "srt" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 "pdf" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 // Corner: the trigger really was off-centre and deep in a sector, nothing opened before the centre was
