@@ -96,14 +96,28 @@ public sealed class SettingsSchemaTests
         Assert.Equal("Space", AppSettings.Defaults.TriggerKey);
     }
 
+    // The typing-interference spike (docs/research/2026-10-25-typing-interference.md, ADR-0021): Explorer ignored every
+    // key below during a drag, and the control without a drag showed that the probe sees F2, F3, F4, F6, F10, F11 and
+    // type-ahead when Explorer does act. F5's refresh is invisible to the probe, so it stays unproven. Letters and digits
+    // passed in Explorer but are refused: the ring opens on any left-button drag, so a letter pressed while holding the
+    // mouse in another program (a game, a drawing) would open it there.
     [Theory]
     [InlineData("Space", true)]
+    [InlineData("F2", true)]
+    [InlineData("F3", true)]
+    [InlineData("F4", true)]
+    [InlineData("F6", true)]
+    [InlineData("F7", true)]
     [InlineData("F8", true)]
+    [InlineData("F10", true)]
+    [InlineData("F11", true)]
     [InlineData("F12", true)]
     [InlineData("F1", false)]
-    [InlineData("F2", false)]
     [InlineData("F5", false)]
     [InlineData("A", false)]
+    [InlineData("Q", false)]
+    [InlineData("1", false)]
+    [InlineData("Ctrl", false)]
     public void Every_key_offered_or_refused_has_a_reason(string key, bool allowed)
     {
         var verdict = TriggerKeyPolicy.Judge(key);

@@ -42,7 +42,7 @@
               <StackPanel Margin="0,0,16,0">
                 <TextBlock Text="Activation key" />
                 <TextBlock Style="{StaticResource Hint}" Text="While dragging files, press this key to open the menu." />
-                <TextBlock Style="{StaticResource Hint}" Text="Keys Explorer uses, such as F2 (rename) or letters (type to select), are not offered until tested during a drag." />
+                <TextBlock Style="{StaticResource Hint}" Text="Not offered: F1 (opens Help), F5 (refreshes Explorer), and letters or digits (they would open the menu while you hold the mouse in games or drawing programs)." />
               </StackPanel>
               <ComboBox x:Name="TriggerKey" Grid.Column="1" Width="120" Height="32" VerticalAlignment="Center" AutomationProperties.Name="Activation key" />
             </Grid>
