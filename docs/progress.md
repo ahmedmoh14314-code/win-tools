@@ -3,10 +3,10 @@
 Keep this a snapshot, not a diary. Update at the end of every session (workflow step 13).
 
 ## Current phase
-**V2 ("Files", 0.2.0 Beta) in progress: Stages 0 and 1 done; Archives, Subtitles and Documents partly done; PDF partly done.**
-- The plan is `docs/plans/2026-10-23-v2-technical-plan.md`, with one PR per slice.
-- **V2 is not complete.** §15's Definition of Done is not met (see "Not done" below).
-- **No 0.2.0 release or tag exists.** V3 (Media) has not started.
+**0.2.0 Beta, Tangerine parity (owner direction, 2026-10-25): one release with media included; no V2/V3 split.**
+- Flow: drag → trigger → a contextual wheel (Convert / Tools / Actions and the module's own groups) → drop. English and Arabic (RTL).
+- Mature engines over in-house work; obscure cases are documented, not chased.
+- **No 0.2.0 release or tag exists yet.** Remaining work is listed under "Not done".
 
 | PR | Slice | State |
 |---|---|---|
@@ -22,6 +22,12 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 | #27 | Documents 6.2: Remove properties (ADR-0025 decision 6) | Merged |
 | #28–#30 | Checkpoint docs and release-matrix rows; portable ZIP names; the dialog-focus spike | Merged |
 | #31 | PDF 2.2: Protect and Remove protection, the password dialog and the secret channel (ADR-0026) | Merged |
+| #33 | Encrypted ZIP extract with the password dialog (ADR-0027) | Merged |
+| #34 | General Files 7.2: Batch rename with a preview, Copy name, Folder path | Merged |
+| #35 | The WinTools window (Home, How to use, Features, Settings, About), the first-run tour, English and Arabic | Merged |
+| #36 | Media: FFmpeg 8.1.3 LGPL, video and audio convert, compress, edit, info (ADR-0028) | Merged |
+| #37 | The wheel as Convert / Tools / Actions; the wheel, toasts, dialogs and panels in Arabic (RTL) | Open at this writing |
+| #38 | Forms: Trim, Split, a custom subtitle shift, video crop presets | This PR |
 
 ## Last known-good commit
 - `main` at `fe01125`, the merge of #31, with CI `build-and-test` green.
@@ -51,6 +57,10 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 - The release matrix (`tests/WinTools.EndToEnd/Run-ReleaseMatrix.ps1`) now has rows for every V2 module.
   - PDF Optimize has no row: the sample is already compact, so the command rightly answers "nothing to do" while the harness expects a file.
 
+## Done since #31 (with evidence)
+- **Forms** (#38): `FormTests`, `MediaWorkerTests` (Trim, Split, Crop on the bundled FFmpeg), `DialogsProcessTests` (the form opens in both languages). Explorer: Trim video 10/10, Trim audio 10/10, Shift… 10/10, Crop 1:1 3/3.
+- **Arabic** (#37): every wheel label fits at 96–192 DPI in both languages (`ArabicWheelTests`, `UiSurfaceTests`); the ring, toasts and info panel checked by eye with `WinTools.Preview --lang ar`.
+
 ## Not done (V2 Definition of Done, §9 and §15)
 - **PDF:**
   - PDFium rendering, text and image extraction (3.x);
@@ -60,15 +70,13 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 - **Documents:** TXT/Markdown/CSV → PDF (needs the rendering backend); the optional external converter.
 - **Archives:**
   - TAR/GZ create;
-  - encrypted-ZIP extract (password dialog);
   - 7z/RAR extract (SharpCompress review);
   - batch extraction.
-- **General Files:**
-  - batch rename (7.2, needs its dialog);
-  - copy name and folder;
-  - MD5.
+- **General Files:** MD5; Copy/Move to a folder, Terminal here, Share, a shelf.
 - **Settings V2 extras:** module defaults and conflict detection beyond the trigger policy.
-- **Subtitles:** custom offset (needs the dialog); ASS/SSA.
+- **Subtitles:** ASS/SSA; TXT export.
+- **Images:** HEIC/AVIF, SVG, crop, edit, annotate, redact, collage, Images→PDF.
+- **Wheel:** keyboard navigation; letter triggers (only after the typing-interference test).
 - **Stage 8 hardening:**
   - fuzzing per parser;
   - soak;
@@ -76,7 +84,6 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
   - the performance pass (the TAR double read is recorded: Info on a 400 MB TAR.GZ, 1.8 s);
   - the licence CI gate.
 - **Stage 9:** the acceptance gate, the installed-artifact matrix, the 0.2.0 Beta installer.
-- **V3 Media (FFmpeg):** not started. It needs an LGPL-configured build and its licence review first.
 
 ## Decisions made
 ADR-0017 to ADR-0025 (see `docs/adr/README.md`). ADR-0018 to ADR-0025 are **Proposed**: they need the owner's acceptance.
