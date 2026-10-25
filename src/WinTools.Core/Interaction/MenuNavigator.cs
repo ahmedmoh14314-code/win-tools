@@ -36,7 +36,8 @@ public sealed class MenuNavigator
     /// <summary>Minimum time a ring of commands must have been on screen before a drop on it runs.</summary>
     public static readonly TimeSpan ArmDelay = TimeSpan.FromMilliseconds(150);
 
-    public const string BackLabel = "Back";
+    /// <summary>"Back", in the language in use.</summary>
+    public static string BackLabel => Localization.UiText.TOr("menu.back", "Back");
 
     private readonly IReadOnlyList<MenuGroup> _groups;
     private readonly string[] _groupLabels;

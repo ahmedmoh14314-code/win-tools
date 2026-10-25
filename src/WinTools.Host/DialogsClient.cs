@@ -72,6 +72,7 @@ internal sealed class DialogsClient(string dialogsExe)
             StandardInputEncoding = new UTF8Encoding(false),
             StandardOutputEncoding = Encoding.UTF8,
             WorkingDirectory = Path.GetDirectoryName(dialogsExe)!,
+            ArgumentList = { "--lang", WinTools.Core.Localization.UiText.Language },
         };
         Process process;
         try { process = Process.Start(psi) ?? throw new InvalidOperationException("Process.Start returned null."); }

@@ -32,7 +32,7 @@ public static class PdfCapabilities
         new("optimize", "Optimize", "compress", 25),
         new("rotate", "Rotate", "rotate", 40),
         new("protect", "Protect", "protect", 60),
-        new("tools", "Tools", "tools", 90),
+        new("tools", "Tools", "tools", 11), // Convert, then Tools, then the module's own groups, Actions last (Tangerine's order)
     ];
 
     private static readonly IReadOnlySet<string> PdfOnly = new HashSet<string>(StringComparer.Ordinal) { FileKinds.Pdf.Id };
@@ -63,7 +63,7 @@ public static class PdfCapabilities
         new(ProtectId, "Protect…", "protect", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File,
             LongRunning: true, Feedback: new("Protecting", "protect", "Protected with a password", "Already encrypted", "PDF", "PDFs"),
             Prompt: new("Protect with a password", Confirm: true)),
-        new(UnprotectId, "Remove protection…", "protect", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File,
+        new(UnprotectId, "Unlock…", "protect", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File,
             LongRunning: true, Feedback: new("Removing the protection of", "remove the protection of", "Protection removed", "Not protected", "PDF", "PDFs"),
             Prompt: new("Remove the password", Confirm: false)),
     ];

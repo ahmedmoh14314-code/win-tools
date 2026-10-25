@@ -20,7 +20,7 @@ public static class DocumentCapabilities
     public static IReadOnlyList<CapabilityCategory> Categories { get; } =
     [
         new("convert", "Convert", "convert", 10),
-        new("tools", "Tools", "tools", 90),
+        new("tools", "Tools", "tools", 11), // Convert, then Tools, then the module's own groups, Actions last (Tangerine's order)
     ];
 
     private static readonly IReadOnlySet<string> Office = new HashSet<string>(StringComparer.Ordinal) { FileKinds.Docx.Id, FileKinds.Xlsx.Id, FileKinds.Pptx.Id };
@@ -29,10 +29,11 @@ public static class DocumentCapabilities
     [
         new(ExtractTextId, "Extract text", "convert", Module, new InputRule(Office), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Extracting text from", "extract the text of", "Text extracted", "There is no text to extract", "document", "documents")),
-        new(InfoId, "Document info", "tools", Module, new InputRule(Office), CapabilityShape.PerFile, CapabilityOutput.Facts, LongRunning: false,
-            Feedback: new("Reading", "read", "Read", "Nothing needed doing", "document", "documents")),
+        // Remove properties first: its long word fits the first sector of the ring, not the second.
         new(RemovePropertiesId, "Remove properties", "tools", Module, new InputRule(Office), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Removing properties from", "remove the properties of", "Properties removed", "There were no properties to remove", "document", "documents")),
+        new(InfoId, "Document info", "tools", Module, new InputRule(Office), CapabilityShape.PerFile, CapabilityOutput.Facts, LongRunning: false,
+            Feedback: new("Reading", "read", "Read", "Nothing needed doing", "document", "documents")),
     ];
 
     /// <summary>Extract text's output names: "report (text).txt", "report (text) (1).txt"...</summary>

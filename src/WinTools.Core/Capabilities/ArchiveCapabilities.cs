@@ -19,7 +19,7 @@ public static class ArchiveCapabilities
     public static IReadOnlyList<CapabilityCategory> Categories { get; } =
     [
         new("archive", "Archive", "archive", 12),
-        new("tools", "Tools", "tools", 90),
+        new("actions", "Actions", "actions", 95),
     ];
 
     /// <summary>The archives Extract, Test and Info read (V2 PR 5.2 adds TAR and TAR.GZ).</summary>
@@ -45,7 +45,7 @@ public static class ArchiveCapabilities
             LongRunning: true, Feedback: new("Decompressing", "decompress", "Decompressed", "Nothing to decompress", "file", "files")),
         new(InfoId, "Archive info", "archive", Module, new InputRule(ZipOnly), CapabilityShape.PerFile, CapabilityOutput.Facts,
             LongRunning: false, Feedback: new("Reading", "read", "Read", "Nothing needed doing", "archive", "archives")),
-        new(ZipId, "Add to ZIP", "tools", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.File,
+        new(ZipId, "Add to ZIP", "actions", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.File,
             LongRunning: true, Feedback: new("Compressing", "compress", "ZIP created", "Nothing to add", "item", "items")),
     ];
 

@@ -8,6 +8,7 @@ namespace WinTools.Core.Tests;
 /// The product's text in English and Arabic (V2 app shell): both tables are complete, their placeholders agree, the
 /// language follows the setting or Windows, and the settings file keeps the language and the tour's state.
 /// </summary>
+[Collection("Language")]
 public sealed partial class LocalizationTests
 {
     [Fact]

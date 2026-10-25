@@ -1,6 +1,7 @@
 using System.Text;
 using System.Windows;
 using WinTools.Core.Jobs;
+using WinTools.Core.Localization;
 
 namespace WinTools.Dialogs;
 
@@ -14,6 +15,10 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // The host's language ("--lang en|ar"): every window speaks it, Arabic right to left.
+        for (var i = 0; i + 1 < e.Args.Length; i++) if (e.Args[i] == "--lang") UiText.Use(e.Args[i + 1]);
+        FrameworkElement.FlowDirectionProperty.OverrideMetadata(typeof(Window),
+            new FrameworkPropertyMetadata(UiText.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight, FrameworkPropertyMetadataOptions.Inherits));
         var line = ReadRequestLine();
         if (WorkerProtocol.Deserialize<DialogEnvelope>(line)?.Kind == DialogKinds.Rename)
         {

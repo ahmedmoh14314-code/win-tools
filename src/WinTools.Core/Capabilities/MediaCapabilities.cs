@@ -33,7 +33,7 @@ public static class MediaCapabilities
         new("compress", "Compress", "compress", 20),
         new("edit", "Edit", "edit", 30),
         new("sound", "Audio", "sound", 50),
-        new("tools", "Tools", "tools", 90),
+        new("tools", "Tools", "tools", 11), // Convert, then Tools, then the module's own groups, Actions last (Tangerine's order)
     ];
 
     /// <summary>A target format: its id suffix, label, extension, and the kinds that already are it (no "To MP4" on an MP4).</summary>

@@ -2,6 +2,7 @@ using System.Globalization;
 using WinTools.Core.Capabilities;
 using WinTools.Core.Files;
 using WinTools.Core.Jobs;
+using WinTools.Core.Localization;
 
 namespace WinTools.Core.Feedback;
 
@@ -16,7 +17,8 @@ public sealed record JobItem(string SourceName, JobResult Result, long? SourceBy
 
 /// <summary>
 /// The words shown to the user when a batch ends. Short, plain and actionable: the outcome first, the reason in the
-/// user's terms (never an error code, a stack trace or a full path). The detailed result stays in the local log.
+/// user's terms (never an error code, a stack trace or a full path). The detailed result stays in the local log. Every
+/// sentence comes from <see cref="UiText"/>; the English tables hold today's English exactly.
 /// </summary>
 public static class FeedbackText
 {
@@ -38,34 +40,34 @@ public static class FeedbackText
             var item = items[0];
             if (item.Result.Success)
                 // A believed success may carry a notice the user must see (entries skipped or renamed in an archive).
-                return new(FeedbackKind.Success, words.SuccessTitle ?? $"{OutputName(item)} created",Join(Join(words.Done, Sizes(words, item)), Notices(item)));
+                return new(FeedbackKind.Success, words.SuccessTitle ?? UiText.F("toast.created", OutputName(item)), Join(Join(words.Done, Sizes(words, item)), Notices(item)));
             if (item.Result.Error == ErrorCode.NothingToDo)
-                return new(FeedbackKind.Nothing, "Nothing to change", words.NothingReason);
-            return new(FeedbackKind.Failure, $"Could not {words.Verb} {item.SourceName}", Reason(item.Result.Error, words));
+                return new(FeedbackKind.Nothing, UiText.T("toast.nothing"), words.NothingReason);
+            return new(FeedbackKind.Failure, UiText.F("toast.couldNot", words.Verb, item.SourceName), Reason(item.Result.Error, words));
         }
 
         var n = items.Count;
         if (failed.Length == 0 && unchanged.Length == 0)
-            return new(FeedbackKind.Success, $"{Images(n)} completed", Join(words.Done, TotalSizes(words, ok)));
+            return new(FeedbackKind.Success, UiText.F("toast.completed", Images(n)), Join(words.Done, TotalSizes(words, ok)));
         if (ok.Length == 0 && failed.Length == 0)
-            return new(FeedbackKind.Nothing, "Nothing to change", $"{words.NothingReason} ({Images(n)})");
+            return new(FeedbackKind.Nothing, UiText.T("toast.nothing"), $"{words.NothingReason} ({Images(n)})");
         if (ok.Length == 0 && unchanged.Length == 0)
-            return new(FeedbackKind.Failure, $"Could not {words.Verb} {Images(n)}", MostCommonReason(failed, words));
+            return new(FeedbackKind.Failure, UiText.F("toast.couldNot", words.Verb, Images(n)), MostCommonReason(failed, words));
 
         var parts = new List<string>();
         if (words.Savings && TotalSizes(words, ok) is { } sizes) parts.Add(sizes); // what was saved is the point
-        if (failed.Length > 0) parts.Add($"{failed.Length} failed: {MostCommonReason(failed, words).TrimEnd('.')}");
-        if (unchanged.Length > 0) parts.Add(words.Savings ? $"{unchanged.Length} already optimized" : $"{unchanged.Length} unchanged");
+        if (failed.Length > 0) parts.Add(UiText.F("toast.failed", failed.Length, MostCommonReason(failed, words).TrimEnd('.')));
+        if (unchanged.Length > 0) parts.Add(UiText.F(words.Savings ? "toast.alreadyOptimized" : "toast.unchanged", unchanged.Length));
         var kind = failed.Length > 0 ? FeedbackKind.Partial : FeedbackKind.Success;
-        return new(kind, $"{Images(ok.Length)} of {n} completed", string.Join(" · ", parts));
+        return new(kind, UiText.F("toast.someCompleted", Images(ok.Length), n), string.Join(" · ", parts));
     }
 
     /// <summary>
     /// What a command that fills the clipboard says (Copy path): what it copied, for how many items, or why it could not.
     /// </summary>
     public static FeedbackMessage Copied(FeedbackWords words, JobItem item) => item.Result.Success
-        ? new(FeedbackKind.Success, item.Inputs == 1 ? words.Done : $"{words.Count(item.Inputs)} copied", item.SourceName)
-        : new(FeedbackKind.Failure, $"Could not {words.Verb} {(item.Inputs == 1 ? $"the {words.Noun}" : words.Count(item.Inputs))}", Reason(item.Result.Error, words));
+        ? new(FeedbackKind.Success, item.Inputs == 1 ? words.Done : UiText.F("toast.copied", words.Count(item.Inputs)), item.SourceName)
+        : new(FeedbackKind.Failure, item.Inputs == 1 ? UiText.F("toast.couldNotThe", words.Verb, words.Noun) : UiText.F("toast.couldNot", words.Verb, words.Count(item.Inputs)), Reason(item.Result.Error, words));
 
     /// <summary>What the operation is doing, for the progress toast ("Converting").</summary>
     public static string Working(Operation op) => op.Kind switch
@@ -114,45 +116,33 @@ public static class FeedbackText
     public static string Reason(ErrorCode error, FeedbackWords words) =>
         words.Reasons is { } own && own.TryGetValue(error, out var reason) ? reason : ModuleReason(error, words);
 
-    private static string ModuleReason(ErrorCode error, FeedbackWords words) => words.Noun == "image" ? Reason(error) : error switch
+    private static string ModuleReason(ErrorCode error, FeedbackWords words) => words.Noun is "image" or "صورة" ? Reason(error) : error switch
     {
-        ErrorCode.InputTooLarge => $"The {words.Noun} is larger than this command accepts.",
-        ErrorCode.ContentMismatch => $"The file is not a {words.Noun}, whatever its name says.",
-        ErrorCode.UnsupportedContent => $"This kind of {words.Noun} is not supported.",
-        ErrorCode.DecodeFailed => $"The {words.Noun} is damaged or incomplete.",
-        ErrorCode.EncodeFailed or ErrorCode.OutputValidationFailed => "The result could not be written correctly. Nothing was saved.",
-        ErrorCode.OutputNameInvalid or ErrorCode.NoFreeOutputName => "No free name for the result in that folder.",
-        ErrorCode.PasswordRequired => words.PasswordRequired ?? $"The {words.Noun} is protected with a password. Remove the protection first.",
-        ErrorCode.PasswordIncorrect => $"The password does not open the {words.Noun}. Nothing was changed.",
-        ErrorCode.LimitExceeded => $"The {words.Noun} is beyond what this command handles (for example too many pages).",
+        ErrorCode.InputTooLarge => UiText.F("reasonm.InputTooLarge", words.Noun),
+        ErrorCode.ContentMismatch => UiText.F("reasonm.ContentMismatch", words.Noun),
+        ErrorCode.UnsupportedContent => UiText.F("reasonm.UnsupportedContent", words.Noun),
+        ErrorCode.DecodeFailed => UiText.F("reasonm.DecodeFailed", words.Noun),
+        ErrorCode.EncodeFailed or ErrorCode.OutputValidationFailed => UiText.T("reasonm.EncodeFailed"),
+        ErrorCode.OutputNameInvalid or ErrorCode.NoFreeOutputName => UiText.T("reasonm.NoFreeOutputName"),
+        ErrorCode.PasswordRequired => words.PasswordRequired ?? UiText.F("reasonm.PasswordRequired", words.Noun),
+        ErrorCode.PasswordIncorrect => UiText.F("reasonm.PasswordIncorrect", words.Noun),
+        ErrorCode.LimitExceeded => UiText.F("reasonm.LimitExceeded", words.Noun),
         _ => Reason(error),
     };
 
     /// <summary>The reason for a failure, in the user's terms.</summary>
-    public static string Reason(ErrorCode error) => error switch
+    public static string Reason(ErrorCode error) => UiText.T("reason." + error switch
     {
-        ErrorCode.SourceNotFound => "The file is no longer there.",
-        ErrorCode.SourceNotReadable => "The file could not be read. It may be open in another program or offline.",
-        ErrorCode.InputTooLarge => "The file is larger than 256 MB.",
-        ErrorCode.ImageTooLarge => "The image is larger than 50 megapixels.",
-        ErrorCode.ContentMismatch => "The file's content does not match its name.",
-        ErrorCode.UnsupportedContent => "This kind of image is not supported (for example animated, multi-page or 16-bit).",
-        ErrorCode.UnsupportedOperation => "This command does not apply to this file.",
-        ErrorCode.DecodeFailed => "The image is damaged or incomplete.",
-        ErrorCode.EncodeFailed or ErrorCode.OutputValidationFailed => "The new image could not be written correctly. Nothing was saved.",
-        ErrorCode.OutputDirectoryNotWritable => "The output folder cannot be written to.",
-        ErrorCode.OutputDirectoryIsLink => "The output folder is a link; for safety nothing is written there.",
-        ErrorCode.OutputNameInvalid or ErrorCode.NoFreeOutputName => "No free name for the new file in that folder.",
-        ErrorCode.DiskFull => "The disk is full.",
-        ErrorCode.WorkerTimeout => "It took too long and was stopped.",
-        ErrorCode.WorkerCrashed or ErrorCode.WorkerProtocolError => "The worker stopped unexpectedly. The original is unchanged.",
-        ErrorCode.Cancelled => "The job was cancelled.",
-        ErrorCode.InvalidRequest => "The file's path is not supported.",
-        ErrorCode.IsAFolder => "It is a folder; this command works on files.",
-        ErrorCode.ClipboardUnavailable => "Another program is using the clipboard. Try again.",
-        ErrorCode.OnlineOnly => "The file is stored online only. Open it once so Windows downloads it, then try again.",
-        _ => "Something went wrong. The original is unchanged.",
-    };
+        ErrorCode.SourceNotFound or ErrorCode.SourceNotReadable or ErrorCode.InputTooLarge or ErrorCode.ImageTooLarge or ErrorCode.ContentMismatch
+            or ErrorCode.UnsupportedContent or ErrorCode.UnsupportedOperation or ErrorCode.DecodeFailed or ErrorCode.EncodeFailed
+            or ErrorCode.OutputDirectoryNotWritable or ErrorCode.OutputDirectoryIsLink or ErrorCode.NoFreeOutputName or ErrorCode.DiskFull
+            or ErrorCode.WorkerTimeout or ErrorCode.WorkerCrashed or ErrorCode.Cancelled or ErrorCode.InvalidRequest or ErrorCode.IsAFolder
+            or ErrorCode.ClipboardUnavailable or ErrorCode.OnlineOnly => error.ToString(),
+        ErrorCode.OutputValidationFailed => nameof(ErrorCode.EncodeFailed),
+        ErrorCode.OutputNameInvalid => nameof(ErrorCode.NoFreeOutputName),
+        ErrorCode.WorkerProtocolError => nameof(ErrorCode.WorkerCrashed),
+        _ => "Other",
+    });
 
     private static string MostCommonReason(IEnumerable<JobItem> failed, FeedbackWords words) =>
         Reason(failed.GroupBy(f => f.Result.Error).OrderByDescending(g => g.Count()).First().Key, words);
@@ -175,7 +165,7 @@ public static class FeedbackText
     {
         if (before <= 0) return "";
         var pct = (int)Math.Round((after - before) * 100.0 / before);
-        if (words.Savings && pct < 0) return string.Create(CultureInfo.InvariantCulture, $", saved {-pct}%");
+        if (words.Savings && pct < 0) return UiText.F("toast.saved", -pct);
         return pct == 0 ? "" : string.Create(CultureInfo.InvariantCulture, $" ({(pct > 0 ? "+" : "−")}{Math.Abs(pct)}%)");
     }
 
@@ -187,7 +177,7 @@ public static class FeedbackText
 
     public static string Size(long bytes) => bytes switch
     {
-        < 1024 => string.Create(CultureInfo.InvariantCulture, $"{bytes} bytes"),
+        < 1024 => UiText.F("size.bytes", bytes),
         < 1024 * 1024 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1024.0:0.#} KB"),
         < 1024L * 1024 * 1024 => string.Create(CultureInfo.InvariantCulture, $"{bytes / (1024.0 * 1024):0.##} MB"),
         _ => string.Create(CultureInfo.InvariantCulture, $"{bytes / (1024.0 * 1024 * 1024):0.##} GB"),
