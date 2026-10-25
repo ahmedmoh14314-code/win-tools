@@ -96,24 +96,25 @@ public sealed class SettingsSchemaTests
         Assert.Equal("Space", AppSettings.Defaults.TriggerKey);
     }
 
-    // The typing-interference spike (docs/research/2026-10-25-typing-interference.md, ADR-0021): Explorer ignored every
-    // key below during a drag, and the control without a drag showed that the probe sees F2, F3, F4, F6, F10, F11 and
-    // type-ahead when Explorer does act. F5's refresh is invisible to the probe, so it stays unproven. Letters and digits
-    // passed in Explorer but are refused: the ring opens on any left-button drag, so a letter pressed while holding the
-    // mouse in another program (a game, a drawing) would open it there.
+    // The typing-interference spike (docs/research/2026-10-25-typing-interference.md, ADR-0021). Explorer ignored F2-F12,
+    // letters and digits during a drag, but a key held past the drop repeats into Explorer, and with Ctrl, Shift or Alt
+    // it is another shortcut (Alt+F4, Shift+F10); neither was measured. Offered: only keys that do nothing in Explorer if
+    // they reach it (Space, F7, F8, F9, F12). F2-F4, F6, F10 and F11 rename, search, focus, open the menu or go full
+    // screen; F5 refreshes; F1 opens Help; letters and digits would open the ring over games and drawing programs.
     [Theory]
     [InlineData("Space", true)]
-    [InlineData("F2", true)]
-    [InlineData("F3", true)]
-    [InlineData("F4", true)]
-    [InlineData("F6", true)]
     [InlineData("F7", true)]
     [InlineData("F8", true)]
-    [InlineData("F10", true)]
-    [InlineData("F11", true)]
+    [InlineData("F9", true)]
     [InlineData("F12", true)]
     [InlineData("F1", false)]
+    [InlineData("F2", false)]
+    [InlineData("F3", false)]
+    [InlineData("F4", false)]
     [InlineData("F5", false)]
+    [InlineData("F6", false)]
+    [InlineData("F10", false)]
+    [InlineData("F11", false)]
     [InlineData("A", false)]
     [InlineData("Q", false)]
     [InlineData("1", false)]
@@ -123,8 +124,13 @@ public sealed class SettingsSchemaTests
         var verdict = TriggerKeyPolicy.Judge(key);
         Assert.Equal(allowed, verdict.Allowed);
         if (!allowed) Assert.False(string.IsNullOrWhiteSpace(verdict.Reason));
+        if (!allowed) Assert.NotEqual(TriggerKeyPolicy.Judge("NoSuchKey").Reason, verdict.Reason); // each refusal has its own reason, never the fallback
         Assert.Equal(allowed, AppSettings.TriggerKeys.ContainsKey(key));
     }
+
+    [Fact]
+    public void The_window_lists_the_keys_in_a_fixed_order() =>
+        Assert.Equal(["Space", "F7", "F8", "F9", "F12"], TriggerKeyPolicy.Order);
 
     [Fact]
     public void Only_allowed_keys_are_trigger_keys() =>

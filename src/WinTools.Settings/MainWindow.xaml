@@ -42,7 +42,7 @@
               <StackPanel Margin="0,0,16,0">
                 <TextBlock Text="Activation key" />
                 <TextBlock Style="{StaticResource Hint}" Text="While dragging files, press this key to open the menu." />
-                <TextBlock Style="{StaticResource Hint}" Text="Not offered: F1 (opens Help), F5 (refreshes Explorer), and letters or digits (they would open the menu while you hold the mouse in games or drawing programs)." />
+                <TextBlock Style="{StaticResource Hint}" Text="Only keys that do nothing in Explorer are offered: F2-F6, F10 and F11 act on Explorer if pressed after the drop, and letters or digits would open the menu while you hold the mouse in games or drawing programs." />
               </StackPanel>
               <ComboBox x:Name="TriggerKey" Grid.Column="1" Width="120" Height="32" VerticalAlignment="Center" AutomationProperties.Name="Activation key" />
             </Grid>
