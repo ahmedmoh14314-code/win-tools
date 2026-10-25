@@ -32,6 +32,8 @@ using WinTools.EndToEnd;
 // "docx" (V2 PR 6.1, 6.2): a small Word document the harness builds, with Extract text (default), Document info (--op
 // documents.info) or Remove properties (--op documents.clean): a new "report (text).txt" holding its text, the info
 // panel, or "report (no properties).docx" without its properties; the document unchanged.
+// "rename" (V2 PR 7.2): "notes.txt" dropped on Batch rename: "2026 " is typed into the real dialog's first box and Enter
+// pressed; the file must then be "2026 notes.txt" with the same content, and nothing else in the folder.
 // "file" and "folder" (V2 PR 1.4, UX-009): a text file and a folder, each with File info by default (--op files.sha256
 // for a file): the info panel must appear, nothing may be written. Copy path is not run here: it would overwrite the
 // user's clipboard (unit-tested in FilesModuleTests; manual protocol in docs/testing/release-matrix.md).
@@ -97,7 +99,7 @@ var (sample, sourceName, defaultTarget) = scenario switch
     "tif" => ("quadrants-64x48.tif", "photo.tif", ImageFormat.Jpeg),
     "webp" => ("quadrants-64x48.webp", "photo.webp", ImageFormat.Png),
     "photo" => ("photo-960x720.jpg", "photo.jpg", ImageFormat.Jpeg),
-    "unsupported" or "file" => ("", "notes.txt", ImageFormat.Unknown),
+    "unsupported" or "file" or "rename" => ("", "notes.txt", ImageFormat.Unknown),
     "folder" => ("", "holiday photos", ImageFormat.Unknown),
     "pdf" => ("pages-3.pdf", "report.pdf", ImageFormat.Unknown),
     "zip" => ("photos-3.zip", "photos.zip", ImageFormat.Unknown),
@@ -112,6 +114,7 @@ var catalog = ImageCapabilities.Operations(new AppSettings().CustomResizeId());
 var target = targetArg is null ? defaultTarget : Enum.Parse<ImageFormat>(targetArg, ignoreCase: true);
 if (scenario == "photo") opArg ??= "compress.balanced";
 if (opArg is null && scenario is "file" or "folder") opArg = FilesCapabilities.InfoId;
+if (opArg is null && scenario == "rename") opArg = FilesCapabilities.RenameId;
 if (opArg is null && scenario == "pdf") opArg = PdfCapabilities.RotateRightId;
 if (opArg is null && scenario is "zip" or "tgz" or "lockedzip") opArg = ArchiveCapabilities.ExtractId;
 if (opArg is null && scenario == "srt") opArg = SubtitleCapabilities.ToVttId;
@@ -137,8 +140,8 @@ string? OutputNameFor(string path) => zipFolder ? (path.EndsWith(".tar.gz", Stri
     : documentClean ? Path.GetFileName(DocumentCapabilities.CleanCandidates(path, null).First())
     : pdfFile ? Path.GetFileName(OutputNaming.CandidatesWithExtension(path, ".pdf", PdfCapabilities.NameSuffix(capability!.Id)).First())
     : outputFormat == ImageFormat.Unknown ? null : Path.GetFileName(OutputNaming.Candidates(path, outputFormat, op!.NameSuffix).First());
-var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "batch" or "edge" || pdfFile || zipFolder || subtitleFile || documentText || documentClean;
-var expectOutput = producing && (outputFormat != ImageFormat.Unknown || pdfFile || zipFolder || subtitleFile || documentText || documentClean);
+var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "batch" or "edge" or "rename" || pdfFile || zipFolder || subtitleFile || documentText || documentClean;
+var expectOutput = producing && (outputFormat != ImageFormat.Unknown || pdfFile || zipFolder || subtitleFile || documentText || documentClean || scenario == "rename");
 var stamp = DateTime.Now.ToString("HHmmss", System.Globalization.CultureInfo.InvariantCulture);
 var folder = Path.Combine(Path.GetTempPath(), "wintools-e2e", pathStyle == "unicode" ? $"{scenario} مجلد 😀 {stamp}" : $"{scenario}-{stamp}");
 if (pathStyle == "long")
@@ -722,6 +725,25 @@ using (var explorer = opened)
                     else dialogInFront = false;
                 }
             }
+            // A command with its own dialog (Batch rename, V2 PR 7.2): type into it once it is in front, Enter only while it is.
+            if (capability?.Dialog is not null && releasedOver == "overlay")
+            {
+                var asked = Stopwatch.GetTimestamp();
+                dialogInFront = false;
+                while (Stopwatch.GetElapsedTime(asked) < TimeSpan.FromSeconds(8))
+                {
+                    if (Desktop.ForegroundProcessName() == "WinTools.Dialogs") { dialogInFront = true; break; }
+                    Thread.Sleep(100);
+                }
+                if (dialogInFront == true)
+                {
+                    Thread.Sleep(400);
+                    Desktop.TypeText("2026 ");
+                    Thread.Sleep(400);
+                    if (Desktop.ForegroundProcessName() == "WinTools.Dialogs") Desktop.Tap(0x0D);
+                    else dialogInFront = false;
+                }
+            }
             if (scenario == "alt")
             {
                 Thread.Sleep(40);
@@ -786,7 +808,9 @@ using (var explorer = opened)
             if (output is not null || expectNothing || wrongPassword) (toastShown, focusKept) = WaitForSurface("WinTools.Toast", explorer.Hwnd, TimeSpan.FromSeconds(3));
             Thread.Sleep(300);
             var files = Directory.GetFileSystemEntries(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray(); // the "folder" scenario's source is a folder
-            var sourceIntact = (isFolder ? Directory.Exists(source) : File.Exists(source)) && HashOf(source) == sourceHash;
+            // Renamed: the source's name is gone and its content is under the new one.
+            var sourceIntact = scenario == "rename" ? !File.Exists(source) && output is not null && HashOf(output) == sourceHash
+                : (isFolder ? Directory.Exists(source) : File.Exists(source)) && HashOf(source) == sourceHash;
             // An extracted folder: exactly the sample's tree, with its content.
             bool ZipTreeValid(string dir) => Directory.Exists(dir) && (scenario == "lockedzip"
                 ? Directory.EnumerateFileSystemEntries(dir, "*", SearchOption.AllDirectories).Select(p => Path.GetRelativePath(dir, p)).Order(StringComparer.Ordinal)
@@ -828,7 +852,7 @@ using (var explorer = opened)
             // The drag ended on the overlay: a Drop, or a DragLeave after the release over a spot that offers nothing.
             bool HiddenFor(string why) => ev.Any(e => Ev(e) == "overlay.hide" && Data(e).TryGetProperty("reason", out var r) && r.GetString() == why);
             var endedOnOverlay = drops.Length > 0 || HiddenFor("dragLeave");
-            var expectedFiles = output is null ? [sourceName] : new[] { sourceName, Path.GetFileName(output) }.Order(StringComparer.Ordinal).ToArray();
+            var expectedFiles = output is null ? [sourceName] : scenario == "rename" ? [Path.GetFileName(output)] : new[] { sourceName, Path.GetFileName(output) }.Order(StringComparer.Ordinal).ToArray();
             var cleanFolder = files.SequenceEqual(expectedFiles);
             var menuOpens = ev.Where(e => Ev(e) == "menu.open").Select(e => Data(e).TryGetProperty("group", out var gr) ? gr.GetString() : null).ToArray();
             var menuBacks = ev.Count(e => Ev(e) == "menu.back");
@@ -852,6 +876,7 @@ using (var explorer = opened)
                 "lockedzip" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1 && dialogInFront == true && secretAsked,
                 "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "file" or "folder" or "pdf" or "zip" or "tgz" or "srt" or "docx" when facts => output is null && infoShown && focusKept == true && accepted == 1,
                 "zip" or "tgz" or "srt" or "docx" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
+                "rename" => output is not null && Path.GetFileName(output) == "2026 notes.txt" && accepted == 1 && dialogInFront == true,
                 "pdf" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1 && (capability?.Prompt is null || dialogInFront == true),
                 "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 // Corner: the trigger really was off-centre and deep in a sector, nothing opened before the centre was
@@ -882,7 +907,8 @@ using (var explorer = opened)
                 startOffset, opensBeforeCentre, levelPushed, categorySeen, menuOpens, menuBacks,
                 triggerAt = $"{at.X},{at.Y}", releaseAt = $"{release.X},{release.Y}", output = output is null ? null : Path.GetFileName(output), outputValid, sourceIntact, cleanFolder, files, ok });
             // The harness's own result (a file, or an extracted folder inside its own temp folder), so the next cycle starts clean.
-            if (output is not null) { if (Directory.Exists(output)) Directory.Delete(output, recursive: true); else File.Delete(output); }
+            if (scenario == "rename" && output is not null && File.Exists(output)) File.Move(output, source); // the next cycle renames it again
+            else if (output is not null) { if (Directory.Exists(output)) Directory.Delete(output, recursive: true); else File.Delete(output); }
             Thread.Sleep((int)Desktop.GetDoubleClickTime() + 300);
         }
         catch
