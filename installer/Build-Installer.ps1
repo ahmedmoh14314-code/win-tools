@@ -65,6 +65,17 @@ $setup = Join-Path $root "artifacts\installer\WinTools-$FileLabel-Setup.exe"
 # The portable package: the same payload as a ZIP (no installer, no Start menu entry, no uninstall entry).
 $portable = Join-Path $root "artifacts\installer\WinTools-$FileLabel-portable.zip"
 if (Test-Path -LiteralPath $portable) { Remove-Item -LiteralPath $portable -Force }
-Compress-Archive -Path (Join-Path $payload '*') -DestinationPath $portable -CompressionLevel Optimal
+# Written entry by entry: Windows PowerShell's Compress-Archive names entries with '\' ("qpdf\qpdf.exe"), which the ZIP
+# format does not allow and tools on other systems read as one odd file name.
+Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+$zip = [System.IO.Compression.ZipFile]::Open($portable, [System.IO.Compression.ZipArchiveMode]::Create)
+try {
+    $base = (Resolve-Path -LiteralPath $payload).Path.TrimEnd('\') + '\'
+    foreach ($file in Get-ChildItem -LiteralPath $payload -Recurse -File) {
+        $name = $file.FullName.Substring($base.Length).Replace('\', '/')
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName, $name, [System.IO.Compression.CompressionLevel]::Optimal)
+    }
+}
+finally { $zip.Dispose() }
 Get-FileHash -Algorithm SHA256 -LiteralPath $portable | Format-List
 Get-FileHash -Algorithm SHA256 -LiteralPath $setup | Format-List
