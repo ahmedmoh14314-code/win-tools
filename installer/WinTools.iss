@@ -10,8 +10,16 @@
 ; - AppId is the product's upgrade identity: never change it, or upgrades become second installations.
 
 #define AppName "WinTools"
-#define AppVersion "0.1.0"
-#define AppVersionLabel "0.1.0 Beta"
+; The version comes from Build-Installer.ps1 (-Version, -Label, -FileLabel); these are the defaults for a bare ISCC run.
+#ifndef AppVersion
+  #define AppVersion "0.1.0"
+#endif
+#ifndef AppVersionLabel
+  #define AppVersionLabel "0.1.0 Beta"
+#endif
+#ifndef AppFileLabel
+  #define AppFileLabel AppVersion + "-Beta"
+#endif
 #ifndef PayloadDir
   #define PayloadDir "..\artifacts\installer\payload"
 #endif
@@ -47,7 +55,7 @@ WizardStyle=modern
 Compression=lzma2/max
 SolidCompression=yes
 OutputDir={#OutputDir}
-OutputBaseFilename=WinTools-{#AppVersion}-Beta-Setup
+OutputBaseFilename=WinTools-{#AppFileLabel}-Setup
 ; The running-instance check below replaces Restart Manager, which cannot ask the windowless host to exit.
 CloseApplications=no
 RestartIfNeededByRun=no
