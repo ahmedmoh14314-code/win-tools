@@ -152,6 +152,8 @@ public sealed class StructureAndContentTests : IDisposable
         Assert.DoesNotContain("SkiaSharp", host);
         Assert.DoesNotContain("WinTools.Worker", host);
         Assert.DoesNotContain("WinTools.Worker.Text", host); // the General Files worker too: a separate process only
+        Assert.DoesNotContain("WinTools.Worker.Pdf", host); // the PDF worker and its qpdf: a separate process only (ADR-0022)
+        Assert.DoesNotContain("WinTools.Worker.Common", host);
     }
 }
 

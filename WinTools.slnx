@@ -5,6 +5,8 @@
     <Project Path="src/WinTools.Host/WinTools.Host.csproj" />
     <Project Path="src/WinTools.Worker/WinTools.Worker.csproj" />
     <Project Path="src/WinTools.Worker.Text/WinTools.Worker.Text.csproj" />
+    <Project Path="src/WinTools.Worker.Common/WinTools.Worker.Common.csproj" />
+    <Project Path="src/WinTools.Worker.Pdf/WinTools.Worker.Pdf.csproj" />
     <Project Path="src/WinTools.Settings/WinTools.Settings.csproj" />
     <Project Path="src/WinTools.Dialogs/WinTools.Dialogs.csproj" />
   </Folder>

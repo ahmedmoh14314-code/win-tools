@@ -40,7 +40,7 @@ public static class FeedbackText
                 return new(FeedbackKind.Success, $"{OutputName(item)} created", Join(words.Done, Sizes(words, item)));
             if (item.Result.Error == ErrorCode.NothingToDo)
                 return new(FeedbackKind.Nothing, "Nothing to change", words.NothingReason);
-            return new(FeedbackKind.Failure, $"Could not {words.Verb} {item.SourceName}", Reason(item.Result.Error));
+            return new(FeedbackKind.Failure, $"Could not {words.Verb} {item.SourceName}", Reason(item.Result.Error, words));
         }
 
         var n = items.Count;
@@ -49,11 +49,11 @@ public static class FeedbackText
         if (ok.Length == 0 && failed.Length == 0)
             return new(FeedbackKind.Nothing, "Nothing to change", $"{words.NothingReason} ({Images(n)})");
         if (ok.Length == 0 && unchanged.Length == 0)
-            return new(FeedbackKind.Failure, $"Could not {words.Verb} {Images(n)}", MostCommonReason(failed));
+            return new(FeedbackKind.Failure, $"Could not {words.Verb} {Images(n)}", MostCommonReason(failed, words));
 
         var parts = new List<string>();
         if (words.Savings && TotalSizes(words, ok) is { } sizes) parts.Add(sizes); // what was saved is the point
-        if (failed.Length > 0) parts.Add($"{failed.Length} failed: {MostCommonReason(failed).TrimEnd('.')}");
+        if (failed.Length > 0) parts.Add($"{failed.Length} failed: {MostCommonReason(failed, words).TrimEnd('.')}");
         if (unchanged.Length > 0) parts.Add(words.Savings ? $"{unchanged.Length} already optimized" : $"{unchanged.Length} unchanged");
         var kind = failed.Length > 0 ? FeedbackKind.Partial : FeedbackKind.Success;
         return new(kind, $"{Images(ok.Length)} of {n} completed", string.Join(" · ", parts));
@@ -64,7 +64,7 @@ public static class FeedbackText
     /// </summary>
     public static FeedbackMessage Copied(FeedbackWords words, JobItem item) => item.Result.Success
         ? new(FeedbackKind.Success, item.Inputs == 1 ? words.Done : $"{words.Count(item.Inputs)} copied", item.SourceName)
-        : new(FeedbackKind.Failure, $"Could not {words.Verb} {(item.Inputs == 1 ? $"the {words.Noun}" : words.Count(item.Inputs))}", Reason(item.Result.Error));
+        : new(FeedbackKind.Failure, $"Could not {words.Verb} {(item.Inputs == 1 ? $"the {words.Noun}" : words.Count(item.Inputs))}", Reason(item.Result.Error, words));
 
     /// <summary>What the operation is doing, for the progress toast ("Converting").</summary>
     public static string Working(Operation op) => op.Kind switch
@@ -106,6 +106,23 @@ public static class FeedbackText
         _ => "Nothing needed doing",
     };
 
+    /// <summary>
+    /// The reason for a failure in the module's own terms (V2 PR 2.1): the image module's words are V1's; another module's
+    /// noun ("PDF") replaces "image" where the reason names what was worked on, and its limits are not the image limits.
+    /// </summary>
+    public static string Reason(ErrorCode error, FeedbackWords words) => words.Noun == "image" ? Reason(error) : error switch
+    {
+        ErrorCode.InputTooLarge => $"The {words.Noun} is larger than this command accepts.",
+        ErrorCode.ContentMismatch => $"The file is not a {words.Noun}, whatever its name says.",
+        ErrorCode.UnsupportedContent => $"This kind of {words.Noun} is not supported.",
+        ErrorCode.DecodeFailed => $"The {words.Noun} is damaged or incomplete.",
+        ErrorCode.EncodeFailed or ErrorCode.OutputValidationFailed => "The result could not be written correctly. Nothing was saved.",
+        ErrorCode.OutputNameInvalid or ErrorCode.NoFreeOutputName => "No free name for the result in that folder.",
+        ErrorCode.PasswordRequired => $"The {words.Noun} is protected with a password. Remove the protection first.",
+        ErrorCode.LimitExceeded => $"The {words.Noun} is beyond what this command handles (for example too many pages).",
+        _ => Reason(error),
+    };
+
     /// <summary>The reason for a failure, in the user's terms.</summary>
     public static string Reason(ErrorCode error) => error switch
     {
@@ -132,8 +149,8 @@ public static class FeedbackText
         _ => "Something went wrong. The original is unchanged.",
     };
 
-    private static string MostCommonReason(IEnumerable<JobItem> failed) =>
-        Reason(failed.GroupBy(f => f.Result.Error).OrderByDescending(g => g.Count()).First().Key);
+    private static string MostCommonReason(IEnumerable<JobItem> failed, FeedbackWords words) =>
+        Reason(failed.GroupBy(f => f.Result.Error).OrderByDescending(g => g.Count()).First().Key, words);
 
     private static string OutputName(JobItem item) => item.Result.OutputPath is { } p ? Path.GetFileName(p) : item.SourceName;
 

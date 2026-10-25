@@ -18,15 +18,36 @@ public static class OutputNaming
     /// Candidate output paths in the order they must be tried. <paramref name="suffix"/> names the operation for outputs
     /// that keep the format ("photo (resized 50%).jpg"); a plain conversion has none ("photo.png").
     /// </summary>
-    public static IEnumerable<string> Candidates(string sourcePath, ImageFormat target, string? suffix = null, string? outputDirectory = null)
+    public static IEnumerable<string> Candidates(string sourcePath, ImageFormat target, string? suffix = null, string? outputDirectory = null) =>
+        CandidatesWithExtension(sourcePath, Extension(target), suffix, outputDirectory);
+
+    /// <summary>
+    /// The same names for any module's file output, with the extension given (".pdf"): "report (merged).pdf", then
+    /// "report (merged) (1).pdf"...
+    /// </summary>
+    public static IEnumerable<string> CandidatesWithExtension(string sourcePath, string extension, string? suffix = null, string? outputDirectory = null)
     {
+        if (extension is not ['.', _, ..] || extension.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '.'))
+            throw new ArgumentException("The extension must be a dot and ASCII letters or digits.", nameof(extension));
         var (dir, stem) = Split(sourcePath);
         dir = outputDirectory ?? dir;
         if (suffix is not null) stem = $"{stem} ({suffix})";
-        var ext = Extension(target);
-        yield return Path.Combine(dir, stem + ext);
+        yield return Path.Combine(dir, stem + extension);
         for (var i = 1; i <= MaxCollisionIndex; i++)
-            yield return Path.Combine(dir, $"{stem} ({i}){ext}");
+            yield return Path.Combine(dir, $"{stem} ({i}){extension}");
+    }
+
+    /// <summary>
+    /// Candidate names of a folder that holds several outputs of one source ("report (pages)", "report (pages) (1)"...),
+    /// claimed by renaming the staging folder, which fails when the name is taken.
+    /// </summary>
+    public static IEnumerable<string> FolderCandidates(string sourcePath, string suffix, string? outputDirectory = null)
+    {
+        var (dir, stem) = Split(sourcePath);
+        dir = outputDirectory ?? dir;
+        yield return Path.Combine(dir, $"{stem} ({suffix})");
+        for (var i = 1; i <= MaxCollisionIndex; i++)
+            yield return Path.Combine(dir, $"{stem} ({suffix}) ({i})");
     }
 
     /// <summary>

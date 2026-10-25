@@ -50,6 +50,10 @@ public enum ErrorCode
     ClipboardUnavailable,
     /// <summary>A cloud placeholder whose content is not on this PC: reading it would download it (V2 PR 1.4).</summary>
     OnlineOnly,
+    /// <summary>The document needs a password to open, and none was given (V2 PR 2.1).</summary>
+    PasswordRequired,
+    /// <summary>The input is beyond one of the module's limits (pages, entries, sizes), named in the message (V2 PR 2.1).</summary>
+    LimitExceeded,
 }
 
 /// <summary>The worker's answer. Success carries the final output path; failure carries a code and a short message.</summary>

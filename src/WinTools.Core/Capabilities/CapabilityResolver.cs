@@ -17,7 +17,8 @@ public sealed class CapabilityResolver(IReadOnlyList<CapabilityDescriptor> catal
 
     /// <summary>The resolver over every module's catalog, with the settings' exact resize.</summary>
     public static CapabilityResolver For(string? customResizeId) =>
-        new([.. ImageCapabilities.Catalog(customResizeId), .. FilesCapabilities.Catalog], [.. ImageCapabilities.Categories, .. FilesCapabilities.Categories]);
+        new([.. ImageCapabilities.Catalog(customResizeId), .. PdfCapabilities.Catalog, .. FilesCapabilities.Catalog],
+            [.. ImageCapabilities.Categories, .. PdfCapabilities.Categories, .. FilesCapabilities.Categories]);
 
     /// <summary>The image module alone (V1's menu, which MenuGoldenTests pins).</summary>
     public static CapabilityResolver Images(string? customResizeId) => new(ImageCapabilities.Catalog(customResizeId), ImageCapabilities.Categories);

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- On-demand worker of the PDF module (V2 PR 2.1, ADR-0022). Runs the bundled qpdf as a child process for structural
+       commands; renders nothing and loads no PDF library itself. One JSON line per job, like the other workers. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <QpdfDir>$(MSBuildThisFileDirectory)..\..\artifacts\engines\qpdf-12.4.2\</QpdfDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WinTools.Core\WinTools.Core.csproj" />
+    <ProjectReference Include="..\WinTools.Worker.Common\WinTools.Worker.Common.csproj" />
+    <InternalsVisibleTo Include="WinTools.Worker.Tests" />
+  </ItemGroup>
+  <!-- qpdf, fetched and hash-checked by scripts\Get-Engines.ps1, goes in a folder of its own next to the worker. -->
+  <ItemGroup>
+    <None Include="$(QpdfDir)*.exe;$(QpdfDir)*.dll" Link="qpdf\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+  <Target Name="RequireQpdf" BeforeTargets="Build" Condition="!Exists('$(QpdfDir)qpdf.exe')">
+    <Error Text="The PDF engine is missing: run scripts\Get-Engines.ps1 (it fetches qpdf 12.4.2 and checks its hashes, ADR-0022)." />
+  </Target>
+</Project>

@@ -19,6 +19,8 @@ using WinTools.EndToEnd;
 //          [--path-style plain|unicode|long]   (unicode: Arabic, emoji and spaces in the folder and file names; long: the
 //          source's full path is longer than 260 characters, its folder just under 248 so Explorer can open it)
 // "alt": a drag with Alt held, then the trigger: nothing may open or run, and the refusal toast must appear.
+// "pdf" (V2 PR 2.1/2.3): a 3-page PDF (tests/samples/pages-3.pdf) with a PDF command (default pdf.rotate-right; --op
+// pdf.optimize, pdf.linearize, pdf.info...): a new PDF with the command's name, or the info panel; the source unchanged.
 // "file" and "folder" (V2 PR 1.4, UX-009): a text file and a folder, each with File info by default (--op files.sha256
 // for a file): the info panel must appear, nothing may be written. Copy path is not run here: it would overwrite the
 // user's clipboard (unit-tested in FilesModuleTests; manual protocol in docs/testing/release-matrix.md).
@@ -84,6 +86,7 @@ var (sample, sourceName, defaultTarget) = scenario switch
     "photo" => ("photo-960x720.jpg", "photo.jpg", ImageFormat.Jpeg),
     "unsupported" or "file" => ("", "notes.txt", ImageFormat.Unknown),
     "folder" => ("", "holiday photos", ImageFormat.Unknown),
+    "pdf" => ("pages-3.pdf", "report.pdf", ImageFormat.Unknown),
     _ => ("quadrants-64x48.png", "photo.png", ImageFormat.Jpeg),
 };
 // The host runs with default settings, so the harness sees the same menu.
@@ -91,6 +94,7 @@ var catalog = ImageCapabilities.Operations(new AppSettings().CustomResizeId());
 var target = targetArg is null ? defaultTarget : Enum.Parse<ImageFormat>(targetArg, ignoreCase: true);
 if (scenario == "photo") opArg ??= "compress.balanced";
 if (opArg is null && scenario is "file" or "folder") opArg = FilesCapabilities.InfoId;
+if (opArg is null && scenario == "pdf") opArg = PdfCapabilities.RotateRightId;
 var op = opArg is not null ? catalog.FirstOrDefault(o => o.Id == opArg) : target == ImageFormat.Unknown ? null : OperationCatalog.Convert(target);
 // Every module, as the host resolves them: the ring positions the harness aims at must be the host's.
 var resolver = CapabilityResolver.For(new AppSettings().CustomResizeId());
@@ -99,9 +103,12 @@ if (opArg is not null && capability is null) { Console.Error.WriteLine($"Unknown
 var facts = op is { WritesFile: false } || capability?.Produces == CapabilityOutput.Facts; // the info panel, no file
 var sourceFormat = FormatHint.FromPath(sourceName);
 var outputFormat = op is null || !op.WritesFile ? ImageFormat.Unknown : op.OutputFormat(sourceFormat);
-string? OutputNameFor(string path) => outputFormat == ImageFormat.Unknown ? null : Path.GetFileName(OutputNaming.Candidates(path, outputFormat, op!.NameSuffix).First());
-var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "batch" or "edge";
-var expectOutput = producing && outputFormat != ImageFormat.Unknown;
+// A PDF command's output is a PDF named by the module (V2 PR 2.1); Split's folder is not driven here (worker tests).
+var pdfFile = scenario == "pdf" && capability is { Module: PdfCapabilities.Module, Produces: CapabilityOutput.File };
+string? OutputNameFor(string path) => pdfFile ? Path.GetFileName(OutputNaming.CandidatesWithExtension(path, ".pdf", PdfCapabilities.NameSuffix(capability!.Id)).First())
+    : outputFormat == ImageFormat.Unknown ? null : Path.GetFileName(OutputNaming.Candidates(path, outputFormat, op!.NameSuffix).First());
+var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "batch" or "edge" || pdfFile;
+var expectOutput = producing && (outputFormat != ImageFormat.Unknown || pdfFile);
 var stamp = DateTime.Now.ToString("HHmmss", System.Globalization.CultureInfo.InvariantCulture);
 var folder = Path.Combine(Path.GetTempPath(), "wintools-e2e", pathStyle == "unicode" ? $"{scenario} مجلد 😀 {stamp}" : $"{scenario}-{stamp}");
 if (pathStyle == "long")
@@ -676,8 +683,10 @@ using (var explorer = opened)
             Thread.Sleep(300);
             var files = Directory.GetFileSystemEntries(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray(); // the "folder" scenario's source is a folder
             var sourceIntact = (isFolder ? Directory.Exists(source) : File.Exists(source)) && HashOf(source) == sourceHash;
-            var outputValid = output is not null && File.ReadAllBytes(output) is var bytes && FileSignature.Detect(bytes) == outputFormat && ContainerCheck.IsComplete(bytes, outputFormat, out _)
-                && (!strip || bytes.AsSpan().IndexOf(metadataMarker) < 0); // the comment is gone
+            var outputValid = output is not null && File.ReadAllBytes(output) is var bytes && (pdfFile
+                ? bytes.AsSpan().StartsWith("%PDF-"u8) && bytes.AsSpan(Math.Max(0, bytes.Length - 1024)).IndexOf("%%EOF"u8) >= 0 // a whole PDF
+                : FileSignature.Detect(bytes) == outputFormat && ContainerCheck.IsComplete(bytes, outputFormat, out _)
+                    && (!strip || bytes.AsSpan().IndexOf(metadataMarker) < 0)); // the comment is gone
             double? saved = op is { Kind: OperationKind.Compress } && output is not null ? Math.Round(1 - (double)new FileInfo(output).Length / new FileInfo(source).Length, 4) : null;
             if (saved is < 0.08) outputValid = false; // Compress writes a copy only when it saves at least 8 % (ADR-0017)
             var ev = HostEventsSinceLastCycle();
@@ -703,10 +712,11 @@ using (var explorer = opened)
             var feedbackOk = output is null || (toastShown == true && focusKept == true);
             var ok = sourceIntact && cleanFolder && soundsHeld && feedbackOk && scenario switch
             {
-                "photo" when expectNothing => output is null && accepted == 1 && toastShown == true && focusKept == true
+                "photo" or "pdf" when expectNothing => output is null && accepted == 1 && toastShown == true && focusKept == true
                     && ev.Any(e => Ev(e) == "toast" && Data(e).TryGetProperty("kind", out var tk) && tk.GetString() == "Nothing")
                     && ev.Any(e => Ev(e) == "job.result" && Data(e).TryGetProperty("error", out var er) && er.GetString() == "NothingToDo"),
-                "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "file" or "folder" when facts => output is null && infoShown && focusKept == true && accepted == 1,
+                "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "file" or "folder" or "pdf" when facts => output is null && infoShown && focusKept == true && accepted == 1,
+                "pdf" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
                 // Corner: the trigger really was off-centre and deep in a sector, nothing opened before the centre was
                 // reached, then exactly the wanted category opened and the wanted command ran.
