@@ -18,6 +18,19 @@ public partial class App : Application
         // The host's language ("--lang en|ar"): every window speaks it, Arabic right to left.
         for (var i = 0; i + 1 < e.Args.Length; i++) if (e.Args[i] == "--lang") UiText.Use(e.Args[i + 1]);
         var line = ReadRequestLine();
+        if (WorkerProtocol.Deserialize<DialogEnvelope>(line)?.Kind == DialogKinds.Form)
+        {
+            var form = WorkerProtocol.Deserialize<FormRequest>(line);
+            if (form is not { Title.Length: > 0, Form: not null } || Forms.For(form.Form) is not { } fields)
+            {
+                Answer(new FormResult(null));
+                return;
+            }
+            var window = new FormWindow(form, fields);
+            window.Closed += (_, _) => Answer(new FormResult(window.Answer));
+            Present(window);
+            return;
+        }
         if (WorkerProtocol.Deserialize<DialogEnvelope>(line)?.Kind == DialogKinds.Rename)
         {
             var rename = WorkerProtocol.Deserialize<RenameRequest>(line);

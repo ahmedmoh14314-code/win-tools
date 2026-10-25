@@ -62,6 +62,33 @@ public sealed class DialogsProcessTests
         AssertWaitsForTheUser(p); // a window that could not be made crashes the process (PR #37 review)
     }
 
+    [Theory]
+    [InlineData("en", "media.trim")]
+    [InlineData("ar", "media.split")]
+    [InlineData("ar", "subtitles.shift-custom")]
+    public void A_form_opens_and_waits_in_either_language(string language, string form)
+    {
+        using var p = Start(language, WorkerProtocol.Serialize(new FormRequest("Test", form, 200, 200)));
+        try
+        {
+            var exited = p.WaitForExit(3000);
+            Assert.False(exited, exited ? $"exit {p.ExitCode}: {p.StandardError.ReadToEnd()} {p.StandardOutput.ReadToEnd()}" : "");
+        }
+        finally
+        {
+            if (!p.HasExited) p.Kill();
+        }
+    }
+
+    [Fact]
+    public void A_form_for_a_command_without_one_is_answered_cancelled()
+    {
+        using var p = Start("en", WorkerProtocol.Serialize(new FormRequest("Test", "media.mono", 200, 200)));
+        var line = p.StandardOutput.ReadLine();
+        Assert.True(p.WaitForExit(10_000));
+        Assert.Null(WorkerProtocol.Deserialize<FormResult>(line)!.Answer);
+    }
+
     [Fact]
     public void A_malformed_request_is_answered_cancelled()
     {

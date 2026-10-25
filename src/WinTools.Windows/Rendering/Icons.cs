@@ -3,7 +3,7 @@ using WinTools.Windows.Native;
 
 namespace WinTools.Windows.Rendering;
 
-internal enum Glyph { Convert, Compress, Resize, Rotate, Tools, Back, Check, Alert, Info, None, Mark, More, Pages, Archive, Timing, Edit, Sound }
+internal enum Glyph { Convert, Compress, Resize, Rotate, Tools, Back, Check, Alert, Info, None, Mark, More, Pages, Archive, Timing, Edit, Sound, Crop }
 
 /// <summary>
 /// The product's line icons, drawn as vectors on a 24-unit grid (stroke 2 units, round caps), so they are crisp at every
@@ -24,6 +24,7 @@ internal static class Icons
         "timing" => Glyph.Timing,
         "edit" => Glyph.Edit,
         "sound" => Glyph.Sound,
+        "crop" => Glyph.Crop,
         _ => Glyph.Tools,
     };
 
@@ -98,6 +99,10 @@ internal static class Icons
                 p.Arc(P(7, 17).X, P(7, 17).Y, 3f * u, 0, Math.PI * 2, colour, w);
                 p.Arc(P(17, 17).X, P(17, 17).Y, 3f * u, 0, Math.PI * 2, colour, w);
                 L(9, 15, 18, 4); L(15, 15, 6, 4);
+                break;
+            case Glyph.Crop: // two crossed corners: the frame kept
+                Poly(P(7, 3), P(7, 17), P(21, 17));
+                Poly(P(3, 7), P(17, 7), P(17, 21));
                 break;
             case Glyph.Sound: // a speaker and two sound waves
                 Poly(P(4, 9), P(8, 9), P(13, 5), P(13, 19), P(8, 15), P(4, 15), P(4, 9));

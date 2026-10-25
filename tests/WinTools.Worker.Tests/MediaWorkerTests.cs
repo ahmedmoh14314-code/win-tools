@@ -250,4 +250,91 @@ public sealed class MediaWorkerTests : IDisposable
         Assert.All(results, r => Assert.True(r.Success, r.Message));
         Assert.Equal(Path.Combine(_dir.Path, "song.mp3"), results[0].Outputs.Single().Path);
     }
+
+    // ---- Trim, Split and Crop (Tangerine parity): the form's answer is the one parameter ----
+
+    private static JobRequest WithForm(string capability, string answer, params string[] inputs) =>
+        new(Guid.NewGuid().ToString("N"), capability, inputs, Parameters: new Dictionary<string, string> { [DialogParameters.Name] = answer });
+
+    [Fact]
+    public void Trim_keeps_the_part_between_start_and_end_of_a_video_and_of_audio()
+    {
+        var clip = Clip("clip.mp4", seconds: 6);
+        var before = Hash.Of(clip);
+        var r = RunBelieved(WithForm(MediaCapabilities.TrimVideoId, "start=1;end=3.5", clip));
+        Assert.Equal("clip (trimmed).mp4", Path.GetFileName(r.Outputs.Single().Path));
+        var probe = MediaJobs.Probe(r.Outputs[0].Path)!;
+        Assert.InRange(probe.Duration, 2.3, 2.7);
+        Assert.NotNull(probe.Video);
+        Assert.NotNull(probe.Audio);
+        Assert.Equal(before, Hash.Of(clip));
+        // No end: everything after the start.
+        var song = Clip("song.mp3", seconds: 5);
+        var a = RunBelieved(WithForm(MediaCapabilities.TrimAudioId, "start=2;end=", song));
+        Assert.Equal("song (trimmed).mp3", Path.GetFileName(a.Outputs[0].Path));
+        Assert.InRange(MediaJobs.Probe(a.Outputs[0].Path)!.Duration, 2.7, 3.3);
+    }
+
+    [Fact]
+    public void Trim_past_the_end_says_so_and_an_end_beyond_the_file_keeps_the_rest_with_a_notice()
+    {
+        var song = Clip("song.wav", seconds: 3);
+        var past = MediaJobs.Run(WithForm(MediaCapabilities.TrimAudioId, "start=10;end=", song));
+        Assert.Equal(ErrorCode.NothingToDo, past.Error);
+        var r = RunBelieved(WithForm(MediaCapabilities.TrimAudioId, "start=1;end=60", song));
+        Assert.Contains(r.Facts, f => f is { Label: "End", Notice: true });
+        Assert.InRange(MediaJobs.Probe(r.Outputs[0].Path)!.Duration, 1.8, 2.2);
+    }
+
+    [Fact]
+    public void A_form_command_runs_only_with_a_valid_answer_and_other_commands_take_none()
+    {
+        var song = Clip("song.wav", seconds: 2);
+        Assert.Equal(ErrorCode.InvalidRequest, MediaJobs.Run(Request(MediaCapabilities.TrimAudioId, song)).Error);
+        Assert.Equal(ErrorCode.InvalidRequest, MediaJobs.Run(WithForm(MediaCapabilities.TrimAudioId, "start=2;end=1", song)).Error);
+        Assert.Equal(ErrorCode.InvalidRequest, MediaJobs.Run(WithForm(MediaCapabilities.TrimAudioId, "start=01;end=", song)).Error); // not canonical
+        Assert.Equal(ErrorCode.InvalidRequest, MediaJobs.Run(WithForm(MediaCapabilities.MonoId, "start=0;end=", song)).Error);
+        Assert.Equal(["song.wav"], Names());
+    }
+
+    [Fact]
+    public void Split_writes_equal_parts_into_a_new_folder()
+    {
+        var clip = Clip("clip.mp4", seconds: 6);
+        var r = RunBelieved(WithForm(MediaCapabilities.SplitVideoId, "parts=3", clip));
+        var folder = r.Outputs.Single().Path;
+        Assert.Equal("clip (parts)", Path.GetFileName(folder));
+        var parts = Directory.GetFiles(folder).Order(StringComparer.Ordinal).ToArray();
+        Assert.Equal(["part 00.mp4", "part 01.mp4", "part 02.mp4"], parts.Select(p => Path.GetFileName(p)));
+        Assert.All(parts, p => Assert.InRange(MediaJobs.Probe(p)!.Duration, 1.6, 2.4));
+        var song = Clip("song.m4a", seconds: 4);
+        var a = RunBelieved(WithForm(MediaCapabilities.SplitAudioId, "parts=2", song));
+        Assert.Equal(2, Directory.GetFiles(a.Outputs[0].Path, "part *.m4a").Length);
+        Assert.Equal(ErrorCode.NothingToDo, MediaJobs.Run(WithForm(MediaCapabilities.SplitAudioId, "parts=20", Clip("short.wav", seconds: 2))).Error);
+    }
+
+    [Theory]
+    [InlineData(MediaCapabilities.CropSquareId, 240, 240, "clip (1x1).mp4")]
+    [InlineData(MediaCapabilities.CropWideId, 320, 180, "clip (16x9).mp4")]
+    [InlineData(MediaCapabilities.CropTallId, 134, 240, "clip (9x16).mp4")]
+    public void Crop_cuts_the_centre_to_the_shape(string capability, int width, int height, string name)
+    {
+        var clip = Clip("clip.mp4", seconds: 2);
+        var r = RunBelieved(Request(capability, clip));
+        Assert.Equal(name, Path.GetFileName(r.Outputs[0].Path));
+        var v = MediaJobs.Probe(r.Outputs[0].Path)!.Video!;
+        Assert.Equal((width, height), (v.Width, v.Height));
+    }
+
+    [Fact]
+    public void A_percent_sign_in_the_folder_is_not_read_as_a_pattern()
+    {
+        var sub = Directory.CreateDirectory(Path.Combine(_dir.Path, "100%d done")).FullName;
+        var clip = Clip("clip.mp4", seconds: 3);
+        var moved = Path.Combine(sub, "clip.mp4");
+        File.Move(clip, moved);
+        var r = RunBelieved(Request(MediaCapabilities.FramesId, moved));
+        Assert.StartsWith(sub, r.Outputs[0].Path, StringComparison.Ordinal);
+        Assert.NotEmpty(Directory.GetFiles(r.Outputs[0].Path, "frame *.png"));
+    }
 }

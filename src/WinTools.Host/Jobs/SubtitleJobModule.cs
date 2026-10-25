@@ -27,7 +27,9 @@ internal sealed class SubtitleJobModule : IJobModule
         if (result.Facts.Count > 0 && !(result.Facts.Count <= 2 && result.Facts.All(f => f is { Label: "Read as" or "Dropped", Notice: true }) && JobFacts.AreShowable(result.Facts))) return false;
         try
         {
-            if (!SubtitleCapabilities.Candidates(request.CapabilityId, source, request.OutputDirectory).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
+            var answer = request.Parameters is { } p && p.TryGetValue(DialogParameters.Name, out var a) ? a : null;
+            if (SubtitleCapabilities.ShiftOf(request.CapabilityId, answer) is null && request.CapabilityId == SubtitleCapabilities.ShiftCustomId) return false;
+            if (!SubtitleCapabilities.Candidates(request.CapabilityId, source, request.OutputDirectory, answer).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
             var info = new FileInfo(output.Path);
             if (!info.Exists || info.Length > SubtitleCapabilities.MaxInputBytes * 2) return false;
             var bytes = File.ReadAllBytes(output.Path);

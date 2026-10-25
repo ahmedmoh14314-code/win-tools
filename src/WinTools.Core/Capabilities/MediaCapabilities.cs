@@ -8,10 +8,13 @@ namespace WinTools.Core.Capabilities;
 /// The Media module (V2 media sprint, ADR-0028): video and audio through the bundled FFmpeg (LGPL build), run by the media
 /// worker as a child process. The wheel offers what fits the dropped file:
 /// <list type="bullet">
-/// <item>Video: Convert (MP4, WebM, MKV, MOV, GIF, AVI, WMV), Compress, Edit (speed, join), Audio (extract, remove), and
-/// Tools (save frames, info).</item>
-/// <item>Audio: Convert (MP3, M4A, WAV, FLAC, OGG, Opus, AIFF, WMA), Compress, Edit (normalize, mono, stereo), and Tools (info).</item>
+/// <item>Video: Convert (MP4, WebM, MKV, MOV, GIF, AVI, WMV), Compress, Edit (trim, split, join, speed, remove
+/// the audio: six groups at most, as the image ring, so every label fits), Crop (1:1, 16:9,
+/// 9:16, centred), and Tools (extract the audio, save frames, info).</item>
+/// <item>Audio: Convert (MP3, M4A, WAV, FLAC, OGG, Opus, AIFF, WMA), Compress, Edit (trim, split, normalize, mono, stereo),
+/// and Tools (info).</item>
 /// </list>
+/// Trim and Split ask their times or parts in a form first (<see cref="Jobs.Forms"/>).
 /// Every result is a new file next to the original (or in the output folder), never over an existing one.
 /// </summary>
 public static class MediaCapabilities
@@ -23,6 +26,8 @@ public static class MediaCapabilities
     public const string Speed2xId = "media.speed-2x", SpeedHalfId = "media.speed-half", JoinId = "media.join";
     public const string ExtractAudioId = "media.extract-audio", MuteId = "media.mute", FramesId = "media.frames";
     public const string NormalizeId = "media.normalize", MonoId = "media.mono", StereoId = "media.stereo";
+    public const string TrimVideoId = "media.trim", TrimAudioId = "media.trim-audio", SplitVideoId = "media.split", SplitAudioId = "media.split-audio";
+    public const string CropSquareId = "media.crop-1x1", CropWideId = "media.crop-16x9", CropTallId = "media.crop-9x16";
 
     /// <summary>The most files Join takes at once.</summary>
     public const int MaxJoinInputs = 50;
@@ -32,7 +37,7 @@ public static class MediaCapabilities
         new("convert", "Convert", "convert", 10),
         new("compress", "Compress", "compress", 20),
         new("edit", "Edit", "edit", 30),
-        new("sound", "Audio", "sound", 50),
+        new("crop", "Crop", "crop", 40),
         new("tools", "Tools", "tools", 11), // Convert, then Tools, then the module's own groups, Actions last (Tangerine's order)
     ];
 
@@ -79,6 +84,19 @@ public static class MediaCapabilities
             Feedback: video ? Words("Converting", "convert", $"Converted {t.Label.ToLowerInvariant()}") : Words("Converting", "convert", $"Converted {t.Label.ToLowerInvariant()}", "audio file", "audio files"),
             Payload: t);
 
+    private static CapabilityDescriptor Crop(string id, string label, string done) =>
+        new(id, label, "crop", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+            Feedback: Words("Cropping", "crop", done));
+
+    /// <summary>The width:height a Crop command cuts to, centred; null for any other command.</summary>
+    public static (int W, int H)? AspectOf(string capabilityId) => capabilityId switch
+    {
+        CropSquareId => (1, 1),
+        CropWideId => (16, 9),
+        CropTallId => (9, 16),
+        _ => null,
+    };
+
     public static IReadOnlyList<CapabilityDescriptor> Catalog { get; } =
     [
         .. VideoTargets.Select(t => Convert(t, video: true)),
@@ -89,22 +107,33 @@ public static class MediaCapabilities
             Feedback: new("Compressing", "compress", "Compressed to 720p", "Already small: a smaller copy would not save enough", "video", "videos", Savings: true)),
         new(CompressAudioId, "Smaller", "compress", Module, new InputRule(Audio), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Compressing", "compress", "Compressed", "Already small: a smaller copy would not save enough", "audio file", "audio files", Savings: true)),
+        new(TrimVideoId, "Trim…", "edit", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+            Feedback: new("Trimming", "trim", "Trimmed", "Nothing is left between the start and the end", "video", "videos"), Dialog: Jobs.DialogKinds.Form),
+        new(SplitVideoId, "Split…", "edit", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.Folder, LongRunning: true,
+            Feedback: new("Splitting", "split", "Split into parts", "Too short to split", "video", "videos"), Dialog: Jobs.DialogKinds.Form),
         new(Speed2xId, "2× speed", "edit", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: Words("Speeding up", "speed up", "Twice as fast")),
         new(SpeedHalfId, "½ speed", "edit", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: Words("Slowing down", "slow down", "Half as fast")),
         new(JoinId, "Join", "edit", Module, new InputRule(MovingVideo, MinCount: 2, MaxCount: MaxJoinInputs), CapabilityShape.Selection, CapabilityOutput.File, LongRunning: true,
             Feedback: Words("Joining", "join", "Joined")),
-        new(ExtractAudioId, "Extract audio", "sound", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+        new(ExtractAudioId, "Extract audio", "tools", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: Words("Extracting the audio of", "extract the audio of", "Audio extracted")),
-        new(MuteId, "Remove audio", "sound", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+        new(MuteId, "Remove audio", "edit", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: Words("Removing the audio of", "remove the audio of", "Audio removed")),
-        new(NormalizeId, "Normalize volume", "edit", Module, new InputRule(Audio), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+        new(NormalizeId, "Normalize", "edit", Module, new InputRule(Audio), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: Words("Normalizing", "normalize", "Volume normalized", "audio file", "audio files")),
+        new(TrimAudioId, "Trim…", "edit", Module, new InputRule(Audio), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+            Feedback: new("Trimming", "trim", "Trimmed", "Nothing is left between the start and the end", "audio file", "audio files"), Dialog: Jobs.DialogKinds.Form),
+        new(SplitAudioId, "Split…", "edit", Module, new InputRule(Audio), CapabilityShape.PerFile, CapabilityOutput.Folder, LongRunning: true,
+            Feedback: new("Splitting", "split", "Split into parts", "Too short to split", "audio file", "audio files"), Dialog: Jobs.DialogKinds.Form),
         new(MonoId, "To mono", "edit", Module, new InputRule(Audio), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Converting", "convert", "Now mono", "Already mono", "audio file", "audio files")),
         new(StereoId, "To stereo", "edit", Module, new InputRule(Audio), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Converting", "convert", "Now stereo", "Already stereo", "audio file", "audio files")),
+        Crop(CropSquareId, "Square 1:1", "Cropped to a square"),
+        Crop(CropWideId, "Wide 16:9", "Cropped to 16:9"),
+        Crop(CropTallId, "Tall 9:16", "Cropped to 9:16"),
         new(FramesId, "Save frames", "tools", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.Folder, LongRunning: true,
             Feedback: Words("Saving frames of", "save frames of", "Frames saved (one per second)")),
         new(VideoInfoId, "Video info", "tools", Module, new InputRule(Video), CapabilityShape.PerFile, CapabilityOutput.Facts, LongRunning: false,
@@ -124,11 +153,13 @@ public static class MediaCapabilities
         return capabilityId switch
         {
             ExtractAudioId => ".m4a",
-            FramesId or VideoInfoId or AudioInfoId => null,
+            FramesId or SplitVideoId or SplitAudioId or VideoInfoId or AudioInfoId => null,
             JoinId => ".mp4",
             _ when TargetOf(capabilityId) is { } t => t.Extension,
             // A re-encoded video is H.264 in MP4, which every player opens; WebM stays WebM (VP9).
             CompressVideoId or CompressVideo720Id or Speed2xId or SpeedHalfId => source == FileKinds.WebM ? ".webm" : ".mp4",
+            // Raw AAC (ADTS) has no muxer of its own here: its edits are AAC in M4A.
+            _ when Path.GetExtension(sourcePath).Equals(".aac", StringComparison.OrdinalIgnoreCase) => ".m4a",
             // A smaller copy of a lossless file is AAC in M4A; a lossy one keeps its format at a lower rate.
             CompressAudioId when source == FileKinds.Wav || source == FileKinds.Flac || source == FileKinds.Aiff => ".m4a",
             // Otherwise the source's own container: the audio removed, a quieter or mono copy of the same kind of file.
@@ -150,12 +181,17 @@ public static class MediaCapabilities
         MonoId => "mono",
         StereoId => "stereo",
         FramesId => "frames",
+        TrimVideoId or TrimAudioId => "trimmed",
+        SplitVideoId or SplitAudioId => "parts",
+        CropSquareId => "1x1",
+        CropWideId => "16x9",
+        CropTallId => "9x16",
         _ => null,
     };
 
     /// <summary>The names to try for a command's output, in order, never an existing one (the worker moves without overwriting).</summary>
     public static IEnumerable<string> Candidates(string capabilityId, string sourcePath, string? outputDirectory) =>
-        capabilityId == FramesId
+        capabilityId is FramesId or SplitVideoId or SplitAudioId
             ? OutputNaming.FolderCandidates(sourcePath, NameSuffix(capabilityId)!, outputDirectory)
             : OutputNaming.CandidatesWithExtension(sourcePath, ExtensionOf(capabilityId, sourcePath)!, NameSuffix(capabilityId), outputDirectory);
 }

@@ -11,7 +11,7 @@ namespace WinTools.Host.Jobs;
 /// <item>Video info and Audio info: facts within <see cref="JobFacts"/>' bounds, and no file.</item>
 /// <item>A new file: one, under a name the module allows for that command, whose SHA-256 is the one the worker validated
 /// (any facts are notices the toast shows).</item>
-/// <item>Save frames: one folder under an allowed name, holding no link, whose shape (paths and sizes) is the one the
+/// <item>Save frames and Split: one folder under an allowed name, holding no link, whose shape (paths and sizes) is the one the
 /// worker reported.</item>
 /// </list>
 /// A killed worker may leave its temporary file or folder, under one deterministic name.
@@ -22,7 +22,7 @@ internal sealed class MediaJobModule : IJobModule
 
     public string Name => MediaCapabilities.Module;
 
-    /// <summary>The module's commands take no parameters yet.</summary>
+    /// <summary>No settings reach the module; Trim and Split carry only their form's answer.</summary>
     public static IReadOnlyDictionary<string, string>? Parameters(Core.Settings.AppSettings _) => null;
 
     public bool IsBelievable(JobRequest request, JobResult result)
@@ -36,7 +36,7 @@ internal sealed class MediaJobModule : IJobModule
             {
                 case MediaCapabilities.VideoInfoId or MediaCapabilities.AudioInfoId:
                     return request.Inputs.Count == 1 && result.Outputs.Count == 0 && result.Facts.Any(f => f.Label == "Duration");
-                case MediaCapabilities.FramesId:
+                case MediaCapabilities.FramesId or MediaCapabilities.SplitVideoId or MediaCapabilities.SplitAudioId:
                 {
                     if (result.Outputs is not [{ Sha256: { Length: 64 } shape } output] || request.Inputs.Count != 1) return false;
                     if (!MediaCapabilities.Candidates(request.CapabilityId, request.Inputs[0], request.OutputDirectory).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;

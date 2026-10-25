@@ -25,13 +25,15 @@ internal static class SubtitleJobs
         var id = request.Id;
         if (id is not { Length: > 0 and <= 64 } || id.Any(c => !char.IsAsciiLetterOrDigit(c)))
             return JobResult.Fail("invalid", ErrorCode.InvalidRequest, "Request id must be 1-64 ASCII letters or digits.");
-        if (request.Parameters is { Count: > 0 }) return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters.");
+        // Shift… takes its form's answer, read again here; every other command takes nothing.
+        if (request.CapabilityId == SubtitleCapabilities.ShiftCustomId ? SubtitleCapabilities.ShiftOf(request.CapabilityId, Answer(request)) is null : request.Parameters is { Count: > 0 })
+            return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters, or Shift… lacks its form's answer.");
         if (request.Inputs is not [var path] || !PathPolicy.IsSupported(path) || Path.EndsInDirectorySeparator(path))
             return JobResult.Fail(id, ErrorCode.InvalidRequest, "One subtitle file per request.");
         if (request.OutputDirectory is { } od && !PathPolicy.IsSupported(Path.Combine(od, "x.srt")))
             return JobResult.Fail(id, ErrorCode.InvalidRequest, "The output folder must be a canonical, fully qualified path.");
         var known = request.CapabilityId is SubtitleCapabilities.InfoId or SubtitleCapabilities.ToVttId or SubtitleCapabilities.ToSrtId or SubtitleCapabilities.CleanUpId
-            || SubtitleCapabilities.ShiftOf(request.CapabilityId) is not null;
+            || SubtitleCapabilities.ShiftOf(request.CapabilityId, Answer(request)) is not null;
         if (!known) return JobResult.Fail(id, ErrorCode.UnsupportedOperation, "This worker does not run that command."); // before the file is read
         try
         {
@@ -44,7 +46,7 @@ internal static class SubtitleJobs
             var doc = SubtitleParser.Parse(decoded.Text, format);
             if (doc.Problems.Count > 0) return JobResult.Fail(id, ErrorCode.DecodeFailed, $"The file has errors, so it was not changed: {doc.Problems[0]}");
             if (doc.Cues.Count == 0) return JobResult.Fail(id, ErrorCode.NothingToDo, "The file has no cues.");
-            var output = SubtitleCapabilities.ShiftOf(request.CapabilityId) is { } by ? SubtitleTiming.Shift(doc, by) : doc;
+            var output = SubtitleCapabilities.ShiftOf(request.CapabilityId, Answer(request)) is { } by ? SubtitleTiming.Shift(doc, by) : doc;
             if (output.Cues.Any(c => c.End > SubtitleWriter.MaxTime))
                 return JobResult.Fail(id, ErrorCode.LimitExceeded, "A cue would end after 999:59:59, which subtitle files cannot hold.");
             var target = SubtitleCapabilities.OutputFormat(request.CapabilityId, path);
@@ -61,6 +63,10 @@ internal static class SubtitleJobs
         catch (UnauthorizedAccessException) { return JobResult.Fail(id, ErrorCode.OutputDirectoryNotWritable, "The destination folder is not writable."); }
         catch (IOException ex) { return JobResult.Fail(id, ErrorCode.OutputDirectoryNotWritable, $"Writing failed (0x{ex.HResult:X8})."); }
     }
+
+    /// <summary>The form's answer a request carries, when it carries exactly that.</summary>
+    private static string? Answer(JobRequest request) =>
+        request.Parameters is { Count: 1 } p && p.TryGetValue(DialogParameters.Name, out var a) ? a : null;
 
     /// <summary>Reads the source once, bounded; the refusal's code and reason when it cannot or must not be read.</summary>
     private static ErrorCode? Read(string path, out byte[] bytes, out string? why)
@@ -133,7 +139,7 @@ internal static class SubtitleJobs
             if (MarkOfTheWeb.ZoneToCarry(source) is { } z) MarkOfTheWeb.Apply(temp, z);
             File.SetAttributes(temp, FileAttributes.Normal);
             var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
-            foreach (var candidate in SubtitleCapabilities.Candidates(request.CapabilityId, source, request.OutputDirectory))
+            foreach (var candidate in SubtitleCapabilities.Candidates(request.CapabilityId, source, request.OutputDirectory, Answer(request)))
             {
                 try
                 {
