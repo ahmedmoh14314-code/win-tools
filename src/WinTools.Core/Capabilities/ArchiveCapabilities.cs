@@ -1,0 +1,72 @@
+using WinTools.Core.Feedback;
+using WinTools.Core.Files;
+
+namespace WinTools.Core.Capabilities;
+
+/// <summary>
+/// The Archives module, ZIP first (V2 plan §9, PR 5.1, ADR-0023): Extract into a new folder, Test the archive's integrity
+/// (every entry decompressed and its CRC-32 checked), ZIP info, and Add to ZIP for any files and folders. Extraction never
+/// writes outside its own new folder, never overwrites, never opens what it extracted, and refuses encrypted entries
+/// (.NET cannot decrypt them; a password dialog is a later PR).
+/// </summary>
+public static class ArchiveCapabilities
+{
+    public const string Module = "archive";
+    public const string ExtractId = "archive.extract", TestId = "archive.test", InfoId = "archive.info", ZipId = "archive.zip";
+
+    /// <summary>"Archive" is the ZIP's own category; Add to ZIP sits in the shared Tools, so no other menu gains a ring sector.</summary>
+    public static IReadOnlyList<CapabilityCategory> Categories { get; } =
+    [
+        new("archive", "Archive", "archive", 12),
+        new("tools", "Tools", "tools", 90),
+    ];
+
+    private static readonly IReadOnlySet<string> ZipOnly = new HashSet<string>(StringComparer.Ordinal) { FileKinds.Zip.Id };
+    private static readonly IReadOnlySet<string> AnyFileOrFolder = FileKinds.Declared.Select(k => k.Id).ToHashSet(StringComparer.Ordinal);
+
+    public static IReadOnlyList<CapabilityDescriptor> Catalog { get; } =
+    [
+        new(ExtractId, "Extract to folder", "archive", Module, new InputRule(ZipOnly), CapabilityShape.PerFile, CapabilityOutput.Folder,
+            LongRunning: true, Feedback: new("Extracting", "extract", "Extracted", "Nothing to extract", "archive", "archives")),
+        new(TestId, "Test", "archive", Module, new InputRule(ZipOnly), CapabilityShape.PerFile, CapabilityOutput.Facts,
+            LongRunning: true, Feedback: new("Testing", "test", "Tested", "Nothing to test", "archive", "archives")),
+        new(InfoId, "ZIP info", "archive", Module, new InputRule(ZipOnly), CapabilityShape.PerFile, CapabilityOutput.Facts,
+            LongRunning: false, Feedback: new("Reading", "read", "Read", "Nothing needed doing", "archive", "archives")),
+        new(ZipId, "Add to ZIP", "tools", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.File,
+            LongRunning: true, Feedback: new("Compressing", "compress", "ZIP created", "Nothing to add", "item", "items")),
+    ];
+
+    /// <summary>
+    /// The folder or file a command's output is named after: Extract makes "photos" from "photos.zip"; Add to ZIP makes
+    /// "report.zip" from one item, and from several the name of the folder that holds the first (as 7-Zip does).
+    /// </summary>
+    public static (string Directory, string Stem) OutputStem(string capabilityId, IReadOnlyList<string> inputs, string? outputDirectory)
+    {
+        var first = Path.TrimEndingDirectorySeparator(inputs[0]);
+        var dir = outputDirectory ?? Path.GetDirectoryName(first) ?? throw new ArgumentException("The input has no folder.", nameof(inputs));
+        if (capabilityId == ZipId && inputs.Count > 1)
+        {
+            var parent = Path.GetFileName(Path.GetDirectoryName(first));
+            return (dir, string.IsNullOrEmpty(parent) ? "Archive" : parent);
+        }
+        var stem = capabilityId == ZipId && Path.EndsInDirectorySeparator(inputs[0]) ? Path.GetFileName(first) : Path.GetFileNameWithoutExtension(first);
+        return (dir, stem.Length == 0 ? "Archive" : stem);
+    }
+
+    /// <summary>The names to try for a command's output, in order ("photos", "photos (1)"...; "report.zip", "report (1).zip"...).</summary>
+    public static IEnumerable<string> Candidates(string capabilityId, IReadOnlyList<string> inputs, string? outputDirectory)
+    {
+        var (dir, stem) = OutputStem(capabilityId, inputs, outputDirectory);
+        var ext = capabilityId == ZipId ? ".zip" : "";
+        yield return Path.Combine(dir, stem + ext);
+        for (var i = 1; i <= Output.OutputNaming.MaxCollisionIndex; i++) yield return Path.Combine(dir, $"{stem} ({i}){ext}");
+    }
+
+    /// <summary>The temporary name in the destination for one request (a file for Add to ZIP, a folder for Extract).</summary>
+    public static string TempPath(string requestId, IReadOnlyList<string> inputs, string? outputDirectory)
+    {
+        if (requestId.Length == 0 || requestId.Any(c => !char.IsAsciiLetterOrDigit(c))) throw new ArgumentException("Request id must be ASCII letters/digits.", nameof(requestId));
+        var (dir, _) = OutputStem(ExtractId, inputs, outputDirectory);
+        return Path.Combine(dir, $"~wintools-{requestId}.tmp");
+    }
+}
