@@ -71,31 +71,36 @@ internal static class DocumentJobs
         if (!info.Exists) throw new FileNotFoundException();
         if ((info.Attributes & (FileAttributes.Offline | RecallOnOpen | RecallOnDataAccess)) != 0) throw new DocFailure(ErrorCode.OnlineOnly, "The file is online only; reading it would download it.");
         if (info.Length > DocumentCapabilities.MaxInputBytes) throw new DocFailure(ErrorCode.LimitExceeded, $"The file is larger than {DocumentCapabilities.MaxInputBytes >> 20} MB.");
-        var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1 << 16);
+        FileStream stream;
+        try { stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1 << 16); }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException and not FileNotFoundException and not DirectoryNotFoundException)
+        {
+            throw new DocFailure(ErrorCode.SourceNotReadable, "The document could not be read."); // never "the destination is not writable"
+        }
         try
         {
-            var head = new byte[2];
-            if (stream.ReadAtLeast(head, 2, throwOnEndOfStream: false) < 2 || head[0] != 'P' || head[1] != 'K')
+            var head = new byte[4];
+            var got = stream.ReadAtLeast(head, 4, throwOnEndOfStream: false);
+            // A password-protected Office file is an encrypted compound file, not a ZIP (evaluator, PR 6.1).
+            if (got == 4 && head is [0xD0, 0xCF, 0x11, 0xE0]) throw new DocFailure(ErrorCode.PasswordRequired, "The document is protected with a password; open it in Office to remove the protection first.");
+            if (got < 2 || head[0] != 'P' || head[1] != 'K')
                 throw new DocFailure(ErrorCode.ContentMismatch, "The file is not an Office document, whatever its name says.");
             stream.Position = 0;
             var zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
             if (zip.Entries.Count > MaxParts) throw new DocFailure(ErrorCode.LimitExceeded, $"The document has more than {MaxParts:N0} parts.");
             long declared = 0;
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var e in zip.Entries)
             {
+                // Two parts whose names differ only in case: which one a reader takes is anyone's guess (evaluator, PR 6.1).
+                if (!names.Add(e.FullName)) throw new DocFailure(ErrorCode.DecodeFailed, "The document's package holds two parts of the same name.");
                 declared += e.Length;
-                if (ArchiveLimits.IsBomb(e.Length, e.CompressedLength) || declared > 4L * DocumentCapabilities.MaxInputBytes + (1L << 30))
+                if (ArchiveLimits.IsBomb(e.Length, e.CompressedLength) || ArchiveLimits.IsArchiveBomb(declared, info.Length)
+                    || declared > 4L * DocumentCapabilities.MaxInputBytes + (1L << 30))
                     throw new DocFailure(ErrorCode.LimitExceeded, "The document's package expands far beyond its size; it looks like a compression bomb.");
             }
-            var types = ReadPart(zip, "[Content_Types].xml") ?? throw new DocFailure(ErrorCode.ContentMismatch, "The file is not an Office document (it has no content types).");
-            var expected = kind switch
-            {
-                Kind.Word => "wordprocessingml.document.main+xml",
-                Kind.Excel => "spreadsheetml.sheet.main+xml",
-                _ => "presentationml.presentation.main+xml",
-            };
-            if (!types.Contains(expected, StringComparison.Ordinal) && !types.Contains(MacroType(kind), StringComparison.Ordinal))
-                throw new DocFailure(ErrorCode.ContentMismatch, $"The file is not a {Name(kind)}, whatever its name says.");
+            var mainType = MainContentType(ReadPart(zip, "[Content_Types].xml") ?? throw new DocFailure(ErrorCode.ContentMismatch, "The file is not an Office document (it has no content types)."), kind);
+            if (mainType is null) throw new DocFailure(ErrorCode.ContentMismatch, $"The file is not a {Name(kind)}, whatever its name says.");
             return zip;
         }
         catch
@@ -103,6 +108,30 @@ internal static class DocumentJobs
             stream.Dispose();
             throw;
         }
+    }
+
+    private static string MainPart(Kind kind) => kind switch { Kind.Word => "/word/document.xml", Kind.Excel => "/xl/workbook.xml", _ => "/ppt/presentation.xml" };
+
+    private static string MainType(Kind kind) => kind switch
+    {
+        Kind.Word => "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+        Kind.Excel => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+        _ => "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml",
+    };
+
+    /// <summary>
+    /// The content type [Content_Types].xml gives the kind's main part, when it is exactly that kind's (or its
+    /// macro-enabled variant); null otherwise. Parsed, not searched: a comment naming the type proves nothing (evaluator, PR 6.1).
+    /// </summary>
+    private static string? MainContentType(string types, Kind kind)
+    {
+        using var r = Xml(types);
+        while (r.Read())
+            if (r.NodeType == XmlNodeType.Element && r.LocalName == "Override"
+                && string.Equals(r.GetAttribute("PartName"), MainPart(kind), StringComparison.OrdinalIgnoreCase)
+                && r.GetAttribute("ContentType") is { } t && (t == MainType(kind) || t.StartsWith("application/vnd." + MacroType(kind), StringComparison.Ordinal)))
+                return t;
+        return null;
     }
 
     private static string MacroType(Kind kind) => kind switch
@@ -145,27 +174,44 @@ internal static class DocumentJobs
     /// <summary>The parts named prefix + N + ".xml", in number order (slide10 after slide9).</summary>
     private static IEnumerable<(int Number, string Name)> Numbered(ZipArchive zip, string prefix) =>
         zip.Entries.Select(e => e.FullName)
-            .Where(n => n.StartsWith(prefix, StringComparison.Ordinal) && n.EndsWith(".xml", StringComparison.Ordinal)
+            .Where(n => n.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && n.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)
                 && int.TryParse(n.AsSpan(prefix.Length, n.Length - prefix.Length - 4), NumberStyles.None, CultureInfo.InvariantCulture, out _))
             .Select(n => (int.Parse(n.AsSpan(prefix.Length, n.Length - prefix.Length - 4), NumberStyles.None, CultureInfo.InvariantCulture), n))
             .OrderBy(p => p.Item1);
 
-    /// <summary>The text of every paragraph element (local name <paramref name="paragraph"/>) in a part, its runs joined.</summary>
+    /// <summary>
+    /// The text of every paragraph element (local name <paramref name="paragraph"/>) in a part, its runs joined, a tab in
+    /// a run kept as a tab and a line break as a new line. Text boxes, the fallback copy of alternate content and deleted or
+    /// moved-away text are skipped whole, so a paragraph holding a text box keeps its own text and nothing comes out twice
+    /// (evaluator, PR 6.1); tab-stop definitions are not tabs.
+    /// </summary>
     private static IEnumerable<string> Paragraphs(string xml, string paragraph, string textElement)
     {
         using var r = Xml(xml);
         StringBuilder? current = null;
-        // ReadElementContentAsString leaves the reader on the node after the element: that node is handled next, not skipped.
+        var inRun = 0;
+        // ReadElementContentAsString and Skip leave the reader on the next node: that node is handled next, not skipped.
         var onNext = false;
         while (onNext || r.Read())
         {
             onNext = false;
-            if (r.NodeType == XmlNodeType.Element && r.LocalName == paragraph) { current = new StringBuilder(); if (r.IsEmptyElement) { yield return ""; current = null; } }
+            if (r.NodeType == XmlNodeType.Element && r.LocalName is "txbxContent" or "Fallback" or "del" or "moveFrom" or "tabs" or "tabLst" && !r.IsEmptyElement)
+            {
+                r.Skip();
+                onNext = true;
+            }
+            else if (r.NodeType == XmlNodeType.Element && r.LocalName == paragraph && current is null) { current = new StringBuilder(); if (r.IsEmptyElement) { yield return ""; current = null; } }
+            else if (r.NodeType == XmlNodeType.Element && r.LocalName == "r") { if (!r.IsEmptyElement) inRun++; }
+            else if (r.NodeType == XmlNodeType.EndElement && r.LocalName == "r") inRun = Math.Max(0, inRun - 1);
             else if (r.NodeType == XmlNodeType.Element && current is not null && r.LocalName == textElement && !r.IsEmptyElement) { current.Append(r.ReadElementContentAsString()); onNext = true; }
-            else if (r.NodeType == XmlNodeType.Element && current is not null && r.LocalName == "tab") current.Append('\t');
+            else if (r.NodeType == XmlNodeType.Element && current is not null && inRun > 0 && r.LocalName == "tab") current.Append('\t');
+            else if (r.NodeType == XmlNodeType.Element && current is not null && r.LocalName is "br" or "cr") current.Append("\r\n");
             else if (r.NodeType == XmlNodeType.EndElement && r.LocalName == paragraph && current is not null) { yield return current.ToString(); current = null; }
         }
     }
+
+    /// <summary>A heading the extractor writes itself ("Slide 3", "Sheet 2"), which is not the document's text.</summary>
+    private const char Heading = '\u0001';
 
     private static IEnumerable<string> TextLines(ZipArchive zip, Kind kind)
     {
@@ -177,7 +223,7 @@ internal static class DocumentJobs
             case Kind.PowerPoint:
                 foreach (var (n, name) in Numbered(zip, "ppt/slides/slide"))
                 {
-                    yield return $"Slide {n}";
+                    yield return $"{Heading}Slide {n}";
                     foreach (var p in Paragraphs(ReadPart(zip, name)!, "p", "t")) if (p.Length > 0) yield return p;
                     yield return "";
                 }
@@ -188,50 +234,88 @@ internal static class DocumentJobs
                     foreach (var si in Paragraphs(sst, "si", "t")) shared.Add(si);
                 foreach (var (n, name) in Numbered(zip, "xl/worksheets/sheet"))
                 {
-                    yield return $"Sheet {n}";
+                    yield return $"{Heading}Sheet {n}";
                     foreach (var row in Rows(ReadPart(zip, name)!, shared)) yield return row;
                 }
                 break;
         }
     }
 
-    /// <summary>Each row's cells, tab-separated, in order: shared strings, inline strings, numbers and booleans.</summary>
+    /// <summary>
+    /// Each row's cells, tab-separated in their columns (the "r" reference, gaps kept): shared strings, inline strings
+    /// (all their runs, one cell), numbers and booleans (evaluator, PR 6.1).
+    /// </summary>
     private static IEnumerable<string> Rows(string xml, List<string> shared)
     {
         using var r = Xml(xml);
-        List<string>? cells = null;
+        SortedDictionary<int, string>? cells = null;
+        var next = 0;
+        int column = 0;
         string? type = null;
+        StringBuilder? inline = null;
         var onNext = false;
         while (onNext || r.Read())
         {
             onNext = false;
-            if (r.NodeType == XmlNodeType.Element && r.LocalName == "row") { cells = []; if (r.IsEmptyElement) { cells = null; } }
-            else if (r.NodeType == XmlNodeType.Element && r.LocalName == "c" && cells is not null) { type = r.GetAttribute("t"); if (r.IsEmptyElement) cells.Add(""); }
+            if (r.NodeType == XmlNodeType.Element && r.LocalName == "row") { cells = []; next = 0; if (r.IsEmptyElement) { yield return ""; cells = null; } }
+            else if (r.NodeType == XmlNodeType.Element && r.LocalName == "c" && cells is not null)
+            {
+                type = r.GetAttribute("t");
+                column = ColumnOf(r.GetAttribute("r")) ?? next;
+                next = column + 1;
+                if (r.IsEmptyElement) cells[column] = "";
+            }
             else if (r.NodeType == XmlNodeType.Element && r.LocalName == "v" && cells is not null)
             {
                 var v = r.ReadElementContentAsString();
-                cells.Add(type switch
+                cells[column] = type switch
                 {
                     "s" => int.TryParse(v, NumberStyles.None, CultureInfo.InvariantCulture, out var i) && i < shared.Count ? shared[i] : "",
                     "b" => v == "1" ? "TRUE" : "FALSE",
                     _ => v,
-                });
+                };
                 onNext = true;
             }
-            else if (r.NodeType == XmlNodeType.Element && r.LocalName == "t" && cells is not null && type == "inlineStr") { cells.Add(r.ReadElementContentAsString()); onNext = true; }
-            else if (r.NodeType == XmlNodeType.EndElement && r.LocalName == "row" && cells is not null) { yield return string.Join('\t', cells); cells = null; }
+            else if (r.NodeType == XmlNodeType.Element && r.LocalName == "is" && cells is not null) inline = new StringBuilder();
+            else if (r.NodeType == XmlNodeType.Element && r.LocalName == "t" && inline is not null && !r.IsEmptyElement) { inline.Append(r.ReadElementContentAsString()); onNext = true; }
+            else if (r.NodeType == XmlNodeType.EndElement && r.LocalName == "is" && inline is not null && cells is not null) { cells[column] = inline.ToString(); inline = null; }
+            else if (r.NodeType == XmlNodeType.EndElement && r.LocalName == "row" && cells is not null)
+            {
+                var width = cells.Count == 0 ? 0 : cells.Keys.Max() + 1;
+                if (width > 16_384) throw new DocFailure(ErrorCode.LimitExceeded, "A row is wider than a worksheet can be.");
+                yield return string.Join('\t', Enumerable.Range(0, width).Select(k => cells.TryGetValue(k, out var c) ? c : ""));
+                cells = null;
+            }
         }
+    }
+
+    /// <summary>The zero-based column of a cell reference ("C2" is 2), or null.</summary>
+    private static int? ColumnOf(string? reference)
+    {
+        if (string.IsNullOrEmpty(reference)) return null;
+        var column = 0;
+        var letters = 0;
+        foreach (var ch in reference)
+        {
+            if (!char.IsAsciiLetterUpper(ch)) break;
+            column = column * 26 + (ch - 'A' + 1);
+            if (++letters > 3) return null;
+        }
+        return letters == 0 ? null : column - 1;
     }
 
     private static JobResult ExtractText(JobRequest request, string path, ZipArchive zip, Kind kind)
     {
         var text = new StringBuilder();
+        var content = false; // headings alone are not text (evaluator, PR 6.1)
         foreach (var line in TextLines(zip, kind))
         {
-            text.Append(line).Append("\r\n");
+            if (line.Length > 0 && line[0] == Heading) text.Append(line, 1, line.Length - 1);
+            else { text.Append(line); content |= line.Trim().Length > 0; }
+            text.Append("\r\n");
             if (text.Length > MaxPartChars) throw new DocFailure(ErrorCode.LimitExceeded, "The document's text is too large.");
         }
-        if (text.ToString().Trim().Length == 0) return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "The document has no text.");
+        if (!content) return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "The document has no text.");
         var output = kind == Kind.PowerPoint ? text.ToString().TrimEnd('\r', '\n') + "\r\n" : text.ToString();
         byte[] bytes = [0xEF, 0xBB, 0xBF, .. Encoding.UTF8.GetBytes(output)];
         return Commit(request, path, bytes);
@@ -300,16 +384,40 @@ internal static class DocumentJobs
                 }
                 break;
         }
-        if (zip.Entries.Any(e => e.FullName.EndsWith("vbaProject.bin", StringComparison.OrdinalIgnoreCase)))
+        var macroType = MainContentType(ReadPart(zip, "[Content_Types].xml") ?? "", kind) is { } t && t.Contains("macroEnabled", StringComparison.OrdinalIgnoreCase);
+        if (macroType || zip.Entries.Any(e => e.FullName.EndsWith("vbaProject.bin", StringComparison.OrdinalIgnoreCase)))
             facts.Add(new("Macros", "Contains macros (WinTools never runs them)", Notice: true));
         var embedded = zip.Entries.Count(e => e.FullName.Contains("/embeddings/", StringComparison.Ordinal));
         if (embedded > 0) facts.Add(new("Embedded", $"{embedded:N0} embedded objects", Notice: true));
-        var external = zip.Entries.Where(e => e.FullName.EndsWith(".rels", StringComparison.Ordinal)).Any(e => (ReadPart(zip, e.FullName) ?? "").Contains("TargetMode=\"External\"", StringComparison.Ordinal));
+        // Parsed, so quoting and case do not matter; every relationships part counts (a template link lives in settings).
+        var external = zip.Entries.Where(e => e.FullName.EndsWith(".rels", StringComparison.OrdinalIgnoreCase)).Any(e => HasExternalTarget(ReadPart(zip, e.FullName) ?? ""));
         if (external) facts.Add(new("Links", "Links to files or websites outside the document (never opened)", Notice: true));
         return JobResult.WithFacts(id, [.. facts.Take(JobFacts.MaxCount)]);
     }
 
-    private static string Clip(string s) => s.Length <= 150 ? s : s[..149] + "…";
+    /// <summary>At most 150 characters, never cutting a character in two (a surrogate pair, an emoji).</summary>
+    private static string Clip(string s)
+    {
+        if (s.Length <= 150) return s;
+        var info = new StringInfo(s);
+        var cut = info.LengthInTextElements > 149 ? info.SubstringByTextElements(0, 149) : s;
+        while (cut.Length > 149) cut = new StringInfo(cut).SubstringByTextElements(0, new StringInfo(cut).LengthInTextElements - 1);
+        return cut + "…";
+    }
+
+    private static bool HasExternalTarget(string rels)
+    {
+        if (rels.Length == 0) return false;
+        using var r = Xml(rels);
+        while (r.Read())
+            if (r.NodeType == XmlNodeType.Element && r.LocalName == "Relationship" && string.Equals(r.GetAttribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
+    /// <summary>Text a fact may show: no control or format characters (bidi marks and overrides), as JobFacts requires.</summary>
+    private static string Showable(string value) =>
+        new([.. value.Where(c => !char.IsControl(c) && CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.Format)]);
 
     /// <summary>The text of each top-level element of a properties part, by local name.</summary>
     private static Dictionary<string, string> Properties(string xml)
@@ -327,7 +435,7 @@ internal static class DocumentJobs
                 var name = r.LocalName;
                 var value = r.ReadElementContentAsString();
                 onNext = true;
-                props.TryAdd(name, value.Any(char.IsControl) ? new string([.. value.Where(c => !char.IsControl(c))]) : value);
+                props.TryAdd(name, Showable(value)); // one RLM must not make the whole Info unbelievable (evaluator, PR 6.1)
             }
         }
         return props;
