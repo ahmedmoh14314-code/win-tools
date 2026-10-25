@@ -30,56 +30,65 @@ internal static class SubtitleJobs
             return JobResult.Fail(id, ErrorCode.InvalidRequest, "One subtitle file per request.");
         if (request.OutputDirectory is { } od && !PathPolicy.IsSupported(Path.Combine(od, "x.srt")))
             return JobResult.Fail(id, ErrorCode.InvalidRequest, "The output folder must be a canonical, fully qualified path.");
+        var known = request.CapabilityId is SubtitleCapabilities.InfoId or SubtitleCapabilities.ToVttId or SubtitleCapabilities.ToSrtId or SubtitleCapabilities.CleanUpId
+            || SubtitleCapabilities.ShiftOf(request.CapabilityId) is not null;
+        if (!known) return JobResult.Fail(id, ErrorCode.UnsupportedOperation, "This worker does not run that command."); // before the file is read
         try
         {
-            var (decoded, size) = Read(path);
+            if (Read(path, out var raw, out var refusal) is not { } failure) { }
+            else return JobResult.Fail(id, failure, refusal!);
             var format = SubtitleCapabilities.FormatOf(path);
+            var decoded = SubtitleEncoding.TryDecode(raw, out var why);
+            if (request.CapabilityId == SubtitleCapabilities.InfoId) return Info(id, decoded, why, raw.Length, decoded is null ? null : SubtitleParser.Parse(decoded.Text, format));
+            if (decoded is null) return JobResult.Fail(id, ErrorCode.UnsupportedContent, why);
             var doc = SubtitleParser.Parse(decoded.Text, format);
-            if (request.CapabilityId == SubtitleCapabilities.InfoId) return Info(id, decoded, size, doc);
             if (doc.Problems.Count > 0) return JobResult.Fail(id, ErrorCode.DecodeFailed, $"The file has errors, so it was not changed: {doc.Problems[0]}");
             if (doc.Cues.Count == 0) return JobResult.Fail(id, ErrorCode.NothingToDo, "The file has no cues.");
-            var output = request.CapabilityId switch
-            {
-                SubtitleCapabilities.ToVttId or SubtitleCapabilities.ToSrtId or SubtitleCapabilities.CleanUpId => doc,
-                _ when SubtitleCapabilities.ShiftOf(request.CapabilityId) is { } by => SubtitleTiming.Shift(doc, by),
-                _ => null,
-            };
-            if (output is null) return JobResult.Fail(id, ErrorCode.UnsupportedOperation, "This worker does not run that command.");
+            var output = SubtitleCapabilities.ShiftOf(request.CapabilityId) is { } by ? SubtitleTiming.Shift(doc, by) : doc;
+            if (output.Cues.Any(c => c.End > SubtitleWriter.MaxTime))
+                return JobResult.Fail(id, ErrorCode.LimitExceeded, "A cue would end after 999:59:59, which subtitle files cannot hold.");
             var target = SubtitleCapabilities.OutputFormat(request.CapabilityId, path);
             var bytes = SubtitleWriter.Bytes(output, target);
             // Clean up on a file that already is exactly what it would write: say so, write nothing.
-            if (request.CapabilityId == SubtitleCapabilities.CleanUpId && File.ReadAllBytes(path).AsSpan().SequenceEqual(bytes))
+            if (request.CapabilityId == SubtitleCapabilities.CleanUpId && raw.AsSpan().SequenceEqual(bytes))
                 return JobResult.Fail(id, ErrorCode.NothingToDo, "The file already is clean UTF-8.");
-            return Commit(request, path, bytes, target, output.Cues.Count);
+            return Commit(request, path, bytes, target, output, SubtitleWriter.Dropped(output, target));
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return JobResult.Fail(id, ErrorCode.SourceNotFound, "The file is no longer there."); }
-        catch (InvalidOperationException ex) { return JobResult.Fail(id, ErrorCode.InputTooLarge, ex.Message); }
         catch (UnauthorizedAccessException) { return JobResult.Fail(id, ErrorCode.OutputDirectoryNotWritable, "The destination folder is not writable."); }
         catch (IOException ex) { return JobResult.Fail(id, ErrorCode.OutputDirectoryNotWritable, $"Writing failed (0x{ex.HResult:X8})."); }
     }
 
-    private static (DecodedText Text, long Size) Read(string path)
+    /// <summary>Reads the source once, bounded; the refusal's code and reason when it cannot or must not be read.</summary>
+    private static ErrorCode? Read(string path, out byte[] bytes, out string? why)
     {
-        if (Directory.Exists(path)) throw new FileNotFoundException();
+        bytes = [];
+        why = null;
+        if (Directory.Exists(path)) { why = "It is a folder."; return ErrorCode.IsAFolder; }
         var info = new FileInfo(path);
         if (!info.Exists) throw new FileNotFoundException();
-        if ((info.Attributes & (FileAttributes.Offline | RecallOnOpen | RecallOnDataAccess)) != 0) throw new InvalidOperationException("The file is online only; reading it would download it.");
-        if (info.Length > SubtitleCapabilities.MaxInputBytes) throw new InvalidOperationException($"The file is larger than {SubtitleCapabilities.MaxInputBytes >> 20} MB; a subtitle file is far smaller.");
+        if ((info.Attributes & (FileAttributes.Offline | RecallOnOpen | RecallOnDataAccess)) != 0) { why = "The file is online only; reading it would download it."; return ErrorCode.OnlineOnly; }
+        if (info.Length > SubtitleCapabilities.MaxInputBytes) { why = $"The file is larger than {SubtitleCapabilities.MaxInputBytes >> 20} MB; a subtitle file is far smaller."; return ErrorCode.LimitExceeded; }
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        var bytes = new byte[Math.Min(fs.Length, SubtitleCapabilities.MaxInputBytes)];
-        var n = fs.ReadAtLeast(bytes, bytes.Length, throwOnEndOfStream: false);
-        return (SubtitleEncoding.Decode(bytes.AsSpan(0, n)), n);
+        var buffer = new byte[Math.Min(fs.Length, SubtitleCapabilities.MaxInputBytes)];
+        var n = fs.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
+        bytes = n == buffer.Length ? buffer : buffer[..n];
+        return null;
     }
 
-    private static JobResult Info(string id, DecodedText decoded, long size, SubtitleDocument doc)
+    private static JobResult Info(string id, DecodedText? decoded, string why, long size, SubtitleDocument? doc)
     {
-        var facts = new List<JobFact>
+        var facts = new List<JobFact> { new("Type", "Subtitles") };
+        if (decoded is null || doc is null)
         {
-            new("Type", "Subtitles"),
-            new("Encoding", decoded.EncodingName),
-            new("Cues", doc.Cues.Count.ToString("N0", CultureInfo.InvariantCulture)),
-            new("Size", Core.Feedback.FeedbackText.Size(size)),
-        };
+            facts.Add(new("Encoding", "Not recognised", Notice: true));
+            facts.Add(new("Size", Core.Feedback.FeedbackText.Size(size)));
+            facts.Add(new("Problems", Clip(why), Notice: true));
+            return JobResult.WithFacts(id, facts);
+        }
+        facts.Add(new("Encoding", decoded.EncodingName));
+        facts.Add(new("Cues", doc.Cues.Count.ToString("N0", CultureInfo.InvariantCulture)));
+        facts.Add(new("Size", Core.Feedback.FeedbackText.Size(size)));
         if (doc.Cues.Count > 0)
             facts.Add(new("Runs", $"{Time(doc.Cues[0].Start)} to {Time(doc.Cues[^1].End)}"));
         var overlaps = SubtitleTiming.Overlaps(doc);
@@ -90,9 +99,12 @@ internal static class SubtitleJobs
 
     private static string Clip(string s) => s.Length <= 150 ? s : s[..149] + "…";
 
+    private static bool SameCues(SubtitleDocument a, SubtitleDocument b) =>
+        a.Cues.Count == b.Cues.Count && a.Cues.Zip(b.Cues).All(p => p.First.Start == p.Second.Start && p.First.End == p.Second.End && p.First.Lines.SequenceEqual(p.Second.Lines));
+
     private static string Time(TimeSpan t) => string.Create(CultureInfo.InvariantCulture, $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}");
 
-    private static JobResult Commit(JobRequest request, string source, byte[] bytes, SubtitleFormat format, int cues)
+    private static JobResult Commit(JobRequest request, string source, byte[] bytes, SubtitleFormat format, SubtitleDocument written, IReadOnlyList<string> dropped)
     {
         var dir = new DirectoryInfo(request.OutputDirectory ?? Path.GetDirectoryName(source)!);
         if (!dir.Exists) return JobResult.Fail(request.Id, request.OutputDirectory is null ? ErrorCode.SourceNotFound : ErrorCode.OutputDirectoryNotWritable, "The destination folder does not exist.");
@@ -108,9 +120,12 @@ internal static class SubtitleJobs
                 fs.Flush(flushToDisk: true);
             }
             File.SetAttributes(temp, FileAttributes.Hidden);
-            // Read back: the written file must parse to the same number of cues without a problem.
+            // Read back: the written file must parse, without a problem, to the same cues: every time, and every line once
+            // turned into the target format.
             var again = SubtitleParser.Parse(SubtitleEncoding.Decode(File.ReadAllBytes(temp)).Text, format);
-            if (again.Problems.Count > 0 || again.Cues.Count != cues)
+            var expected = SubtitleParser.Parse(SubtitleEncoding.Decode(bytes).Text, format);
+            if (again.Problems.Count > 0 || again.Cues.Count != written.Cues.Count || !SameCues(again, expected)
+                || !again.Cues.Select(c => (c.Start, c.End)).SequenceEqual(written.Cues.Select(c => (c.Start, c.End))))
                 return JobResult.Fail(request.Id, ErrorCode.OutputValidationFailed, "The new file did not check out; nothing was saved.");
             if (MarkOfTheWeb.ZoneToCarry(source) is { } z) MarkOfTheWeb.Apply(temp, z);
             File.SetAttributes(temp, FileAttributes.Normal);
@@ -121,7 +136,9 @@ internal static class SubtitleJobs
                 {
                     File.Move(temp, candidate, overwrite: false);
                     committed = true;
-                    return JobResult.Ok(request.Id, new JobOutput(candidate, hash));
+                    // What the target format cannot hold is said in the toast (evaluator, PR 7.1).
+                    IReadOnlyList<JobFact> facts = dropped.Count > 0 ? [new JobFact("Dropped", "Not kept: " + string.Join(", ", dropped), Notice: true)] : [];
+                    return new JobResult(request.Id, true, ErrorCode.None, null, [new JobOutput(candidate, hash)], facts);
                 }
                 catch (IOException ex) when (ex.HResult is ErrorFileExists or ErrorAlreadyExists) { }
             }

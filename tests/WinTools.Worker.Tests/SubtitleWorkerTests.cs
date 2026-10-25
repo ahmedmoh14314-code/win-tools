@@ -110,6 +110,30 @@ public sealed class SubtitleWorkerTests : IDisposable
     }
 
     [Fact]
+    public void An_encoding_that_is_not_certain_is_refused_and_nothing_is_written()
+    {
+        // Evaluator, PR 7.1 (blocker, reproduced): Cyrillic was read as Arabic and written out as "Saved as UTF-8".
+        var russian = _dir.Write("film.srt", CodePages.Get(1251).GetBytes("1\r\n00:00:01,000 --> 00:00:02,000\r\nПривет, как дела?\r\n\r\n"));
+        var r = SubtitleJobs.Run(Request(SubtitleCapabilities.CleanUpId, russian));
+        Assert.Equal(ErrorCode.UnsupportedContent, r.Error);
+        Assert.Equal(["film.srt"], _dir.Names());
+        var info = SubtitleJobs.Run(Request(SubtitleCapabilities.InfoId, russian));
+        Assert.Contains(info.Facts, f => f is { Label: "Encoding", Value: "Not recognised", Notice: true });
+    }
+
+    [Fact]
+    public void A_conversion_says_what_the_target_format_cannot_keep()
+    {
+        var source = _dir.Write("film.vtt", Encoding.UTF8.GetBytes("WEBVTT\n\nSTYLE\n::cue { color: yellow }\n\n00:00:01.000 --> 00:00:02.000 line:0\n<c.red>top</c> &amp; more\n\n"));
+        var request = Request(SubtitleCapabilities.ToSrtId, source);
+        var r = SubtitleJobs.Run(request);
+        Assert.True(r.Success, r.Message);
+        Assert.Contains(r.Facts, f => f is { Label: "Dropped", Notice: true } && f.Value.Contains("cue positions", StringComparison.Ordinal));
+        Assert.Contains("top & more", File.ReadAllText(r.OutputPath!), StringComparison.Ordinal);
+        Assert.True(SubtitleJobModule.Instance.IsBelievable(request, r));
+    }
+
+    [Fact]
     public async Task The_real_text_worker_runs_subtitle_and_file_jobs_side_by_side()
     {
         var source = _dir.Write("film.srt", Encoding.UTF8.GetBytes(ArabicSrt));

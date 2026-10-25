@@ -40,6 +40,29 @@
    - Clean up on a file that already is exactly its clean form writes nothing ("Already clean UTF-8").
    - The host believes a file only under an allowed name, with the validated SHA-256, and when it parses without a problem.
 
+## Evaluator review
+One round (2026-10-25), reproduced on the built code: three blockers and five majors, fixed with `SubtitleReviewTests` (written first, failing).
+- **Blockers:**
+  - **Encoding was guessed.** Cyrillic, Greek, Portuguese pairs and damaged UTF-8 were decoded wrongly and written out as "Saved as UTF-8". Decoding now succeeds only when it is certain (decision 3 below supersedes the earlier rule) and refuses otherwise, with the reason.
+  - **A BOM followed by other bytes** was replaced silently. Decoders are strict now.
+  - **A missing blank line** merged two cues. A timing line among a cue's text is now a problem.
+- **Majors:**
+  - non-ASCII digits crashed the worker (the timing regex now takes `[0-9]` only);
+  - long lines were cut (now a problem);
+  - a whitespace-only line after `WEBVTT` swallowed the first cue (the header ends at any blank line, and a timing in the header is a problem);
+  - WebVTT to WebVTT dropped the header, blocks, ids and settings (now kept verbatim);
+  - tags and entities were mishandled both ways (only WebVTT's own tags are removed; entities are decoded to SRT and escaped to WebVTT).
+  - What a conversion cannot keep is told in the toast ("Not kept: cue positions, styles and notes").
+- **Minors fixed:**
+  - error codes;
+  - one bounded read;
+  - the read-back compares every cue;
+  - unknown ids are refused before the file is read;
+  - 1,000,000 lines at most;
+  - a shift past 999 hours is refused.
+
+**Decision 3, as revised:** a BOM with a strict decoder; strict UTF-8, refusing mostly-valid UTF-8 with damaged bytes; Windows-1256 only when at least 80 % of the decoded non-ASCII characters are Arabic script; Windows-1252 only when at least 95 % are Latin and fewer than half of the high bytes stand in runs of three or more (Cyrillic and Greek put over 90 % there). Anything else is refused: "save it as UTF-8 and try again".
+
 ## Alternatives considered
 - **SubtitlesParserV2.** LGPL-3, rejected by the licence policy.
 - **UTF.Unknown for detection.** MPL. Not needed for the two code pages that matter here.
@@ -47,7 +70,7 @@
 - **UTF-8 without a BOM for SRT.** Rejected: common Windows players then show Arabic as mojibake.
 
 ## Consequences
-- Other legacy code pages (1250, 1251, Shift-JIS…) decode as 1252 when they are not valid UTF-8. Info names the encoding it used, so the user can tell.
+- Other legacy code pages (1250, 1251, 1253, Shift-JIS…) are refused with the reason, not guessed; Info says "Not recognised".
 - WebVTT styling is lost on conversion to SRT, which cannot hold it.
 
 ## Evidence / experiments
