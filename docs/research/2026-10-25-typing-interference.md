@@ -62,19 +62,22 @@ The host log confirmed the key (`"TriggerKey":"F2"`, `"F11"`).
 - **Held past the drop.** The probe sends a 60 ms press inside the drag. A user who holds the key and drops after about half a second keeps sending auto-repeat key-downs after the drag has ended. Those reach Explorer, which then has the focus: F2 opens the rename box on the file, F11 goes full screen, F4 focuses the address bar.
 - **With a modifier.** Ctrl and Shift held still fire the trigger (ADR-0003), and the key passes on. Alt+F4 closes the window, Shift+F10 opens the context menu, Ctrl+F4 closes a tab.
 
-Neither was measured, and the safe answer needs no measurement: offer only keys that do nothing in Explorer if they reach it.
+Neither was measured, and the safe answer needs no measurement: offer only keys whose stray press is harmless where it lands.
+
+**Other file managers (second review).** The ring opens on any left-button drag, and a held key repeats into whatever program is in front. In Total Commander and Far, F8 is Delete, and Shift+F8 deletes without the Recycle Bin; F7 makes a folder (a dialog), and F9 and F12 open menus or screens.
 
 ## Decision (applied in `TriggerKeyPolicy`)
-- **Offered:** Space, F7, F8, F9, F12.
-  - Explorer has no function on F7–F9 and F12: the control saw nothing for them, and the drag probe saw nothing either.
-  - That is a judgement from "nothing to act on", as for F5's invisible refresh, not a measured reaction. It is safe because a stray press of these keys is harmless whatever the reason.
+- **Offered:** Space, F7, F9, F12.
+  - In Explorer, Space only selects the focused item. Explorer has no function on F7, F9 and F12: the control saw nothing for them, and the drag probe saw nothing either.
+  - For F7, F9 and F12 this is a judgement from "nothing to act on", not a measured reaction, the same kind of evidence as for F5's invisible refresh. It is safe because a stray press of these keys is harmless whatever the reason.
 - **Refused, with the reason in the load note and the window:**
   - F2, F3, F4, F6, F10, F11 (a stray press renames, searches, opens the address bar, moves the focus, opens the menu bar, or goes full screen);
   - F5 (refresh);
+  - F8 (Delete in Total Commander and Far);
   - F1 (Help);
   - letters and digits (they would open the ring over games and drawing programs);
   - modifiers (they change the drop effect).
-- **V1 users with F10 or F11** get Space and a load note saying why.
+- **V1 users with F8, F10 or F11** get Space and a load note saying why (`HardeningTests.A_refused_trigger_key_is_reported_with_its_reason`).
 - **Follow-ups that would widen the set:**
   - a file-drag-only condition (for letters and digits): the drag-image window that Explorer's drag source shows (`SysDragImage`), or an OLE `DragEnter` on an invisible target under the cursor before the ring shows;
   - a probe variant that holds the key across the drop, with auto-repeat, and with Ctrl, Shift and Alt (for F2–F6, F10, F11).

@@ -99,12 +99,13 @@ public sealed class SettingsSchemaTests
     // The typing-interference spike (docs/research/2026-10-25-typing-interference.md, ADR-0021). Explorer ignored F2-F12,
     // letters and digits during a drag, but a key held past the drop repeats into Explorer, and with Ctrl, Shift or Alt
     // it is another shortcut (Alt+F4, Shift+F10); neither was measured. Offered: only keys that do nothing in Explorer if
-    // they reach it (Space, F7, F8, F9, F12). F2-F4, F6, F10 and F11 rename, search, focus, open the menu or go full
-    // screen; F5 refreshes; F1 opens Help; letters and digits would open the ring over games and drawing programs.
+    // they reach it (Space only selects, F7, F9 and F12 do nothing there). F2-F4, F6, F10 and F11 rename, search, focus,
+    // open the menu or go full screen; F5 refreshes; F1 opens Help; F8 deletes in Total Commander and Far, which a held
+    // key reaches too (second review); letters and digits would open the ring over games and drawing programs.
     [Theory]
     [InlineData("Space", true)]
     [InlineData("F7", true)]
-    [InlineData("F8", true)]
+    [InlineData("F8", false)]
     [InlineData("F9", true)]
     [InlineData("F12", true)]
     [InlineData("F1", false)]
@@ -130,7 +131,7 @@ public sealed class SettingsSchemaTests
 
     [Fact]
     public void The_window_lists_the_keys_in_a_fixed_order() =>
-        Assert.Equal(["Space", "F7", "F8", "F9", "F12"], TriggerKeyPolicy.Order);
+        Assert.Equal(["Space", "F7", "F9", "F12"], TriggerKeyPolicy.Order);
 
     [Fact]
     public void Only_allowed_keys_are_trigger_keys() =>

@@ -12,16 +12,18 @@ The low-level keyboard hook passes every key on (rules/windows-integration.md: h
 
 ## Decision
 1. **Schema 2 groups the file in sections:** `trigger`, `output`, `images`, `ui`. A module adds its own section when it has settings (YAGNI: no empty `pdf` or `archive` sections yet). In memory `AppSettings` stays flat, so no caller changes. A schema 1 file (flat) is read as it is and written back as schema 2. Missing sections take their defaults, and odd values are repaired by the existing normalisation.
-2. **Trigger keys: Space, F7, F8, F9 and F12, the keys that do nothing in Explorer** (spike: `docs/research/2026-10-25-typing-interference.md`).
-   - The spike showed that Explorer ignores F2–F12, letters and digits while a file is dragged. A control without a drag proved that the probe sees F2, F3, F4, F6, F10, F11 and type-ahead when Explorer does act.
+2. **Trigger keys: Space, F7, F9 and F12, the keys whose stray press is harmless** (spike: `docs/research/2026-10-25-typing-interference.md`).
+   - The spike showed that Explorer ignores F2–F4, F6–F12, letters and digits while a file is dragged. F5's refresh is invisible to the probe. A control without a drag proved that the probe sees F2, F3, F4, F6, F10, F11 and type-ahead when Explorer does act.
    - Two paths were not measured (evaluator review): a key held past the drop repeats into Explorer after the drag ends, and with Ctrl, Shift or Alt it is another shortcut (Alt+F4, Shift+F10).
-   - So only keys whose stray press is harmless are offered.
+   - So only keys whose stray press is harmless are offered: in Explorer Space only selects, and F7, F9 and F12 do nothing.
+   - F8 was dropped in a second review: it deletes in Total Commander and Far, and a held key reaches whatever program is in front.
    - **Refused:**
      - F2–F4, F6, F10 and F11 (rename, search, address bar, focus, menu bar, full screen);
      - F5 (refresh);
+     - F8 (Delete in Total Commander and Far);
      - F1 (Help);
      - letters and digits: the ring opens on any left-button drag, so in a game or a drawing program they would open it there.
-   - V1 users who chose F10 or F11 get Space and a load note with the reason.
+   - V1 users who chose F8, F10 or F11 get Space and a load note with the reason.
    - `TriggerKeyPolicy` gives the reason for every refusal. A refused key in the file is reported in the load note, and the window says which keys are not offered and why.
    - **Limits:**
      - one PC and one layout (Arabic);
@@ -47,6 +49,7 @@ The low-level keyboard hook passes every key on (rules/windows-integration.md: h
 - `SettingsSchemaTests` (15): migration keeps every value, the section layout, round trip, repair of a partial file, Reset, and every key's verdict.
 - `SettingsHardeningTests`: a newer schema (3 and 4, flat and in sections) is never moved aside or overwritten; the load note reports an invalid output folder in both layouts and a refused trigger key with its reason.
 - Spike (2026-10-25): `keyprobe` (during a drag) and `keycontrol` (no drag) for F2–F12, A, B, D, E, Q, Z, 0, 1 and 5; the results table is in the research note. Trigger end to end with F7, F9 and F12 (2/2 each), and before the review F2, F4, F6 and F11.
+- `HardeningTests.A_refused_trigger_key_is_reported_with_its_reason`: a V1 file with F8, F10 or F11 loads as Space with the policy's reason.
 - `SettingsSchemaTests.Every_key_offered_or_refused_has_a_reason`: every offered key and every refusal (F1, F5, letters, a digit, a modifier), shown failing on the earlier policy.
 
 ## Evaluator review
