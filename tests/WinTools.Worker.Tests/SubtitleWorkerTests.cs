@@ -76,7 +76,7 @@ public sealed class SubtitleWorkerTests : IDisposable
     [Fact]
     public void Clean_up_rewrites_as_utf8_once_and_then_has_nothing_to_do()
     {
-        var source = _dir.Write("old.srt", CodePages.Get(1252).GetBytes("1\n00:00:01,000 --> 00:00:02,000\nCafé crème\n"));
+        var source = _dir.Write("old.srt", Encoding.UTF8.GetBytes("1\n00:00:01,000 --> 00:00:02,000\nCafé crème\n")); // UTF-8 without a BOM, LF
         var r = SubtitleJobs.Run(Request(SubtitleCapabilities.CleanUpId, source));
         Assert.True(r.Success, r.Message);
         var bytes = File.ReadAllBytes(r.OutputPath!);
