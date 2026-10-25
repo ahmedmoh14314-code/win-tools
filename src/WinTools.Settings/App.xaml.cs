@@ -1,17 +1,23 @@
 using System.Runtime.InteropServices;
 using System.Windows;
+using WinTools.Core.Localization;
+using WinTools.Windows;
 using WinTools.Windows.Settings;
 
 namespace WinTools.Settings;
 
 /// <summary>
-/// The settings process: one window, one instance. Usage: WinTools.Settings [--settings &lt;file&gt;] (the host passes the
-/// file it uses). A second start brings the open window to the front instead of opening another.
+/// The WinTools window's process: one window, one instance. Usage: WinTools.Settings [--settings &lt;file&gt;] [--page
+/// home|howto|features|settings|about]. The host passes the file it uses. A second start brings the open window to the
+/// front instead of opening another. The language comes from the settings (or Windows); when it changes, the window is
+/// built again in it, on the same page.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "The mutex lives as long as the process and is disposed in OnExit.")]
 public partial class App : Application
 {
     private Mutex? _single;
+    private SettingsStore? _store;
+    private string _hostPath = "";
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -25,14 +31,38 @@ public partial class App : Application
             return;
         }
         string? path = null;
+        var page = "home";
         for (var i = 0; i < e.Args.Length; i++)
+        {
             if (e.Args[i] == "--settings" && i + 1 < e.Args.Length) path = Path.GetFullPath(e.Args[++i]);
-        var store = path is null ? SettingsStore.Default() : new SettingsStore(path);
-        var hostPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Host.exe");
-        var window = new MainWindow(store, hostPath);
+            else if (e.Args[i] == "--page" && i + 1 < e.Args.Length) page = e.Args[++i];
+        }
+        _store = path is null ? SettingsStore.Default() : new SettingsStore(path);
+        _hostPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Host.exe");
+        UiText.Use(_store.Load().Language, SystemPreferences.UiLanguageTag());
+        Open(page);
+    }
+
+    private void Open(string page, MainWindow? previous = null)
+    {
+        // Words the shared styles show (the switch's state), in the language in use.
+        Resources["SwitchOn"] = UiText.T("switch.on");
+        Resources["SwitchOff"] = UiText.T("switch.off");
+        var window = new MainWindow(_store!, _hostPath, page);
+        window.LanguageSwitched += language =>
+        {
+            UiText.Use(language, SystemPreferences.UiLanguageTag());
+            window.Dispatcher.BeginInvoke(() => Open(window.SettingsPage.Visibility == Visibility.Visible ? "settings" : "home", window));
+        };
         MainWindow = window;
+        if (previous is not null)
+        {
+            window.WindowStartupLocation = WindowStartupLocation.Manual;
+            (window.Left, window.Top, window.Width, window.Height) = (previous.Left, previous.Top, previous.Width, previous.Height);
+        }
         window.Show();
         window.Activate();
+        previous?.Close();
     }
 
     protected override void OnExit(ExitEventArgs e)

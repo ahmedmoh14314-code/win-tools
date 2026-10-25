@@ -44,6 +44,10 @@ public sealed record AppSettings
     public bool UiSounds { get; init; } = true;
     /// <summary>"System" (follow Windows' "Animation effects"), "On" or "Off".</summary>
     public string Animations { get; init; } = "System";
+    /// <summary>"System" (Arabic when Windows shows Arabic, otherwise English), "en" or "ar".</summary>
+    public string Language { get; init; } = "System";
+    /// <summary>Whether the first-run tour was finished or skipped; it is shown again only on request.</summary>
+    public bool Onboarded { get; init; }
 
     /// <summary>Whether the UI should show changes at once, given Windows' own setting.</summary>
     public bool ReducedMotion(bool systemReducedMotion) => Normalized().Animations switch
@@ -72,6 +76,7 @@ public sealed record AppSettings
             ResizeHeight = Math.Clamp(ResizeHeight, 0, 65_535),
             Theme = Theme is "System" or "Light" or "Dark" ? Theme : "System",
             Animations = Animations is "System" or "On" or "Off" ? Animations : "System",
+            Language = Language is "System" or "en" or "ar" ? Language : "System",
         };
     }
 
@@ -99,7 +104,7 @@ public sealed record AppSettings
             new(s.TriggerKey),
             new(s.OutputPolicy, s.OutputFolder),
             new(s.JpegQuality, s.WebPQuality, s.ResizeWidth, s.ResizeHeight, s.KeepAspectRatio, s.NoUpscale),
-            new(s.Theme, s.UiSounds, s.Animations)), Json);
+            new(s.Theme, s.UiSounds, s.Animations, s.Language, s.Onboarded)), Json);
     }
 
     /// <summary>
@@ -134,6 +139,8 @@ public sealed record AppSettings
                 Theme = f.Ui?.Theme ?? d.Theme,
                 UiSounds = f.Ui?.Sounds ?? d.UiSounds,
                 Animations = f.Ui?.Animations ?? d.Animations,
+                Language = f.Ui?.Language ?? d.Language,
+                Onboarded = f.Ui?.Onboarded ?? d.Onboarded,
             }.Normalized();
         }
         catch (JsonException) { return null; }
@@ -164,5 +171,5 @@ public sealed record AppSettings
     private sealed record TriggerSection(string? Key);
     private sealed record OutputSection(OutputPolicy? Policy, string? Folder);
     private sealed record ImagesSection(int? JpegQuality, int? WebPQuality, int? ResizeWidth, int? ResizeHeight, bool? KeepAspectRatio, bool? NoUpscale);
-    private sealed record UiSection(string? Theme, bool? Sounds, string? Animations);
+    private sealed record UiSection(string? Theme, bool? Sounds, string? Animations, string? Language = null, bool? Onboarded = null);
 }

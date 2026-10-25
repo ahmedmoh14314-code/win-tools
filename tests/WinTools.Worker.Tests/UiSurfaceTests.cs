@@ -220,7 +220,10 @@ public sealed partial class UiSurfaceTests
     public void Startup_registration_recognises_this_copy_another_copy_and_none()
     {
         var host = @"C:\Apps\WinTools\WinTools.Host.exe";
-        Assert.Equal("\"C:\\Apps\\WinTools\\WinTools.Host.exe\"", StartupRegistration.CommandFor(host));
+        // Signing in shows the tray icon, not the window (app shell): the stored command adds --background; a value an older
+        // version wrote (the path alone) still counts as on.
+        Assert.Equal("\"C:\\Apps\\WinTools\\WinTools.Host.exe\" --background", StartupRegistration.CommandFor(host));
+        Assert.Equal(StartupState.On, StartupRegistration.State(host, "\"C:\\Apps\\WinTools\\WinTools.Host.exe\" --background"));
         Assert.Equal(StartupState.Off, StartupRegistration.State(host, null));
         Assert.Equal(StartupState.Off, StartupRegistration.State(host, " "));
         Assert.Equal(StartupState.On, StartupRegistration.State(host, "\"c:\\apps\\wintools\\WinTools.Host.exe\""));

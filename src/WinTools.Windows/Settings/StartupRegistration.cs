@@ -6,21 +6,23 @@ public enum StartupState { Off, On, OtherCopy }
 
 /// <summary>
 /// "Start with Windows": a value named WinTools under the current user's Run key
-/// (HKCU\Software\Microsoft\Windows\CurrentVersion\Run), holding the quoted path of this copy's host. Per user, no
-/// elevation, no scheduled task or service. Only that one value is ever written or deleted. A value that points to
-/// another copy is reported as such and replaced only when the user turns the option on here.
+/// (HKCU\Software\Microsoft\Windows\CurrentVersion\Run), holding the quoted path of this copy's host and
+/// <c>--background</c>, so signing in shows the tray icon and not the window. Per user, no elevation, no scheduled task or
+/// service. Only that one value is ever written or deleted. A value that points to another copy is reported as such and
+/// replaced only when the user turns the option on here. A value an older version wrote (the path alone) counts as on.
 /// </summary>
 public static class StartupRegistration
 {
     public const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     public const string ValueName = "WinTools";
 
-    /// <summary>The command line stored for <paramref name="hostPath"/>: the quoted full path, no arguments.</summary>
-    public static string CommandFor(string hostPath) => $"\"{Path.GetFullPath(hostPath)}\"";
+    /// <summary>The command line stored for <paramref name="hostPath"/>: the quoted full path and --background.</summary>
+    public static string CommandFor(string hostPath) => $"\"{Path.GetFullPath(hostPath)}\" --background";
 
     public static StartupState State(string hostPath, string? stored) =>
         string.IsNullOrWhiteSpace(stored) ? StartupState.Off
-        : string.Equals(stored.Trim(), CommandFor(hostPath), StringComparison.OrdinalIgnoreCase) ? StartupState.On
+        : string.Equals(stored.Trim(), CommandFor(hostPath), StringComparison.OrdinalIgnoreCase)
+          || string.Equals(stored.Trim(), $"\"{Path.GetFullPath(hostPath)}\"", StringComparison.OrdinalIgnoreCase) ? StartupState.On
         : StartupState.OtherCopy;
 
     public static StartupState Read(string hostPath)

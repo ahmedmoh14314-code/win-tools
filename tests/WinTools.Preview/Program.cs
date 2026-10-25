@@ -19,7 +19,9 @@ if (args.Length >= 2 && args[0] == "--measure")
         Console.WriteLine($"{px}px: " + string.Join("  ", args[1..].Select(t => $"{t}={Fonts.Width(t, px, RadialRenderer.LabelWeight)}")));
     return 0;
 }
-if (args.Length == 3 && args[0] == "--settings-shot") return SettingsShot.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
+// --settings-shot <exe> <png> [en|ar] [page] [tour]: the WinTools window in a language, on a page, or with its first-run tour.
+if (args.Length >= 3 && args[0] == "--settings-shot")
+    return SettingsShot.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]), args.Length > 3 ? args[3] : "en", args.Length > 4 ? args[4] : "settings", args.Length > 5 && args[5] == "tour");
 if (args.Length < 1) { Console.Error.WriteLine("Usage: WinTools.Preview <output folder> [dpi ...] | --icon <file.ico>"); return 64; }
 var outDir = Path.GetFullPath(args[0]);
 Directory.CreateDirectory(outDir);
@@ -223,23 +225,23 @@ internal static class Live
 /// </summary>
 internal static partial class SettingsShot
 {
-    public static int Run(string exe, string png)
+    public static int Run(string exe, string png, string language, string page, bool tour)
     {
         var dir = Path.Combine(Path.GetTempPath(), $"wintools-shot-{Environment.ProcessId}");
         Directory.CreateDirectory(dir);
         var file = Path.Combine(dir, "settings.json");
-        File.WriteAllText(file, new AppSettings { OutputPolicy = OutputPolicy.Folder, OutputFolder = @"D:\Pictures\Converted" }.ToJson());
-        using var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false, ArgumentList = { "--settings", file } })!;
+        File.WriteAllText(file, new AppSettings { OutputPolicy = OutputPolicy.Folder, OutputFolder = @"D:\Pictures\Converted", Language = language, Onboarded = !tour }.ToJson());
+        using var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false, ArgumentList = { "--settings", file, "--page", page } })!;
         nint hwnd = 0;
-        for (var i = 0; i < 100 && hwnd == 0; i++) { Thread.Sleep(100); hwnd = FindWindowW(null, "WinTools Settings"); }
+        for (var i = 0; i < 100 && hwnd == 0; i++) { Thread.Sleep(100); p.Refresh(); hwnd = p.MainWindowHandle; }
         if (hwnd == 0) { Console.Error.WriteLine("Settings window not found."); p.Kill(); return 1; }
         Thread.Sleep(1500);
         Capture(hwnd, png);
         // The lower half: scrolled to the end through UI Automation's scroll pattern (no input is injected).
-        var root = System.Windows.Automation.AutomationElement.FromHandle(hwnd);
-        var scroller = root.FindFirst(System.Windows.Automation.TreeScope.Descendants,
+        var root = page != "settings" ? null : System.Windows.Automation.AutomationElement.FromHandle(hwnd);
+        var scroller = root?.FindFirst(System.Windows.Automation.TreeScope.Descendants,
             new System.Windows.Automation.PropertyCondition(System.Windows.Automation.AutomationElement.IsScrollPatternAvailableProperty, true));
-        if (scroller?.GetCurrentPattern(System.Windows.Automation.ScrollPattern.Pattern) is System.Windows.Automation.ScrollPattern scroll)
+        if (page == "settings" && scroller?.GetCurrentPattern(System.Windows.Automation.ScrollPattern.Pattern) is System.Windows.Automation.ScrollPattern scroll)
         {
             scroll.SetScrollPercent(System.Windows.Automation.ScrollPattern.NoScroll, 100);
             Thread.Sleep(600);

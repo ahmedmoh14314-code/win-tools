@@ -7,6 +7,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>..\WinTools.Host\Assets\WinTools.ico</ApplicationIcon>
+    <!-- WPF asks for the input language's culture when a text box takes focus; with an Arabic keyboard layout invariant
+         globalization refuses with a crash, as in the dialogs process (V2 PR 2.2). This window is now in Arabic too. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
   <ItemGroup>
     <Using Include="System.IO" />
