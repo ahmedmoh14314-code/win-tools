@@ -40,6 +40,49 @@
    - Clean up on a file that already is exactly its clean form writes nothing ("Already clean UTF-8").
    - The host believes a file only under an allowed name, with the validated SHA-256, and when it parses without a problem.
 
+## Evaluator review
+Three rounds (2026-10-25), all reproduced on the built code. First round: three blockers and five majors, fixed with `SubtitleReviewTests` (written first, failing).
+- **Blockers:**
+  - **Encoding was guessed.** Cyrillic, Greek, Portuguese pairs and damaged UTF-8 were decoded wrongly and written out as "Saved as UTF-8". Decoding now succeeds only when it is certain (decision 3 below supersedes the earlier rule) and refuses otherwise, with the reason.
+  - **A BOM followed by other bytes** was replaced silently. Decoders are strict now.
+  - **A missing blank line** merged two cues. A timing line among a cue's text is now a problem.
+- **Majors:**
+  - non-ASCII digits crashed the worker (the timing regex now takes `[0-9]` only);
+  - long lines were cut (now a problem);
+  - a whitespace-only line after `WEBVTT` swallowed the first cue (the header ends at any blank line, and a timing in the header is a problem);
+  - WebVTT to WebVTT dropped the header, blocks, ids and settings (now kept verbatim);
+  - tags and entities were mishandled both ways (only WebVTT's own tags are removed; entities are decoded to SRT and escaped to WebVTT).
+  - What a conversion cannot keep is told in the toast ("Not kept: cue positions, styles and notes").
+- **Minors fixed:**
+  - error codes;
+  - one bounded read;
+  - the read-back compares every cue;
+  - unknown ids are refused before the file is read;
+  - 1,000,000 lines at most;
+  - a shift past 999 hours is refused.
+
+**Decision 3, as revised after two rounds:**
+1. A BOM, with a strict decoder.
+2. Strict UTF-8; mostly valid UTF-8 with damaged bytes is refused.
+3. **Windows-1256 only when unambiguous:**
+   - every letter is Arabic script (punctuation such as « » … – is neutral);
+   - at least ten letters;
+   - no Arabic letter touching a Latin letter;
+   - **(third look)** the definite article "ال" at least twice and once every 25 Arabic letters.
+     - KOI8-R puts lower-case Cyrillic on the very bytes 1256 uses for Arabic letters, and all-caps Russian and Greek and some Thai do too, so no rule on the bytes alone tells them apart. The third look found 175 such files accepted out of 688 probes before this rule.
+     - The article is a strong signal, not a proof. Every file read this way says "Read as Windows-1256 (Arabic)" in the toast, so a wrong reading is visible at once.
+   - A file with NUL bytes (UTF-16 without its BOM) is refused.
+4. **Windows-1252 is not guessed at all.** The second round showed that no content rule tells it from 1250, 1254 or 1257: German, Spanish and Swedish read as Arabic, and short Russian and Greek dialogue read as Western.
+
+Everything else is refused with the reason ("save it as UTF-8"). A user-chosen encoding comes with the dialog (V2 Stage 7).
+
+Further fixes from the second round:
+- a WebVTT line that would become "-->" stops the conversion;
+- lines left empty by a removed tag are dropped;
+- cue ids and speaker names are named in "Not kept";
+- SRT settings must be its position hints;
+- the read-back compares every line with the document in memory.
+
 ## Alternatives considered
 - **SubtitlesParserV2.** LGPL-3, rejected by the licence policy.
 - **UTF.Unknown for detection.** MPL. Not needed for the two code pages that matter here.
@@ -47,7 +90,7 @@
 - **UTF-8 without a BOM for SRT.** Rejected: common Windows players then show Arabic as mojibake.
 
 ## Consequences
-- Other legacy code pages (1250, 1251, Shift-JIS…) decode as 1252 when they are not valid UTF-8. Info names the encoding it used, so the user can tell.
+- Legacy code pages other than unambiguous Arabic 1256 (1252, 1250, 1251, 1253, 1254, Shift-JIS…) are refused with the reason, not guessed; Info says "Not recognised". A Western file saved by an old editor must be saved as UTF-8 first, until the encoding dialog exists.
 - WebVTT styling is lost on conversion to SRT, which cannot hold it.
 
 ## Evidence / experiments

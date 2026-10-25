@@ -34,6 +34,7 @@ public sealed class SubtitleWorkerTests : IDisposable
         var vtt = File.ReadAllText(r.OutputPath!, Encoding.UTF8);
         Assert.StartsWith("WEBVTT\n\n", vtt, StringComparison.Ordinal);
         Assert.Contains("مرحبا بكم في الفيلم", vtt, StringComparison.Ordinal);
+        Assert.Contains(r.Facts, f => f is { Label: "Read as", Notice: true } && f.Value.Contains("1256", StringComparison.Ordinal)); // said in the toast
         Assert.Equal(before, Hash(source));
         Assert.True(SubtitleJobModule.Instance.IsBelievable(request, r));
     }
@@ -76,7 +77,7 @@ public sealed class SubtitleWorkerTests : IDisposable
     [Fact]
     public void Clean_up_rewrites_as_utf8_once_and_then_has_nothing_to_do()
     {
-        var source = _dir.Write("old.srt", CodePages.Get(1252).GetBytes("1\n00:00:01,000 --> 00:00:02,000\nCafé crème\n"));
+        var source = _dir.Write("old.srt", Encoding.UTF8.GetBytes("1\n00:00:01,000 --> 00:00:02,000\nCafé crème\n")); // UTF-8 without a BOM, LF
         var r = SubtitleJobs.Run(Request(SubtitleCapabilities.CleanUpId, source));
         Assert.True(r.Success, r.Message);
         var bytes = File.ReadAllBytes(r.OutputPath!);
@@ -107,6 +108,30 @@ public sealed class SubtitleWorkerTests : IDisposable
         File.WriteAllText(r.OutputPath!, "WEBVTT\n\nnot what was written\n");
         Assert.False(SubtitleJobModule.Instance.IsBelievable(request, r));
         Assert.False(SubtitleJobModule.Instance.IsBelievable(request, r with { Outputs = [r.Outputs[0] with { Path = source }] }));
+    }
+
+    [Fact]
+    public void An_encoding_that_is_not_certain_is_refused_and_nothing_is_written()
+    {
+        // Evaluator, PR 7.1 (blocker, reproduced): Cyrillic was read as Arabic and written out as "Saved as UTF-8".
+        var russian = _dir.Write("film.srt", CodePages.Get(1251).GetBytes("1\r\n00:00:01,000 --> 00:00:02,000\r\nПривет, как дела?\r\n\r\n"));
+        var r = SubtitleJobs.Run(Request(SubtitleCapabilities.CleanUpId, russian));
+        Assert.Equal(ErrorCode.UnsupportedContent, r.Error);
+        Assert.Equal(["film.srt"], _dir.Names());
+        var info = SubtitleJobs.Run(Request(SubtitleCapabilities.InfoId, russian));
+        Assert.Contains(info.Facts, f => f is { Label: "Encoding", Value: "Not recognised", Notice: true });
+    }
+
+    [Fact]
+    public void A_conversion_says_what_the_target_format_cannot_keep()
+    {
+        var source = _dir.Write("film.vtt", Encoding.UTF8.GetBytes("WEBVTT\n\nSTYLE\n::cue { color: yellow }\n\n00:00:01.000 --> 00:00:02.000 line:0\n<c.red>top</c> &amp; more\n\n"));
+        var request = Request(SubtitleCapabilities.ToSrtId, source);
+        var r = SubtitleJobs.Run(request);
+        Assert.True(r.Success, r.Message);
+        Assert.Contains(r.Facts, f => f is { Label: "Dropped", Notice: true } && f.Value.Contains("cue positions", StringComparison.Ordinal));
+        Assert.Contains("top & more", File.ReadAllText(r.OutputPath!), StringComparison.Ordinal);
+        Assert.True(SubtitleJobModule.Instance.IsBelievable(request, r));
     }
 
     [Fact]

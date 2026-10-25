@@ -88,7 +88,13 @@ public static class ArchiveLimits
     /// compressed size, or share one stored stream (overlapping entries), so the per-entry rule alone can be cheated
     /// (evaluator, PR 5.1).
     /// </summary>
-    public static bool IsArchiveBomb(long totalWritten, long archiveBytes) => IsBomb(totalWritten, archiveBytes);
+    public static bool IsArchiveBomb(long totalWritten, long archiveBytes) => totalWritten > ArchiveRatioAfterBytes && IsBomb(totalWritten, archiveBytes);
+
+    /// <summary>
+    /// The whole-archive rule starts here: many small, very compressible files (logs) are ordinary, and the 20 GB cap and
+    /// the free-space reserve bound the rest (second review, PR 5.1).
+    /// </summary>
+    public const long ArchiveRatioAfterBytes = 256L << 20;
 
     /// <summary>
     /// Counts what an extraction creates, files and folders alike (implicit parent folders included), against

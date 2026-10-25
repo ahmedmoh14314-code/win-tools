@@ -442,7 +442,7 @@ internal static class ArchiveJobs
                 {
                     committed = true;
                     var facts = new List<JobFact> { new("Files", pass.Files.ToString("N0", CultureInfo.InvariantCulture)) };
-                    if (pass.Skipped > 0) facts.Add(new("Skipped", $"{pass.Skipped:N0} entries not extracted (links, devices or unsafe names)", Notice: true));
+                    if (pass.Skipped > 0) facts.Add(new("Skipped", $"{pass.Skipped:N0} entries not extracted (links, devices, unsafe or clashing names)", Notice: true));
                     if (pass.Renamed > 0) facts.Add(new("Renamed", $"{pass.Renamed:N0} names changed to be valid on Windows", Notice: true));
                     return new JobResult(request.Id, true, ErrorCode.None, null, [new JobOutput(candidate, shape)], facts);
                 }
@@ -491,6 +491,7 @@ internal static class ArchiveJobs
                 Add(file, file.Name, items, ref total, temp);
             }
         }
+        if (items.Count + folderNames.Count > ArchiveLimits.MaxEntries) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"More than {ArchiveLimits.MaxEntries:N0} files and folders.");
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var i in items)
             if (!names.Add(i.Name)) throw new ArchiveFailure(ErrorCode.InvalidRequest, $"Two selected items would have the same name in the archive ({i.Name}).");
@@ -508,11 +509,15 @@ internal static class ArchiveJobs
                     foreach (var folder in folderNames) zip.CreateEntry(folder + "/");
                     foreach (var item in items)
                     {
+                        // Shared for writing too: Office and loggers keep files open that way without writing. Whether the file
+                        // changed while it was read is checked instead, and only that fails the job (second review, PR 5.1).
+                        item.File.Refresh();
+                        var (length, written) = (item.File.Length, item.File.LastWriteTimeUtc);
                         Stream source;
-                        try { source = new FileStream(item.File.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, FileOptions.SequentialScan); }
+                        try { source = new FileStream(item.File.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1 << 16, FileOptions.SequentialScan); }
                         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
                         {
-                            throw new ArchiveFailure(ErrorCode.SourceNotReadable, $"{item.Name} could not be read (it may be open in another program); nothing was saved.");
+                            throw new ArchiveFailure(ErrorCode.SourceNotReadable, $"{item.Name} could not be read; nothing was saved.");
                         }
                         using (source)
                         {
@@ -521,6 +526,9 @@ internal static class ArchiveJobs
                             using var target = entry.Open();
                             source.CopyTo(target);
                         }
+                        item.File.Refresh();
+                        if (!item.File.Exists || item.File.Length != length || item.File.LastWriteTimeUtc != written)
+                            throw new ArchiveFailure(ErrorCode.SourceNotReadable, $"{item.Name} changed while it was being packed; nothing was saved. Try again.");
                         zone = Strictest(zone, MarkOfTheWeb.ZoneToCarry(item.File.FullName));
                     }
                 }
@@ -582,7 +590,9 @@ internal static class ArchiveJobs
         if (file.Name.StartsWith("~wintools-", StringComparison.Ordinal) && file.Name.EndsWith(".tmp", StringComparison.Ordinal)) return; // another job's temporary
         if ((file.Attributes & (FileAttributes.Offline | RecallOnOpen | RecallOnDataAccess)) != 0)
             throw new ArchiveFailure(ErrorCode.OnlineOnly, $"{name} is online only; open it once so Windows downloads it, then try again.");
-        if (items.Count + 1 > ArchiveLimits.MaxEntries) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"More than {ArchiveLimits.MaxEntries:N0} files.");
+        // The name's parts are what an extraction will judge: no file deeper than an archive may hold (second review, PR 5.1).
+        if (name.Count(c => c == '/') + 1 > ArchiveEntryPolicy.MaxDepth) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"A file is more than {ArchiveEntryPolicy.MaxDepth} levels deep.");
+        if (items.Count + 1 > ArchiveLimits.MaxEntries) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"More than {ArchiveLimits.MaxEntries:N0} files."); // folders are counted once listed
         total += file.Length;
         if (total > ArchiveLimits.MaxTotalBytes) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"More than {ArchiveLimits.MaxTotalBytes >> 30} GB in all.");
         items.Add(new ZipItem(file, name));

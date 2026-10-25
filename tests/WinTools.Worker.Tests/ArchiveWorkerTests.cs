@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using WinTools.Core.Capabilities;
+using WinTools.Core.Files;
 using WinTools.Core.Jobs;
 using WinTools.Host.Jobs;
 using WinTools.Worker.Archive;
@@ -247,12 +248,41 @@ public sealed class ArchiveWorkerTests : IDisposable
         var r = ArchiveJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), ArchiveCapabilities.ZipId, [folder + Path.DirectorySeparatorChar]));
         Assert.Equal(ErrorCode.OnlineOnly, r.Error);
         File.SetAttributes(online, FileAttributes.Normal);
-        using (new FileStream(Path.Combine(folder, "a.txt"), FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite)) // being written
+        using (new FileStream(Path.Combine(folder, "a.txt"), FileMode.Open, FileAccess.ReadWrite, FileShare.None)) // locked by another program
         {
             var busy = ArchiveJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), ArchiveCapabilities.ZipId, [folder + Path.DirectorySeparatorChar]));
             Assert.Equal(ErrorCode.SourceNotReadable, busy.Error);
         }
         Assert.DoesNotContain(Directory.EnumerateFileSystemEntries(_dir.Path), e => e.EndsWith(".zip", StringComparison.Ordinal) || Path.GetFileName(e).StartsWith("~wintools-", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Add_to_zip_packs_a_file_another_program_holds_open_without_writing()
+    {
+        // Second review, PR 5.1 (reproduced): Word keeps an open document shared for reading, open for writing.
+        var folder = Path.Combine(_dir.Path, "reports");
+        Directory.CreateDirectory(folder);
+        var doc = Path.Combine(folder, "report.docx");
+        File.WriteAllText(doc, "content");
+        using var word = new FileStream(doc, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
+        var r = ArchiveJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), ArchiveCapabilities.ZipId, [folder + Path.DirectorySeparatorChar]));
+        Assert.True(r.Success, r.Message);
+    }
+
+    [Fact]
+    public void Add_to_zip_takes_a_file_at_the_deepest_level_an_archive_may_hold()
+    {
+        var path = Path.Combine(_dir.Path, "deep");
+        var leaf = path;
+        for (var i = 0; i < ArchiveEntryPolicy.MaxDepth - 2; i++) leaf = Path.Combine(leaf, "d"); // "deep/d/.../x.txt": 32 parts
+        Directory.CreateDirectory(leaf);
+        File.WriteAllText(Path.Combine(leaf, "x.txt"), "x");
+        Assert.True(ArchiveJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), ArchiveCapabilities.ZipId, [path + Path.DirectorySeparatorChar])).Success);
+        File.WriteAllText(Path.Combine(leaf, "d"), "a file one level deeper would need 33 parts"); // a name, not a folder: still 32 parts
+        Directory.CreateDirectory(Path.Combine(leaf, "e"));
+        File.WriteAllText(Path.Combine(leaf, "e", "y.txt"), "33 parts");
+        var r = ArchiveJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), ArchiveCapabilities.ZipId, [path + Path.DirectorySeparatorChar]));
+        Assert.Equal(ErrorCode.LimitExceeded, r.Error); // refused while listing, before anything is compressed
     }
 
     [Fact]
