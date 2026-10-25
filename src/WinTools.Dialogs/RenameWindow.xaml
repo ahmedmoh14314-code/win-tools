@@ -26,6 +26,15 @@
   <Border Padding="14" Background="{StaticResource Surface}" BorderBrush="{StaticResource Edge}" BorderThickness="1">
     <StackPanel>
       <TextBlock x:Name="Heading" Foreground="{StaticResource Text}" FontFamily="Segoe UI" FontSize="14" Margin="0,0,0,10" />
+      <Grid Margin="0,0,0,6">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="New name" Style="{StaticResource Label}" />
+        <TextBox x:Name="NewName" Grid.Column="1" AutomationProperties.Name="New name" TextChanged="OnChanged"
+                 ToolTip="Replaces the whole name; leave empty to keep it. With several files, add a number." />
+      </Grid>
       <Grid>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto" />

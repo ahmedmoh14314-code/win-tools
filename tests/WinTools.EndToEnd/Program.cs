@@ -738,6 +738,8 @@ using (var explorer = opened)
                 if (dialogInFront == true)
                 {
                     Thread.Sleep(400);
+                    Desktop.Tap(0x09); // Tab: from "New name" to "Add before"
+                    Thread.Sleep(150);
                     Desktop.TypeText("2026 ");
                     Thread.Sleep(400);
                     if (Desktop.ForegroundProcessName() == "WinTools.Dialogs") Desktop.Tap(0x0D);

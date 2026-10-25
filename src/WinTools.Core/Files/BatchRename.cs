@@ -9,12 +9,14 @@ public enum RenameSpaces { Keep, ToUnderscores, ToSpaces }
 public enum RenameCase { Keep, Lower, Upper, Title }
 
 /// <summary>
-/// One Batch rename rule (V2 PR 7.2), applied to each name's stem; the extension is kept as it is. In order: find and
-/// replace (any case), spaces and underscores, case, then the prefix and the suffix, then a number when asked for (after
-/// a space, or an underscore when spaces become underscores), counted in the names' natural order.
+/// One Batch rename rule (V2 PR 7.2), applied to each name's stem; the extension is kept as it is. In order: a new name
+/// replacing the old one when given (photos: "Holiday" with numbering gives "Holiday 01"), else find and replace (any
+/// case) with the spaces it leaves tidied, then spaces and underscores, case, the prefix and the suffix, then a number
+/// when asked for (after a space, or an underscore when spaces become underscores), counted in the names' natural order.
 /// </summary>
 public sealed record RenameRule(string Prefix = "", string Suffix = "", string Find = "", string Replace = "",
-    RenameSpaces Spaces = RenameSpaces.Keep, RenameCase Case = RenameCase.Keep, bool Number = false, int Start = 1, int Digits = 2)
+    RenameSpaces Spaces = RenameSpaces.Keep, RenameCase Case = RenameCase.Keep, bool Number = false, int Start = 1, int Digits = 2,
+    string Name = "")
 {
     public const int MaxText = 100, MaxDigits = 6, MaxStart = 999_999;
 
@@ -29,8 +31,8 @@ public sealed record RenameRule(string Prefix = "", string Suffix = "", string F
         RenameRule? rule;
         try { rule = JsonSerializer.Deserialize<RenameRule>(text, Json); }
         catch (JsonException) { return null; }
-        return rule is { Prefix: not null, Suffix: not null, Find: not null, Replace: not null }
-            && new[] { rule.Prefix, rule.Suffix, rule.Find, rule.Replace }.All(s => s.Length <= MaxText)
+        return rule is { Prefix: not null, Suffix: not null, Find: not null, Replace: not null, Name: not null }
+            && new[] { rule.Prefix, rule.Suffix, rule.Find, rule.Replace, rule.Name }.All(s => s.Length <= MaxText)
             && rule.Start is >= 0 and <= MaxStart && rule.Digits is >= 1 and <= MaxDigits
             && Enum.IsDefined(rule.Spaces) && Enum.IsDefined(rule.Case) ? rule : null;
     }
@@ -76,7 +78,8 @@ public static class BatchRename
     {
         var ext = Path.GetExtension(name);
         var stem = name[..^ext.Length];
-        if (rule.Find.Length > 0) stem = stem.Replace(rule.Find, rule.Replace, StringComparison.OrdinalIgnoreCase);
+        if (rule.Name.Length > 0) stem = rule.Name;
+        else if (rule.Find.Length > 0) stem = Tidy(stem.Replace(rule.Find, rule.Replace, StringComparison.OrdinalIgnoreCase));
         stem = rule.Spaces switch
         {
             RenameSpaces.ToUnderscores => stem.Replace(' ', '_'),
@@ -93,6 +96,13 @@ public static class BatchRename
         stem = rule.Prefix + stem + rule.Suffix;
         if (rule.Number) stem += (rule.Spaces == RenameSpaces.ToUnderscores ? "_" : " ") + number.ToString(new string('0', rule.Digits), System.Globalization.CultureInfo.InvariantCulture);
         return stem + ext;
+    }
+
+    /// <summary>A removed word leaves no double or edge spaces ("photo copy" without "copy" is "photo").</summary>
+    private static string Tidy(string stem)
+    {
+        while (stem.Contains("  ", StringComparison.Ordinal)) stem = stem.Replace("  ", " ", StringComparison.Ordinal);
+        return stem.Trim(' ');
     }
 
     /// <summary>Each word's first letter upper case and the rest lower (words split by spaces, underscores, dashes, dots).</summary>
@@ -115,7 +125,9 @@ public static class BatchRename
         if (name.Length > MaxNameLength) return "The name would be too long";
         if (name.Any(c => c < ' ' || c is '<' or '>' or ':' or '"' or '/' or '\\' or '|' or '?' or '*')) return "The name would hold a character Windows does not allow (< > : \" / \\ | ? *)";
         if (name[^1] is '.' or ' ') return "The name would end with a dot or a space";
-        if (PathPolicy.IsDeviceName(Path.GetFileNameWithoutExtension(name))) return "The name is reserved by Windows";
+        // The same rule as every other path WinTools takes (device names, "aux .txt", "con.backup.txt", 8.3-alias shapes),
+        // so the product can always work on the files it renamed (review, PR 7.2).
+        if (!PathPolicy.IsSupported(@"C:\x\" + name)) return "The name is reserved by Windows";
         return null;
     }
 

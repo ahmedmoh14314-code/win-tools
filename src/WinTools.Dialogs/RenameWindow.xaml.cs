@@ -32,7 +32,7 @@ public partial class RenameWindow : Window
         {
             WindowPlacement.NearPoint(this, _request.X, _request.Y);
             Activate();
-            Prefix.Focus();
+            NewName.Focus();
             Refresh();
         };
     }
@@ -42,7 +42,8 @@ public partial class RenameWindow : Window
         if (!int.TryParse(Start.Text, NumberStyles.None, CultureInfo.InvariantCulture, out var start)) start = -1;
         if (!int.TryParse(Digits.Text, NumberStyles.None, CultureInfo.InvariantCulture, out var digits)) digits = 0;
         var rule = new RenameRule(Prefix.Text, Suffix.Text, Find.Text, Replace.Text, (RenameSpaces)Math.Max(0, Spaces.SelectedIndex),
-            (RenameCase)Math.Max(0, Case.SelectedIndex), Number.IsChecked == true, Number.IsChecked == true ? start : 1, Number.IsChecked == true ? digits : 2);
+            (RenameCase)Math.Max(0, Case.SelectedIndex), Number.IsChecked == true, Number.IsChecked == true ? start : 1, Number.IsChecked == true ? digits : 2,
+            NewName.Text);
         return RenameRule.Parse(rule.Serialize());
     }
 

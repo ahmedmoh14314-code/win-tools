@@ -41,49 +41,83 @@ internal static class BatchRenamer
             if ((File.Exists(to) || Directory.Exists(to)) && !freed.Contains(to))
                 return JobResult.Fail(id, ErrorCode.NoFreeOutputName, $"A file named \"{Path.GetFileName(to)}\" is already in the folder; nothing was renamed.");
 
-        // Step one: every file to its own temporary name; step two: each to its new name, never over an existing one.
-        var temps = moves.Select((_, i) => Path.Combine(folder, $"~wintools-{id}-{i}.tmp")).ToArray();
-        var atTemp = new bool[moves.Length];
-        var atTarget = new bool[moves.Length];
+        // Straight to the new name, except a file whose name another file of the batch takes (a chain, or a change of
+        // case alone): that one goes to a temporary name first. Every file passing through a temporary name made OneDrive
+        // see it leave and come back (review, PR 7.2). Never over an existing file.
+        var targets = moves.Select(m => m.To).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var viaTemp = moves.Select(m => targets.Contains(m.From)).ToArray();
+        var temps = moves.Select((m, i) => TempName(folder, i, Path.GetFileName(m.From))).ToArray();
+        var at = new Place[moves.Length];
         try
         {
             for (var i = 0; i < moves.Length; i++)
             {
-                File.Move(moves[i].From, temps[i], overwrite: false);
-                atTemp[i] = true;
+                if (!viaTemp[i]) continue;
+                Move(moves[i].From, temps[i]);
+                at[i] = Place.Temp;
             }
             for (var i = 0; i < moves.Length; i++)
             {
-                File.Move(temps[i], moves[i].To, overwrite: false);
-                (atTemp[i], atTarget[i]) = (false, true);
+                Move(at[i] == Place.Temp ? temps[i] : moves[i].From, moves[i].To);
+                at[i] = Place.Target;
             }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex)
         {
-            var restored = PutBack(moves, temps, atTemp, atTarget);
-            var code = ex is UnauthorizedAccessException || ex.HResult == unchecked((int)0x80070020) ? ErrorCode.SourceNotReadable : ErrorCode.NoFreeOutputName;
-            return JobResult.Fail(id, code, restored
-                ? "A file could not be renamed (it may be open in another program); every name was put back."
-                : "A file could not be renamed, and some names could not be put back: look for files named ~wintools-….tmp.");
+            if (!PutBack(moves, temps, at))
+                return JobResult.Fail(id, ErrorCode.Incomplete, "A file could not be renamed or put back; look for names starting with \"wintools-renaming\".");
+            var code = ex is UnauthorizedAccessException || ex.HResult == unchecked((int)0x80070020) ? ErrorCode.SourceNotReadable
+                : ex is IOException && (ex.HResult == unchecked((int)0x80070050) || ex.HResult == unchecked((int)0x800700B7)) ? ErrorCode.NoFreeOutputName
+                : ErrorCode.SourceNotReadable;
+            return JobResult.Fail(id, code, "A file could not be renamed; every name was put back.");
         }
         var facts = new List<JobFact> { new("Renamed", moves.Length == 1 ? "1 file" : $"{moves.Length.ToString("N0", CultureInfo.InvariantCulture)} files", Notice: true) };
         return new JobResult(id, true, ErrorCode.None, null, [.. moves.Select(m => new JobOutput(m.To, ""))], facts);
     }
 
-    /// <summary>Every moved file back to its old name: those at their new name first to their temporary one, then all home.</summary>
-    private static bool PutBack((string From, string To)[] moves, string[] temps, bool[] atTemp, bool[] atTarget)
+    private enum Place { Source, Temp, Target }
+
+    /// <summary>A temporary name that keeps the original one, extension included, so a file left there is recognisable.</summary>
+    private static string TempName(string folder, int index, string original)
+    {
+        var name = $"wintools-renaming-{index} {original}";
+        if (name.Length > BatchRename.MaxNameLength) name = $"wintools-renaming-{index}{Path.GetExtension(original)}";
+        return Path.Combine(folder, name);
+    }
+
+    /// <summary>One move, never over an existing file, tried again briefly while another program (an indexer, an antivirus,
+    /// a sync client) holds the file.</summary>
+    private static void Move(string from, string to)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                File.Move(from, to, overwrite: false);
+                return;
+            }
+            catch (IOException ex) when (attempt < 4 && ex.HResult is unchecked((int)0x80070020) or unchecked((int)0x80070021))
+            {
+                Thread.Sleep(100); // ERROR_SHARING_VIOLATION or ERROR_LOCK_VIOLATION: held for a moment
+            }
+        }
+    }
+
+    /// <summary>Every moved file back to its old name: those at their new name first to their temporary one (another file
+    /// of the batch may stand on their old name), then all home. False when one could not be put back.</summary>
+    private static bool PutBack((string From, string To)[] moves, string[] temps, Place[] at)
     {
         var ok = true;
         for (var i = 0; i < moves.Length; i++)
         {
-            if (!atTarget[i]) continue;
-            try { File.Move(moves[i].To, temps[i], overwrite: false); (atTarget[i], atTemp[i]) = (false, true); }
+            if (at[i] != Place.Target) continue;
+            try { Move(moves[i].To, temps[i]); at[i] = Place.Temp; }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { ok = false; }
         }
         for (var i = 0; i < moves.Length; i++)
         {
-            if (!atTemp[i]) continue;
-            try { File.Move(temps[i], moves[i].From, overwrite: false); atTemp[i] = false; }
+            if (at[i] != Place.Temp) continue;
+            try { Move(temps[i], moves[i].From); at[i] = Place.Source; }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { ok = false; }
         }
         return ok;

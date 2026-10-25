@@ -17,6 +17,17 @@ public static class FilesCapabilities
     public const string InfoId = "files.info", Sha256Id = "files.sha256", CopyPathId = "files.copy-path";
     public const string CopyNameId = "files.copy-name", CopyFolderId = "files.copy-folder", RenameId = "files.rename";
 
+    /// <summary>What a failed Batch rename tells the user (review, PR 7.2): the generic reasons speak of outputs.</summary>
+    private static readonly IReadOnlyDictionary<Jobs.ErrorCode, string> RenameReasons = new Dictionary<Jobs.ErrorCode, string>
+    {
+        [Jobs.ErrorCode.NoFreeOutputName] = "A new name is already used by another file in the folder. Nothing was renamed.",
+        [Jobs.ErrorCode.OutputNameInvalid] = "A new name is not allowed on Windows, or two files would get the same name. Nothing was renamed.",
+        [Jobs.ErrorCode.SourceNotReadable] = "A file is open in another program or cannot be changed. Every name was put back.",
+        [Jobs.ErrorCode.SourceNotFound] = "A file is no longer there. Nothing was renamed.",
+        [Jobs.ErrorCode.OutputValidationFailed] = "The renamed files could not be checked afterwards. Look at the folder to see their names.",
+        [Jobs.ErrorCode.Incomplete] = "A file could not be renamed or put back, and keeps a name starting with \"wintools-renaming\". Rename it back by hand.",
+    };
+
     /// <summary>The commands the host runs itself, putting text on the clipboard.</summary>
     public static bool IsCopy(string capabilityId) => capabilityId is CopyPathId or CopyNameId or CopyFolderId;
 
@@ -34,7 +45,8 @@ public static class FilesCapabilities
         new(CopyPathId, "Copy path", "tools", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Clipboard, LongRunning: false,
             Feedback: new("Copying", "copy", "Path copied", "Nothing needed doing", "path", "paths")),
         new(RenameId, "Batch rename…", "tools", Module, new InputRule(AnyFile), CapabilityShape.Selection, CapabilityOutput.Files, LongRunning: false,
-            Feedback: new("Renaming", "rename", "Renamed", "No name changed", "file", "files", SuccessTitle: "Files renamed"), Dialog: Jobs.DialogKinds.Rename),
+            Feedback: new("Renaming", "rename", "Renamed", "No name changed", "file", "files", SuccessTitle: "Files renamed", Reasons: RenameReasons),
+            Dialog: Jobs.DialogKinds.Rename),
         new(CopyNameId, "Copy name", "tools", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Clipboard, LongRunning: false,
             Feedback: new("Copying", "copy", "Name copied", "Nothing needed doing", "name", "names")),
         new(CopyFolderId, "Copy folder path", "tools", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Clipboard, LongRunning: false,

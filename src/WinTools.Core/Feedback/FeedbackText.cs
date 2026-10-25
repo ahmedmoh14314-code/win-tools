@@ -111,7 +111,10 @@ public static class FeedbackText
     /// The reason for a failure in the module's own terms (V2 PR 2.1): the image module's words are V1's; another module's
     /// noun ("PDF") replaces "image" where the reason names what was worked on, and its limits are not the image limits.
     /// </summary>
-    public static string Reason(ErrorCode error, FeedbackWords words) => words.Noun == "image" ? Reason(error) : error switch
+    public static string Reason(ErrorCode error, FeedbackWords words) =>
+        words.Reasons is { } own && own.TryGetValue(error, out var reason) ? reason : ModuleReason(error, words);
+
+    private static string ModuleReason(ErrorCode error, FeedbackWords words) => words.Noun == "image" ? Reason(error) : error switch
     {
         ErrorCode.InputTooLarge => $"The {words.Noun} is larger than this command accepts.",
         ErrorCode.ContentMismatch => $"The file is not a {words.Noun}, whatever its name says.",
