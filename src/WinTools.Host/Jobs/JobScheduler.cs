@@ -195,7 +195,9 @@ internal sealed class JobScheduler
                 ms = Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 1), jobObject = runner.Client.JobObjectAssigned, workers = runner.Client.LastLaneCount });
             // One archive that needs a password (ADR-0027): asked for instead of a toast, and the job runs again with it.
             // Only a run without a secret asks, so a wrong password is a toast and never a loop.
-            if (capability.Prompt is { WhenRequired: true } && job.Parameters is null && results is [{ Success: false, Error: ErrorCode.PasswordRequired }])
+            // Nor does a job cancelled meanwhile: the host may be exiting (evaluator, PR 5.3).
+            if (capability.Prompt is { WhenRequired: true } && job.Parameters is null && !job.CancelRequested
+                && results is [{ Success: false, Error: ErrorCode.PasswordRequired }])
             {
                 job.MarkSecretNeeded();
                 _log.Event("job.secretNeeded", new { job = job.Id, op = capability.Id });

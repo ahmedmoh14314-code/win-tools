@@ -19,8 +19,8 @@ internal sealed record AesField(int Version, int Strength, ushort Method)
 }
 
 /// <summary>One central-directory record, with what .NET's ZipArchive does not expose: where the entry's local header is,
-/// its flags and its AES field.</summary>
-internal sealed record ZipRecord(ushort Flags, ushort Method, uint Crc, long Packed, long Size, long LocalHeader, AesField? Aes)
+/// its flags and its AES field. <paramref name="Name"/> is decoded as .NET decodes it (UTF-8, flag or not; measured).</summary>
+internal sealed record ZipRecord(string Name, ushort Flags, ushort Method, uint Crc, long Packed, long Size, long LocalHeader, AesField? Aes)
 {
     public bool IsEncrypted => (Flags & 1) != 0;
     public bool HasDataDescriptor => (Flags & 8) != 0;
@@ -29,8 +29,9 @@ internal sealed record ZipRecord(ushort Flags, ushort Method, uint Crc, long Pac
 /// <summary>
 /// Reads a ZIP's central directory itself, only to find encrypted entries' data (V2 PR 5.3, ADR-0027). .NET's
 /// <see cref="ZipArchive"/> stays the reader of names, sizes and check values; this one must agree with it on the entry
-/// count and, entry by entry, on the CRC, both sizes and the encrypted flag, or the archive is refused as damaged. Two
-/// parsers that disagree about one file are how archive checks get bypassed (PR 5.2's TAR lesson).
+/// count and, entry by entry, on the name, the CRC, both sizes and the encrypted flag, or the archive is refused as
+/// damaged. It also takes ZIP64's end record on the same fields .NET does. Two parsers that disagree about one file are
+/// how archive checks get bypassed (PR 5.2's TAR lesson; evaluator, PR 5.3: two directories in one file).
 /// </summary>
 internal static class ZipDirectory
 {
@@ -50,7 +51,8 @@ internal static class ZipDirectory
         for (var i = 0; i < records.Count; i++)
         {
             var (r, e) = (records[i], entries[i]);
-            if (r.Crc != e.Crc32 || r.Packed != e.CompressedLength || r.Size != e.Length || r.IsEncrypted != e.IsEncrypted)
+            if (r.Crc != e.Crc32 || r.Packed != e.CompressedLength || r.Size != e.Length || r.IsEncrypted != e.IsEncrypted
+                || !string.Equals(r.Name, e.FullName, StringComparison.Ordinal))
                 throw Damaged("its directory can be read two ways");
         }
         return records;
@@ -65,10 +67,13 @@ internal static class ZipDirectory
         for (var i = tailLength - 22; i >= 0; i--)
             if (BinaryPrimitives.ReadUInt32LittleEndian(tail.AsSpan(i)) == EndSignature) { end = i; break; }
         if (end < 0) throw Damaged("no end record");
+        var disk = BinaryPrimitives.ReadUInt16LittleEndian(tail.AsSpan(end + 4));
         long count = BinaryPrimitives.ReadUInt16LittleEndian(tail.AsSpan(end + 10));
         long size = BinaryPrimitives.ReadUInt32LittleEndian(tail.AsSpan(end + 12));
         long offset = BinaryPrimitives.ReadUInt32LittleEndian(tail.AsSpan(end + 16));
-        if ((count == 0xFFFF || size == 0xFFFFFFFF || offset == 0xFFFFFFFF) && end >= 20
+        // ZIP64 on the fields .NET's ZipArchive takes it on (this disk, the entry count, the directory's offset), so both
+        // read the same directory; the names are compared as well.
+        if ((disk == 0xFFFF || count == 0xFFFF || offset == 0xFFFFFFFF) && end >= 20
             && BinaryPrimitives.ReadUInt32LittleEndian(tail.AsSpan(end - 20)) == Zip64LocatorSignature)
         {
             var at = BinaryPrimitives.ReadInt64LittleEndian(tail.AsSpan(end - 12));
@@ -97,11 +102,11 @@ internal static class ZipDirectory
             int nameLength = BinaryPrimitives.ReadUInt16LittleEndian(f[28..]), extraLength = BinaryPrimitives.ReadUInt16LittleEndian(f[30..]);
             int commentLength = BinaryPrimitives.ReadUInt16LittleEndian(f[32..]);
             long local = BinaryPrimitives.ReadUInt32LittleEndian(f[42..]);
-            Skip(reader, nameLength);
+            var nameBytes = reader.ReadBytes(nameLength);
+            if (nameBytes.Length != nameLength) throw Damaged("a broken directory record");
             var extra = reader.ReadBytes(extraLength);
             if (extra.Length != extraLength) throw Damaged("a broken directory record");
             Skip(reader, commentLength);
-            AesField? aes = null;
             for (var x = 0; x + 4 <= extra.Length;)
             {
                 var tag = BinaryPrimitives.ReadUInt16LittleEndian(extra.AsSpan(x));
@@ -116,21 +121,38 @@ internal static class ZipDirectory
                     if (packed == 0xFFFFFFFF && at + 8 <= field.Length) { packed = BinaryPrimitives.ReadInt64LittleEndian(field[at..]); at += 8; }
                     if (local == 0xFFFFFFFF && at + 8 <= field.Length) local = BinaryPrimitives.ReadInt64LittleEndian(field[at..]);
                 }
-                else if (tag == 0x9901 && fieldLength == 7 && field[2] == 'A' && field[3] == 'E')
-                    aes = new(BinaryPrimitives.ReadUInt16LittleEndian(field), field[4], BinaryPrimitives.ReadUInt16LittleEndian(field[5..]));
                 x += 4 + fieldLength;
             }
-            var record = new ZipRecord(flags, method, crc, packed, unpacked, local, aes);
+            var record = new ZipRecord(System.Text.Encoding.UTF8.GetString(nameBytes), flags, method, crc, packed, unpacked, local, AesIn(extra));
             if (record.IsEncrypted) Check(record);
             records.Add(record);
         }
         return records;
     }
 
+    /// <summary>WinZip's AES field among an entry's extra fields, or null.</summary>
+    private static AesField? AesIn(ReadOnlySpan<byte> extra)
+    {
+        AesField? aes = null;
+        for (var x = 0; x + 4 <= extra.Length;)
+        {
+            var tag = BinaryPrimitives.ReadUInt16LittleEndian(extra[x..]);
+            int fieldLength = BinaryPrimitives.ReadUInt16LittleEndian(extra[(x + 2)..]);
+            if (x + 4 + fieldLength > extra.Length) break;
+            var field = extra.Slice(x + 4, fieldLength);
+            if (tag == 0x9901 && fieldLength == 7 && field[2] == 'A' && field[3] == 'E')
+                aes = new(BinaryPrimitives.ReadUInt16LittleEndian(field), field[4], BinaryPrimitives.ReadUInt16LittleEndian(field[5..]));
+            x += 4 + fieldLength;
+        }
+        return aes;
+    }
+
     /// <summary>What an encrypted entry must be for this worker to read it.</summary>
     private static void Check(ZipRecord r)
     {
         if ((r.Flags & 0x40) != 0 || (r.Flags & 0x2000) != 0) throw Unsupported("PKWARE's strong encryption");
+        // An AES description on an entry of another method was used and crashed the worker (evaluator, PR 5.3).
+        if (r.Method != 99 && r.Aes is not null) throw Unsupported("an AES description on an entry that is not AES");
         if (r.Method == 99)
         {
             if (r.Aes is not { } aes) throw Unsupported("an AES entry without its description");
@@ -140,9 +162,13 @@ internal static class ZipDirectory
         else if (r.Method is not (0 or 8)) throw Unsupported("an encrypted compression method");
     }
 
-    /// <summary>Where an entry's packed data starts, from its local header, which must be where the directory says, with
-    /// the data inside the file. <paramref name="time"/> is the local header's file time (ZipCrypto's check byte with a
-    /// data descriptor).</summary>
+    /// <summary>
+    /// Where an entry's packed data starts, from its local header, which must be where the directory says, encrypted too,
+    /// with the same method and the same AES description, and with the data inside the file. WinZip's AES authenticates
+    /// only the encrypted bytes: a directory relabelled AE-2, Stored or shorter passed (evaluator, PR 5.3), so the two
+    /// headers must agree. <paramref name="time"/> is the local header's file time (ZipCrypto's check byte with a data
+    /// descriptor).
+    /// </summary>
     public static long DataStart(Stream file, ZipRecord r, out ushort time)
     {
         if (r.LocalHeader < 0 || r.LocalHeader > file.Length - 30) throw Damaged("an entry outside the file");
@@ -150,8 +176,12 @@ internal static class ZipDirectory
         if (BinaryPrimitives.ReadUInt32LittleEndian(header) != LocalSignature) throw Damaged("an entry is not where its directory says");
         if ((BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(6)) & 1) == 0) throw Damaged("an entry is encrypted in one header only");
         time = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(10));
-        var start = r.LocalHeader + 30 + BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(26)) + BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(28));
+        int nameLength = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(26)), extraLength = BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(28));
+        var start = r.LocalHeader + 30 + nameLength + extraLength;
         if (r.Packed < 0 || start > file.Length - r.Packed) throw Damaged("an entry is cut short");
+        var extra = ReadAt(file, r.LocalHeader + 30 + nameLength, extraLength);
+        if (BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(8)) != r.Method || AesIn(extra) != r.Aes)
+            throw Damaged("an entry's two headers describe it differently");
         return start;
     }
 

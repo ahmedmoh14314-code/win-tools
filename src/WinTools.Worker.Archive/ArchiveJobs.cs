@@ -65,6 +65,8 @@ internal static class ArchiveJobs
             candidates = passwordBytes ?? ZipPasswords.Candidates(given, normalized);
         }
         else if (request.Parameters is { Count: > 0 }) return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters.");
+        // The bytes made here are zeroed when the job ends; ZipLocks zeroes its own copies (evaluator, PR 5.3).
+        var made = passwordBytes is null ? candidates : null;
         if (request.Inputs.Count == 0 || !request.Inputs.All(PathPolicy.IsSupported))
             return JobResult.Fail(id, ErrorCode.InvalidRequest, "Every input must be a supported path.");
         if (request.OutputDirectory is { } od && !PathPolicy.IsSupported(Path.Combine(od, "x.zip")))
@@ -94,6 +96,10 @@ internal static class ArchiveJobs
         catch (PathTooLongException) { return JobResult.Fail(id, ErrorCode.OutputNameInvalid, "A name would be too long."); }
         catch (IOException ex) when (ex.HResult is ErrorDiskFull or ErrorHandleDiskFull) { return JobResult.Fail(id, ErrorCode.DiskFull, "The destination drive is full."); }
         catch (IOException ex) { return JobResult.Fail(id, ErrorCode.OutputDirectoryNotWritable, $"Writing failed (0x{ex.HResult:X8})."); }
+        finally
+        {
+            foreach (var bytes in made ?? []) System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes);
+        }
     }
 
     private static void RefuseOnlineOnly(FileSystemInfo item)
@@ -180,7 +186,7 @@ internal static class ArchiveJobs
                     Kind = Kind.Zip;
                     _zip = new ZipArchive(_file, ZipArchiveMode.Read, leaveOpen: true);
                     if (_zip.Entries.Count > ArchiveLimits.MaxEntries) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"The archive has more than {ArchiveLimits.MaxEntries:N0} entries.");
-                    if (passwordBytes is not null && _zip.Entries.Any(e => e.IsEncrypted)) _locks = new ZipLocks(path, _zip, passwordBytes);
+                    if (passwordBytes is not null && _zip.Entries.Any(e => e.IsEncrypted)) _locks = new ZipLocks(_file, _zip, passwordBytes);
                 }
                 else if (read >= 2 && head[0] == 0x1F && head[1] == 0x8B)
                 {

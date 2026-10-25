@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using WinTools.Core.Files;
 using WinTools.Core.Jobs;
 
 namespace WinTools.Worker.Archive;
@@ -172,15 +173,16 @@ internal sealed class WinZipAesStream : ReadOnlyStream
 }
 
 /// <summary>
-/// An entry's plain bytes, decompressed when Deflate was used. When they end, whatever the decompressor left of the
-/// decrypted stream is read too, so the AES code is always checked before the end is reported.
+/// An entry's plain bytes, decompressed when Deflate was used. For AES, when they end, whatever the decompressor left of
+/// the decrypted stream is read too, so the code is always checked before the end is reported. ZipCrypto has no code to
+/// check, and its rest is never read (evaluator, PR 5.3: padding read for every record pointing at it).
 /// </summary>
-internal sealed class UnlockedEntry(Stream plain, Stream decrypted) : ReadOnlyStream
+internal sealed class UnlockedEntry(Stream plain, Stream decrypted, bool drain) : ReadOnlyStream
 {
     public override int Read(Span<byte> buffer)
     {
         var n = plain.Read(buffer);
-        if (n == 0 && buffer.Length > 0)
+        if (n == 0 && drain && buffer.Length > 0)
         {
             var rest = new byte[4096];
             while (decrypted.Read(rest) > 0) { }
@@ -216,55 +218,68 @@ internal abstract class ReadOnlyStream : Stream
 }
 
 /// <summary>
-/// An encrypted ZIP opened with a typed password (V2 PR 5.3, ADR-0027). <b>One archive, one password:</b> before
-/// anything is extracted, every ZipCrypto entry's header and the first AES entry's verifier are checked, and only the
-/// password bytes all of them accept remain, so a wrong candidate that passes one 1-in-256 check byte does not decide
-/// the archive. No candidate left is <see cref="ErrorCode.PasswordIncorrect"/>. Each entry is then opened with the
-/// first remaining candidate it accepts.
+/// An encrypted ZIP opened with a typed password (V2 PR 5.3, ADR-0027), through the source's own handle: the file is
+/// opened once. <b>One archive, one password</b>, in the byte form each scheme was written with: before anything is
+/// extracted, every ZipCrypto entry's header narrows the ZipCrypto candidates, and the first AES entry's verifier narrows
+/// the AES ones, separately, since WinRAR writes AES as UTF-8 and ZipCrypto in the code page (evaluator, PR 5.3). A wrong
+/// candidate that passes one 1-in-256 check byte therefore does not decide the archive; no candidate left for a scheme the
+/// archive uses is <see cref="ErrorCode.PasswordIncorrect"/>. When an entry still accepts more than one, each is proven
+/// before it is used: ZipCrypto by decrypting the entry to its CRC (within the entry's size and the bomb rule), AES by its
+/// authentication code. Encrypted entries may not share data. The worker's copies of the password bytes are zeroed when
+/// it is done, whatever the outcome; the caller's are left alone.
 /// </summary>
 internal sealed class ZipLocks : IDisposable
 {
     private readonly FileStream _file;
     private readonly IReadOnlyList<ZipRecord> _records;
-    private readonly List<byte[]> _candidates;
+    private readonly List<byte[]> _owned;
+    private readonly List<byte[]> _zipCrypto, _aes;
 
-    public ZipLocks(string path, ZipArchive zip, IReadOnlyList<byte[]> candidates)
+    public ZipLocks(FileStream file, ZipArchive zip, IReadOnlyList<byte[]> candidates)
     {
-        _file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 1 << 16);
+        _file = file;
+        _owned = [.. candidates.Select(c => c.ToArray())];
+        (_zipCrypto, _aes) = ([.. _owned], [.. _owned]);
         try
         {
             _records = ZipDirectory.Read(_file, zip);
-            _candidates = [.. candidates];
-            var aesChecked = false;
-            for (var i = 0; i < _records.Count && _candidates.Count > 0; i++)
+            var ranges = new List<(long Start, long End)>();
+            bool usesZipCrypto = false, usesAes = false;
+            foreach (var r in _records)
             {
-                var r = _records[i];
                 if (!r.IsEncrypted) continue;
                 var start = ZipDirectory.DataStart(_file, r, out var time);
+                ranges.Add((start, start + r.Packed));
                 if (r.Aes is { } aes)
                 {
-                    if (aesChecked) continue;
-                    aesChecked = true;
+                    if (usesAes) continue;
+                    usesAes = true;
                     var head = Head(start, r, aes);
-                    _candidates.RemoveAll(c => !Verifies(c, head, aes));
+                    _aes.RemoveAll(c => !Verifies(c, head, aes));
                 }
                 else
                 {
+                    usesZipCrypto = true;
                     var header = Header(start, r);
-                    _candidates.RemoveAll(c => !ZipCryptoKeys.Accepts(c, header, Check(r, time), out _));
+                    _zipCrypto.RemoveAll(c => !ZipCryptoKeys.Accepts(c, header, Check(r, time), out _));
                 }
             }
-            if (_candidates.Count == 0) throw Wrong();
+            // Many records on one encrypted entry would each decrypt and authenticate all of it, counted by no limit.
+            ranges.Sort();
+            for (var i = 1; i < ranges.Count; i++)
+                if (ranges[i].Start < ranges[i - 1].End) throw new ZipRefused(ErrorCode.DecodeFailed, "The archive is damaged (encrypted entries share their data).");
+            if ((usesZipCrypto && _zipCrypto.Count == 0) || (usesAes && _aes.Count == 0)) throw Wrong();
         }
         catch
         {
-            _file.Dispose();
+            Zero();
             throw;
         }
     }
 
-    /// <summary>Whether this record is AE-2, whose CRC field is 0 by design and must not be checked.</summary>
-    public bool SkipsCrc(int index) => _records[index].Aes is { Version: 2 };
+    /// <summary>Whether this record's CRC is not to be checked: AE-2's is 0 by design. One that is not 0 is checked,
+    /// whatever the record says (evaluator, PR 5.3: AE-1 relabelled AE-2).</summary>
+    public bool SkipsCrc(int index) => _records[index] is { Aes.Version: 2, Crc: 0 };
 
     /// <summary>The record's method, for Info: AES and its strength, or ZipCrypto.</summary>
     public static string MethodOf(ZipRecord r) => r.Aes is { } aes ? $"AES-{64 + aes.Strength * 64}" : "ZipCrypto";
@@ -294,49 +309,79 @@ internal sealed class ZipLocks : IDisposable
         return CryptographicOperations.FixedTimeEquals(verifier, head.AsSpan(aes.SaltLength, WinZipAesStream.VerifierLength));
     }
 
-    /// <summary>The entry's plain bytes, decrypted and decompressed. Its own reader: entries are read one after another.</summary>
+    /// <summary>The entry's plain bytes, decrypted and decompressed. Entries are read one after another.</summary>
     public Stream Open(int index)
     {
         var r = _records[index];
         var start = ZipDirectory.DataStart(_file, r, out var time);
-        Stream decrypted;
-        ushort method;
         if (r.Aes is { } aes)
         {
             var head = Head(start, r, aes);
-            foreach (var c in _candidates)
-            {
-                var (key, mac, verifier) = WinZipAesStream.Derive(c, head.AsSpan(0, aes.SaltLength), aes.KeyLength);
-                if (!CryptographicOperations.FixedTimeEquals(verifier, head.AsSpan(aes.SaltLength, WinZipAesStream.VerifierLength)))
-                {
-                    CryptographicOperations.ZeroMemory(key);
-                    CryptographicOperations.ZeroMemory(mac);
-                    continue;
-                }
-                var fields = aes.SaltLength + WinZipAesStream.VerifierLength;
-                var window = new Window(_file, start + fields, r.Packed - fields);
-                decrypted = new WinZipAesStream(window, r.Packed - fields - WinZipAesStream.AuthLength, key, mac);
-                return Inflated(decrypted, aes.Method);
-            }
-            throw Wrong();
+            var fields = aes.SaltLength + WinZipAesStream.VerifierLength;
+            var passing = _aes.Where(c => Verifies(c, head, aes)).ToList();
+            if (passing.Count == 0) throw Wrong();
+            // Two candidates through a 16-bit verifier: the one whose code matches the data (no decompression needed).
+            var chosen = passing.Count == 1 ? passing[0] : passing.FirstOrDefault(c => Authenticates(c, start, r, aes)) ?? passing[0];
+            var (key, mac, _) = WinZipAesStream.Derive(chosen, head.AsSpan(0, aes.SaltLength), aes.KeyLength);
+            var decrypted = new WinZipAesStream(new Window(_file, start + fields, r.Packed - fields), r.Packed - fields - WinZipAesStream.AuthLength, key, mac);
+            return Inflated(decrypted, aes.Method, drain: true);
         }
         var header = Header(start, r);
-        foreach (var c in _candidates)
-        {
-            if (!ZipCryptoKeys.Accepts(c, header, Check(r, time), out var keys)) continue;
-            decrypted = new ZipCryptoStream(new Window(_file, start + 12, r.Packed - 12), keys);
-            method = r.Method;
-            return Inflated(decrypted, method);
-        }
-        throw Wrong();
+        var accepted = _zipCrypto.Where(c => ZipCryptoKeys.Accepts(c, header, Check(r, time), out _)).ToList();
+        if (accepted.Count == 0) throw Wrong();
+        // Two candidates through a 1-in-256 check byte: the one whose decrypted entry has its CRC (evaluator, PR 5.3).
+        var password = accepted.Count == 1 ? accepted[0] : accepted.FirstOrDefault(c => Proves(c, start, r, header, time)) ?? accepted[0];
+        ZipCryptoKeys.Accepts(password, header, Check(r, time), out var keys);
+        return Inflated(new ZipCryptoStream(new Window(_file, start + 12, r.Packed - 12), keys), r.Method, drain: false);
     }
 
-    private static UnlockedEntry Inflated(Stream decrypted, ushort method) =>
-        new(method == 8 ? new DeflateStream(decrypted, CompressionMode.Decompress, leaveOpen: true) : decrypted, decrypted);
-
-    public void Dispose()
+    /// <summary>Whether a ZipCrypto candidate decrypts the entry to its size and CRC, reading no more than its size and
+    /// within the bomb rule; nothing is written.</summary>
+    private bool Proves(byte[] password, long start, ZipRecord r, byte[] header, ushort time)
     {
-        foreach (var c in _candidates) CryptographicOperations.ZeroMemory(c);
-        _file.Dispose();
+        ZipCryptoKeys.Accepts(password, header, Check(r, time), out var keys);
+        using var plain = Inflated(new ZipCryptoStream(new Window(_file, start + 12, r.Packed - 12), keys), r.Method, drain: false);
+        var crc = new Crc32();
+        var buffer = new byte[1 << 16];
+        long total = 0;
+        try
+        {
+            int n;
+            while ((n = plain.Read(buffer)) > 0)
+            {
+                total += n;
+                if (total > r.Size || ArchiveLimits.IsBomb(total, r.Packed)) return false;
+                crc.Append(buffer.AsSpan(0, n));
+            }
+        }
+        catch (InvalidDataException) { return false; }
+        return total == r.Size && crc.Value == r.Crc;
     }
+
+    /// <summary>Whether an AES candidate's code matches the entry's encrypted bytes.</summary>
+    private bool Authenticates(byte[] password, long start, ZipRecord r, AesField aes)
+    {
+        var head = Head(start, r, aes);
+        var fields = aes.SaltLength + WinZipAesStream.VerifierLength;
+        var (key, mac, _) = WinZipAesStream.Derive(password, head.AsSpan(0, aes.SaltLength), aes.KeyLength);
+        using var stream = new WinZipAesStream(new Window(_file, start + fields, r.Packed - fields), r.Packed - fields - WinZipAesStream.AuthLength, key, mac);
+        var buffer = new byte[1 << 16];
+        try
+        {
+            while (stream.Read(buffer) > 0) { }
+            return true;
+        }
+        catch (ZipRefused) { return false; }
+    }
+
+    private static UnlockedEntry Inflated(Stream decrypted, ushort method, bool drain) =>
+        new(method == 8 ? new DeflateStream(decrypted, CompressionMode.Decompress, leaveOpen: true) : decrypted, decrypted, drain);
+
+    private void Zero()
+    {
+        foreach (var c in _owned) CryptographicOperations.ZeroMemory(c);
+    }
+
+    /// <summary>Zeroes the worker's copies of the password bytes; the file belongs to the source.</summary>
+    public void Dispose() => Zero();
 }
