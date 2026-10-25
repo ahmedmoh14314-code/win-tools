@@ -21,6 +21,7 @@ public sealed class JobFeedbackTests
         void IJobFeedback.Progress(CapabilityDescriptor capability, int done, int total) { lock (Progress) Progress.Add(done); }
         public void Finished(CapabilityDescriptor capability, IReadOnlyList<JobItem> items) => Items = items;
         public void Crashed(CapabilityDescriptor capability, int files) => Interlocked.Increment(ref Crashes);
+        public void SecretNeeded(CapabilityDescriptor capability) { }
     }
 
     [Fact]

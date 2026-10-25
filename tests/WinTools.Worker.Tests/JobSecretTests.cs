@@ -60,6 +60,7 @@ public sealed class JobSecretTests : IDisposable
         public void Progress(CapabilityDescriptor capability, int done, int total) { }
         public void Finished(CapabilityDescriptor capability, IReadOnlyList<JobItem> items) { }
         public void Crashed(CapabilityDescriptor capability, int files) { }
+        public void SecretNeeded(CapabilityDescriptor capability) { }
     }
 
     private static CapabilityDescriptor Capability(string id, SecretPrompt? prompt = null) =>
@@ -127,6 +128,104 @@ public sealed class JobSecretTests : IDisposable
         Assert.Contains("job.done", text, StringComparison.Ordinal);
         Assert.DoesNotContain("pw-", text, StringComparison.Ordinal);
         Assert.DoesNotContain(PasswordPolicy.ParameterName, text, StringComparison.Ordinal);
+    }
+
+    /// <summary>Answers every request with "a password is needed", as the archive worker does for a locked ZIP.</summary>
+    private sealed class Locked : IJobExecutor
+    {
+        public readonly List<JobRequest> Requests = [];
+        public bool JobObjectAssigned => true;
+        public int LastLaneCount => 1;
+
+        public Task<IReadOnlyList<JobResult>> RunAsync(IReadOnlyList<JobRequest> requests, CancellationToken cancellationToken, Action<int>? onFileDone = null)
+        {
+            lock (Requests) Requests.AddRange(requests);
+            return Task.FromResult<IReadOnlyList<JobResult>>([.. requests.Select(r => JobResult.Fail(r.Id, ErrorCode.PasswordRequired, "needs one"))]);
+        }
+    }
+
+    private sealed class Told : IJobFeedback
+    {
+        public int Finished, SecretNeeded;
+        public void Started(CapabilityDescriptor capability, IReadOnlyList<string> paths) { }
+        public void Progress(CapabilityDescriptor capability, int done, int total) { }
+        void IJobFeedback.Finished(CapabilityDescriptor capability, IReadOnlyList<JobItem> items) => Interlocked.Increment(ref Finished);
+        void IJobFeedback.SecretNeeded(CapabilityDescriptor capability) => Interlocked.Increment(ref SecretNeeded);
+        public void Crashed(CapabilityDescriptor capability, int files) { }
+    }
+
+    private static readonly SecretPrompt OnDemand = new("Archive password", Confirm: false, WhenRequired: true);
+
+    [Fact]
+    public void A_command_that_asks_only_when_needed_runs_without_a_secret_or_with_one_and_nothing_else()
+    {
+        var executor = new Recording();
+        var scheduler = Scheduler(executor);
+        Assert.NotNull(scheduler.Enqueue(Capability("extract", OnDemand), [@"C:\p\a.zip"]));
+        Assert.NotNull(scheduler.Enqueue(Capability("extract", OnDemand), [@"C:\p\a.zip"], Password(Secret)));
+        var both = new Dictionary<string, string> { [PasswordPolicy.ParameterName] = "x\u00B2", [PasswordPolicy.NormalizedParameterName] = "x2" };
+        Assert.NotNull(scheduler.Enqueue(Capability("extract", OnDemand), [@"C:\p\a.zip"], both));
+        Assert.Null(scheduler.Enqueue(Capability("extract", OnDemand), [@"C:\p\a.zip"], new Dictionary<string, string> { ["more"] = "x" }));
+        Assert.Null(scheduler.Enqueue(Capability("extract", OnDemand), [@"C:\p\a.zip"], Password("")));
+    }
+
+    private JobScheduler Scheduler(IJobExecutor executor, IJobFeedback feedback) =>
+        new([new JobModuleRunner(new Module("m"), executor, _ => null)], _log, () => new AppSettings(), feedback);
+
+    [Fact]
+    public async Task One_archive_that_needs_a_password_asks_for_it_instead_of_a_toast()
+    {
+        var told = new Told();
+        var job = Scheduler(new Locked(), told).Enqueue(Capability("extract", OnDemand), [@"C:\p\a.zip"])!;
+        await job.Completion.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(job.SecretNeeded);
+        Assert.Equal((0, 1), (told.Finished, told.SecretNeeded));
+    }
+
+    [Fact]
+    public async Task Several_archives_or_a_password_already_given_get_the_toast_and_never_a_second_ask()
+    {
+        var told = new Told();
+        var scheduler = Scheduler(new Locked(), told);
+        var several = scheduler.Enqueue(Capability("extract", OnDemand), [@"C:\p\a.zip", @"C:\p\b.zip"])!;
+        await several.Completion.WaitAsync(TimeSpan.FromSeconds(10));
+        var given = scheduler.Enqueue(Capability("extract", OnDemand), [@"C:\p\a.zip"], Password(Secret))!;
+        await given.Completion.WaitAsync(TimeSpan.FromSeconds(10));
+        var asksFirst = scheduler.Enqueue(Capability("protect", new("Title", Confirm: false)), [@"C:\p\a.pdf"], Password(Secret))!;
+        await asksFirst.Completion.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(several.SecretNeeded || given.SecretNeeded || asksFirst.SecretNeeded);
+        Assert.Equal((3, 0), (told.Finished, told.SecretNeeded));
+    }
+
+    /// <summary>Holds each run until released, then answers "a password is needed".</summary>
+    private sealed class GatedLocked : IJobExecutor
+    {
+        public readonly TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool JobObjectAssigned => true;
+        public int LastLaneCount => 1;
+
+        public async Task<IReadOnlyList<JobResult>> RunAsync(IReadOnlyList<JobRequest> requests, CancellationToken cancellationToken, Action<int>? onFileDone = null)
+        {
+            Started.TrySetResult();
+            await Release.Task.ConfigureAwait(false);
+            return [.. requests.Select(r => JobResult.Fail(r.Id, ErrorCode.PasswordRequired, "needs one"))];
+        }
+    }
+
+    [Fact]
+    public async Task A_job_cancelled_while_it_ran_never_asks_for_a_password()
+    {
+        // Evaluator, PR 5.3: a run that ends "a password is needed" while the host is exiting must not open the dialog.
+        var told = new Told();
+        var executor = new GatedLocked();
+        var job = Scheduler(executor, told).Enqueue(Capability("extract", OnDemand), [@"C:\p\a.zip"])!;
+        await executor.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        job.Cancel();
+        executor.Release.TrySetResult();
+        await job.Completion.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(job.SecretNeeded);
+        Assert.Equal(0, told.SecretNeeded);
     }
 
     [Fact]

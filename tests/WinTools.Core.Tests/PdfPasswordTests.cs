@@ -146,8 +146,12 @@ public sealed class PdfPasswordTests
         var ids = Resolver.Resolve([@"C:\p\a.png"]).Select(c => c.Id).ToArray();
         Assert.DoesNotContain(PdfCapabilities.ProtectId, ids);
         Assert.DoesNotContain(Resolver.Resolve([@"C:\p\a.pdf", @"C:\p\b.png"]), c => c.Module == PdfCapabilities.Module);
+        // Only the PDF commands ask before they run; archive Extract and Test ask only when the archive needs a password
+        // (V2 PR 5.3, ADR-0027). No other command has a prompt of either kind.
         Assert.Equal([PdfCapabilities.ProtectId, PdfCapabilities.UnprotectId],
-            Resolver.Catalog.Where(c => c.Prompt is not null).Select(c => c.Id));
+            Resolver.Catalog.Where(c => c.Prompt is { WhenRequired: false }).Select(c => c.Id));
+        Assert.Equal([ArchiveCapabilities.ExtractId, ArchiveCapabilities.TestId],
+            Resolver.Catalog.Where(c => c.Prompt is { WhenRequired: true }).Select(c => c.Id));
     }
 
     [Fact]

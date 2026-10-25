@@ -37,6 +37,7 @@
    - links (Unix mode `lrwxrwxrwx` in the external attributes);
    - devices, pipes and sockets;
    - encrypted entries, which fail the job with `PasswordRequired`, since .NET cannot decrypt them. A password dialog is a later PR.
+     - **Amended by ADR-0027 (V2 PR 5.3):** encrypted entries are now read with the password, asked only when an archive needs one. Without it, the archive is still refused, before anything is written.
 5. **Limits (`ArchiveLimits`, D13), counted on bytes as they decompress:**
    - 100,000 files **and folders created**, implicit parent folders included (a small archive of nested folder names must not create millions of folders);
    - 20 GB in all;
@@ -133,7 +134,7 @@ Two minors were fixed as well: a GZIP of something else now says it is not a TAR
 - **Hashing the extracted content in the host.** Rejected: double reads of up to 20 GB. The shape check refuses any added, removed, resized or linked entry.
 
 ## Consequences
-- Encrypted ZIPs can be inspected (Info says so) but not extracted until the password PR.
+- Encrypted ZIPs can be inspected (Info says so) but not extracted until the password PR. (Since ADR-0027 they are extracted and tested with their password.)
 - ZIP64 and Unicode names work as far as .NET supports them; names from very old DOS tools may decode differently.
 - Extraction time grows with content. The host allows 30 minutes per archive and runs one archive job at a time.
 

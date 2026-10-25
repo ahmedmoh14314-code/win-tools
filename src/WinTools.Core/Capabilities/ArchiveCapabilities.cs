@@ -6,8 +6,8 @@ namespace WinTools.Core.Capabilities;
 /// <summary>
 /// The Archives module, ZIP first (V2 plan §9, PR 5.1, ADR-0023): Extract into a new folder, Test the archive's integrity
 /// (every entry decompressed and its CRC-32 checked), ZIP info, and Add to ZIP for any files and folders. Extraction never
-/// writes outside its own new folder, never overwrites, never opens what it extracted, and refuses encrypted entries
-/// (.NET cannot decrypt them; a password dialog is a later PR).
+/// writes outside its own new folder, never overwrites, never opens what it extracted. An encrypted ZIP is extracted and
+/// tested with its password, asked only when the archive needs one (V2 PR 5.3, ADR-0027).
 /// </summary>
 public static class ArchiveCapabilities
 {
@@ -27,12 +27,20 @@ public static class ArchiveCapabilities
     private static readonly IReadOnlySet<string> GzipOnly = new HashSet<string>(StringComparer.Ordinal) { FileKinds.Gzip.Id };
     private static readonly IReadOnlySet<string> AnyFileOrFolder = FileKinds.Declared.Select(k => k.Id).ToHashSet(StringComparer.Ordinal);
 
+    /// <summary>The password of an encrypted ZIP: asked after a first run says one is needed, typed once (ADR-0027).</summary>
+    private static readonly SecretPrompt ArchivePassword = new("Archive password", Confirm: false, WhenRequired: true);
+
+    /// <summary>Several archives that need a password cannot share one dialog that names none of them.</summary>
+    private const string DropAlone = "The archive is protected with a password. Drop it on its own to type the password.";
+
     public static IReadOnlyList<CapabilityDescriptor> Catalog { get; } =
     [
         new(ExtractId, "Extract to folder", "archive", Module, new InputRule(ZipOnly), CapabilityShape.PerFile, CapabilityOutput.Folder,
-            LongRunning: true, Feedback: new("Extracting", "extract", "Extracted", "Nothing to extract", "archive", "archives")),
+            LongRunning: true, Feedback: new("Extracting", "extract", "Extracted", "Nothing to extract", "archive", "archives", PasswordRequired: DropAlone),
+            Prompt: ArchivePassword),
         new(TestId, "Test", "archive", Module, new InputRule(ZipOnly), CapabilityShape.PerFile, CapabilityOutput.Facts,
-            LongRunning: true, Feedback: new("Testing", "test", "Tested", "Nothing to test", "archive", "archives")),
+            LongRunning: true, Feedback: new("Testing", "test", "Tested", "Nothing to test", "archive", "archives", PasswordRequired: DropAlone),
+            Prompt: ArchivePassword),
         new(DecompressId, "Decompress", "archive", Module, new InputRule(GzipOnly), CapabilityShape.PerFile, CapabilityOutput.File,
             LongRunning: true, Feedback: new("Decompressing", "decompress", "Decompressed", "Nothing to decompress", "file", "files")),
         new(InfoId, "Archive info", "archive", Module, new InputRule(ZipOnly), CapabilityShape.PerFile, CapabilityOutput.Facts,

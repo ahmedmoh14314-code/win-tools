@@ -119,7 +119,7 @@ public static class FeedbackText
         ErrorCode.DecodeFailed => $"The {words.Noun} is damaged or incomplete.",
         ErrorCode.EncodeFailed or ErrorCode.OutputValidationFailed => "The result could not be written correctly. Nothing was saved.",
         ErrorCode.OutputNameInvalid or ErrorCode.NoFreeOutputName => "No free name for the result in that folder.",
-        ErrorCode.PasswordRequired => $"The {words.Noun} is protected with a password. Remove the protection first.",
+        ErrorCode.PasswordRequired => words.PasswordRequired ?? $"The {words.Noun} is protected with a password. Remove the protection first.",
         ErrorCode.PasswordIncorrect => $"The password does not open the {words.Noun}. Nothing was changed.",
         ErrorCode.LimitExceeded => $"The {words.Noun} is beyond what this command handles (for example too many pages).",
         _ => Reason(error),

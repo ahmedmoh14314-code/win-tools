@@ -129,6 +129,30 @@ public sealed class ArchiveCapabilitiesTests
     }
 
     [Fact]
+    public void Extract_and_test_ask_for_a_password_only_when_the_archive_needs_one()
+    {
+        // V2 PR 5.3 (ADR-0027): the first run goes without; the dialog comes only after "a password is needed".
+        var catalog = ArchiveCapabilities.Catalog.ToDictionary(c => c.Id);
+        foreach (var id in new[] { ArchiveCapabilities.ExtractId, ArchiveCapabilities.TestId })
+            Assert.Equal(new SecretPrompt("Archive password", Confirm: false, WhenRequired: true), catalog[id].Prompt);
+        foreach (var id in new[] { ArchiveCapabilities.InfoId, ArchiveCapabilities.ZipId, ArchiveCapabilities.DecompressId })
+            Assert.Null(catalog[id].Prompt);
+        Assert.False(new SecretPrompt("PDF", Confirm: false).WhenRequired); // PR 2.2's prompts still ask first
+    }
+
+    [Fact]
+    public void Archives_that_need_a_password_in_a_batch_are_told_to_be_dropped_on_their_own()
+    {
+        var extract = ArchiveCapabilities.Catalog.Single(c => c.Id == ArchiveCapabilities.ExtractId);
+        var m = Feedback.FeedbackText.For(extract.Words,
+            [new("a.zip", Jobs.JobResult.Fail("1", Jobs.ErrorCode.PasswordRequired, "x")), new("b.zip", Jobs.JobResult.Fail("2", Jobs.ErrorCode.PasswordRequired, "x"))]);
+        Assert.Contains("on its own", m.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("Remove the protection", m.Detail, StringComparison.Ordinal);
+        var wrong = Feedback.FeedbackText.For(extract.Words, [new("a.zip", Jobs.JobResult.Fail("1", Jobs.ErrorCode.PasswordIncorrect, "x"))]);
+        Assert.Contains("password does not open the archive", wrong.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Outputs_are_named_after_the_archive_or_the_selection()
     {
         Assert.Equal([@"C:\p\photos", @"C:\p\photos (1)"], ArchiveCapabilities.Candidates(ArchiveCapabilities.ExtractId, [@"C:\p\photos.zip"], null).Take(2));

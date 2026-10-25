@@ -4,9 +4,11 @@ namespace WinTools.Core.Feedback;
 /// The words a module gives the toasts about one of its commands (V2 PR 1.4), so the presenter needs no module
 /// knowledge: what it is doing ("Converting"), the verb for a failure ("convert"), what it did ("Converted to WebP"),
 /// why nothing changed, and what it works on ("image"/"images"). <paramref name="Savings"/>: the size saved is the point
-/// of the command (Compress: "saved 62%", "already optimized").
+/// of the command (Compress: "saved 62%", "already optimized"). <paramref name="PasswordRequired"/>: what to do about a
+/// file that needs a password, when the module has its own way (an archive: drop it on its own, V2 PR 5.3).
 /// </summary>
-public sealed record FeedbackWords(string Working, string Verb, string Done, string NothingReason, string Noun, string Nouns, bool Savings = false)
+public sealed record FeedbackWords(string Working, string Verb, string Done, string NothingReason, string Noun, string Nouns, bool Savings = false,
+    string? PasswordRequired = null)
 {
     /// <summary>Plain words from a command's label, for a module that gives none.</summary>
     public static FeedbackWords From(string label) =>

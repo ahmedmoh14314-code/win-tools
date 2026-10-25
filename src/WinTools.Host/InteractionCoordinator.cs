@@ -348,20 +348,47 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
 
     private void Run(CapabilityDescriptor capability, IReadOnlyList<string> paths, int x, int y)
     {
-        if (capability.Prompt is not null)
+        if (capability.Prompt is { WhenRequired: false } first)
         {
-            // One password window at a time: a second, with the same title and no file name, could take the password
-            // meant for the first (evaluator, PR 2.2).
-            if (Interlocked.CompareExchange(ref _secretOpen, 1, 0) != 0)
-            {
-                _log.Event("secret.busy", new { op = capability.Id });
-                _feedback.SecretBusy();
-                return;
-            }
-            _ = AskAndRunAsync(capability, capability.Prompt, paths, x, y);
+            Ask(capability, first, paths, x, y);
             return;
         }
-        if (_jobs.Enqueue(capability, paths) is null) _log.Event("job.refused", new { op = capability.Id, module = capability.Module }); // no runner for that module
+        var job = _jobs.Enqueue(capability, paths);
+        if (job is null) _log.Event("job.refused", new { op = capability.Id, module = capability.Module }); // no runner for that module
+        else if (capability.Prompt is { WhenRequired: true } onDemand) _ = AskWhenNeededAsync(job, capability, onDemand, paths, x, y);
+    }
+
+    /// <summary>Opens the password window for a command, unless one is already open.</summary>
+    private void Ask(CapabilityDescriptor capability, SecretPrompt prompt, IReadOnlyList<string> paths, int x, int y)
+    {
+        // One password window at a time: a second, with the same title and no file name, could take the password
+        // meant for the first (evaluator, PR 2.2).
+        if (Interlocked.CompareExchange(ref _secretOpen, 1, 0) != 0)
+        {
+            _log.Event("secret.busy", new { op = capability.Id });
+            _feedback.SecretBusy();
+            return;
+        }
+        _ = AskAndRunAsync(capability, prompt, paths, x, y);
+    }
+
+    /// <summary>
+    /// A command that asks only when needed (V2 PR 5.3, ADR-0027): when its run without a password ends with "one is
+    /// needed" for its single archive, the scheduler told the user nothing, and the password window opens now. The job
+    /// with the password never asks again: a wrong one is a toast.
+    /// </summary>
+    private async Task AskWhenNeededAsync(ScheduledJob job, CapabilityDescriptor capability, SecretPrompt prompt, IReadOnlyList<string> paths, int x, int y)
+    {
+        try
+        {
+            await job.Completion.ConfigureAwait(false);
+            if (job.SecretNeeded) Ask(capability, prompt, paths, x, y);
+        }
+        catch (Exception ex)
+        {
+            _log.Event("secret.error", new { type = ex.GetType().Name });
+            _feedback.DialogUnavailable("the password window");
+        }
     }
 
     /// <summary>
