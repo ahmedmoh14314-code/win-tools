@@ -108,20 +108,17 @@ public sealed class PdfPasswordWorkerTests : IDisposable
         Assert.Equal(["plain.pdf", "restricted.pdf"], _dir.Names());
     }
 
-    [Fact]
-    public void An_open_password_does_not_remove_restrictions_but_the_owner_password_may()
+    [Theory]
+    [InlineData("user")]  // the open password: qpdf would drop the restrictions with it
+    [InlineData("owner")] // the owner password: still refused (the owner's decision: never, whatever password)
+    public void Restrictions_are_never_removed_whatever_password_is_given(string password)
     {
-        // qpdf would decrypt with the open password and drop the author's restrictions with it: refused unless the
-        // password given is the owner's (whoever set the restrictions may lift them).
         var both = _dir.Path + @"\both.pdf";
         Assert.True(Qpdf.Run([Pdf("plain.pdf", 2), "--encrypt", "--user-password=user", "--owner-password=owner", "--bits=256", "--print=none", "--", both], TimeSpan.FromSeconds(30)).Usable);
-        var r = PdfJobs.Run(Request(PdfCapabilities.UnprotectId, both, "user"));
+        var r = PdfJobs.Run(Request(PdfCapabilities.UnprotectId, both, password));
         Assert.Equal(ErrorCode.UnsupportedContent, r.Error);
         Assert.Contains("restrictions", r.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(["both.pdf", "plain.pdf"], _dir.Names());
-        var owner = PdfJobs.Run(Request(PdfCapabilities.UnprotectId, both, "owner"));
-        Assert.True(owner.Success, owner.Message);
-        Assert.Equal(2, Opens(owner.OutputPath!, null));
     }
 
     [Fact]
