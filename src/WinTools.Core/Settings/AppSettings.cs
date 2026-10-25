@@ -24,7 +24,7 @@ public sealed record AppSettings
     /// <summary>The defaults, which Reset restores.</summary>
     public static AppSettings Defaults { get; } = new();
 
-    /// <summary>Keys allowed as the trigger (<see cref="TriggerKeyPolicy"/>): no modifiers, nothing Explorer uses during a drag.</summary>
+    /// <summary>Keys allowed as the trigger (<see cref="TriggerKeyPolicy"/>): keys whose stray press is harmless in Explorer.</summary>
     public static IReadOnlyDictionary<string, int> TriggerKeys => TriggerKeyPolicy.Allowed;
 
     public int Schema { get; init; } = CurrentSchema;

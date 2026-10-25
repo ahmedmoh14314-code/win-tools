@@ -42,7 +42,7 @@ public partial class MainWindow : Window
             var dark = 1;
             _ = Native.DwmSetWindowAttribute(new WindowInteropHelper(this).Handle, 20, ref dark, sizeof(int));
         };
-        foreach (var key in AppSettings.TriggerKeys.Keys) TriggerKey.Items.Add(key);
+        foreach (var key in TriggerKeyPolicy.Order) TriggerKey.Items.Add(key);
         foreach (var (_, label) in AnimationChoices) Animations.Items.Add(label);
         Load();
         Wire();

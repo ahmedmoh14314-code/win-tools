@@ -96,21 +96,42 @@ public sealed class SettingsSchemaTests
         Assert.Equal("Space", AppSettings.Defaults.TriggerKey);
     }
 
+    // The typing-interference spike (docs/research/2026-10-25-typing-interference.md, ADR-0021). Explorer ignored F2-F12,
+    // letters and digits during a drag, but a key held past the drop repeats into Explorer, and with Ctrl, Shift or Alt
+    // it is another shortcut (Alt+F4, Shift+F10); neither was measured. Offered: only keys that do nothing in Explorer if
+    // they reach it (Space only selects, F7, F9 and F12 do nothing there). F2-F4, F6, F10 and F11 rename, search, focus,
+    // open the menu or go full screen; F5 refreshes; F1 opens Help; F8 deletes in Total Commander and Far, which a held
+    // key reaches too (second review); letters and digits would open the ring over games and drawing programs.
     [Theory]
     [InlineData("Space", true)]
-    [InlineData("F8", true)]
+    [InlineData("F7", true)]
+    [InlineData("F8", false)]
+    [InlineData("F9", true)]
     [InlineData("F12", true)]
     [InlineData("F1", false)]
     [InlineData("F2", false)]
+    [InlineData("F3", false)]
+    [InlineData("F4", false)]
     [InlineData("F5", false)]
+    [InlineData("F6", false)]
+    [InlineData("F10", false)]
+    [InlineData("F11", false)]
     [InlineData("A", false)]
+    [InlineData("Q", false)]
+    [InlineData("1", false)]
+    [InlineData("Ctrl", false)]
     public void Every_key_offered_or_refused_has_a_reason(string key, bool allowed)
     {
         var verdict = TriggerKeyPolicy.Judge(key);
         Assert.Equal(allowed, verdict.Allowed);
         if (!allowed) Assert.False(string.IsNullOrWhiteSpace(verdict.Reason));
+        if (!allowed) Assert.NotEqual(TriggerKeyPolicy.Judge("NoSuchKey").Reason, verdict.Reason); // each refusal has its own reason, never the fallback
         Assert.Equal(allowed, AppSettings.TriggerKeys.ContainsKey(key));
     }
+
+    [Fact]
+    public void The_window_lists_the_keys_in_a_fixed_order() =>
+        Assert.Equal(["Space", "F7", "F9", "F12"], TriggerKeyPolicy.Order);
 
     [Fact]
     public void Only_allowed_keys_are_trigger_keys() =>
