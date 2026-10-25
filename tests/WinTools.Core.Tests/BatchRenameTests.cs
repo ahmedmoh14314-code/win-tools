@@ -100,8 +100,8 @@ public sealed class BatchRenameTests
     {
         var byId = FilesCapabilities.Catalog.ToDictionary(c => c.Id);
         Assert.Equal("Copy name", byId[FilesCapabilities.CopyNameId].Label);
-        Assert.Equal("Copy folder path", byId[FilesCapabilities.CopyFolderId].Label);
-        Assert.Equal("Batch rename…", byId[FilesCapabilities.RenameId].Label);
+        Assert.Equal("Folder path", byId[FilesCapabilities.CopyFolderId].Label); // three words did not fit two lines (V2 PR 7.2)
+        Assert.Equal("Rename files", byId[FilesCapabilities.RenameId].Label); // "Batch rename…" and "Rename…" did not fit their sectors; two words wrap (V2 PR 7.2)
         Assert.Equal(DialogKinds.Rename, byId[FilesCapabilities.RenameId].Dialog);
         Assert.Equal(CapabilityOutput.Clipboard, byId[FilesCapabilities.CopyNameId].Produces);
         Assert.Equal("a.png\r\nholiday", FilesCapabilities.ClipboardText(FilesCapabilities.CopyNameId, [@"C:\p\a.png", @"C:\p\holiday\"]));

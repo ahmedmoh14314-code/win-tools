@@ -43,7 +43,7 @@ public sealed class GeneralFilesTests
         var menu = RadialMenu.Build(Resolver, [@"C:\p\a.png"]);
         Assert.Equal(["Convert", "Compress", "Resize", "Rotate", "Tools"], menu.Select(g => g.Label));
         // V2 PR 7.2: seven do not fit; the commands a normal user needs first stay on the ring, the rest go under "More…".
-        Assert.Equal(["Remove metadata", "Image info", "File info", "Copy path", "Batch rename…", "Copy name", "More…"], menu[^1].Commands.Select(c => c.Label));
+        Assert.Equal(["Remove metadata", "Image info", "File info", "Copy path", "Rename files", "More…"], menu[^1].Commands.Select(c => c.Label));
     }
 
     [Fact]

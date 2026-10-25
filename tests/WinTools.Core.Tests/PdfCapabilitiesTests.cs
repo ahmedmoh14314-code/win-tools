@@ -33,7 +33,7 @@ public sealed class PdfCapabilitiesTests
         var menu = RadialMenu.Build(Resolver, [@"C:\p\a.pdf"]);
         Assert.Equal(["Organize", "Optimize", "Rotate", "Protect", "Tools"], menu.Select(g => g.Label)); // Protect since V2 PR 2.2
         Assert.Equal(["Smaller (lossless)", "Fast web view", "Repair"], menu[1].Commands.Select(c => c.Label));
-        Assert.Equal(["PDF info", "File info", "Copy path", "Batch rename…", "Copy name", "Copy folder path", "More…"], menu[^1].Commands.Select(c => c.Label));
+        Assert.Equal(["PDF info", "File info", "Copy path", "Rename files", "Copy name", "More…"], menu[^1].Commands.Select(c => c.Label));
     }
 
     [Fact]
