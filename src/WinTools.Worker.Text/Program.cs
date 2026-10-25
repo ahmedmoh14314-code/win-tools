@@ -14,7 +14,8 @@ internal static class Program
         _ = SetErrorMode(0x0001 | 0x0002 | 0x8000); // SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX
         using var input = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false), false, 4096);
         using var output = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
-        WorkerLoop.Run(input, output, FileJobs.Run);
+        // One worker for the text-only modules: General Files and Subtitles (V2 plan §6).
+        WorkerLoop.Run(input, output, r => r.CapabilityId.StartsWith("subtitles.", StringComparison.Ordinal) ? SubtitleJobs.Run(r) : FileJobs.Run(r));
         return 0;
     }
 
