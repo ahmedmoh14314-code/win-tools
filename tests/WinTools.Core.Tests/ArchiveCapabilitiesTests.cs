@@ -85,6 +85,7 @@ public sealed class ArchiveCapabilitiesTests
         // Evaluator, PR 5.1 (reproduced: 10 entries sharing one stream inflated 2.4 MB to 2.9 GB).
         Assert.True(ArchiveLimits.IsArchiveBomb(2_930_000_000, 2_400_000));
         Assert.False(ArchiveLimits.IsArchiveBomb(300_000_000, 2_400_000)); // 125:1
+        Assert.False(ArchiveLimits.IsArchiveBomb(20 << 20, 50 << 10)); // 50 KB of logs to 20 MB: 400:1, but small
     }
 
     [Fact]
