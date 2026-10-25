@@ -56,6 +56,7 @@
   "module.pdf": "PDF",
   "module.archive": "Archives",
   "module.subtitles": "Subtitles",
+  "module.media": "Video and audio",
   "module.documents": "Documents",
 
   "about.title": "About WinTools",
