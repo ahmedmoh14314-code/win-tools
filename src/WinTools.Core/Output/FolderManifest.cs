@@ -19,6 +19,35 @@ public static class FolderManifest
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
     }
 
+    /// <summary>
+    /// The shape of a folder tree (V2 PR 5.1): one SHA-256 over every entry's relative path, and each file's size, in
+    /// ordinal order. Extraction can write 20 GB; the host checks the tree it finds is the one the worker reported without
+    /// reading it all again. Null when the tree holds a link or junction, or more than <paramref name="maxEntries"/> entries.
+    /// Only a real link counts: OneDrive marks its files with a reparse point too, and they are ordinary data (evaluator,
+    /// PR 5.1).
+    /// </summary>
+    public static string? ShapeOf(string folder, int maxEntries = 200_000)
+    {
+        var root = new DirectoryInfo(folder);
+        if (!root.Exists || root.LinkTarget is not null) return null;
+        var lines = new List<string>();
+        var pending = new Stack<DirectoryInfo>([root]);
+        while (pending.Count > 0)
+        {
+            var dir = pending.Pop();
+            foreach (var e in dir.EnumerateFileSystemInfos())
+            {
+                if (e.LinkTarget is not null) return null;
+                if (lines.Count >= maxEntries) return null;
+                var relative = Path.GetRelativePath(root.FullName, e.FullName).Replace('\\', '/');
+                if (e is DirectoryInfo d) { lines.Add(relative + "/"); pending.Push(d); }
+                else lines.Add(relative + "\t" + ((FileInfo)e).Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+        }
+        lines.Sort(StringComparer.Ordinal);
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', lines))));
+    }
+
     /// <summary>The manifest hash of a folder's files as they are on disk (no subfolders are expected or allowed).</summary>
     public static string? HashOf(string folder)
     {

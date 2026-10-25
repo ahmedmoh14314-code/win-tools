@@ -55,6 +55,9 @@ public static class PathPolicy
         return Path.GetFileNameWithoutExtension(path).Length > 0 ? PathVerdict.Supported : PathVerdict.NoStem;
     }
 
+    /// <summary>Whether a name's stem is a Windows device name (CON, NUL, COM0–COM9, LPT0–LPT9…), any case.</summary>
+    public static bool IsDeviceName(string stem) => DeviceNames.Contains(stem);
+
     private static readonly HashSet<string> DeviceNames = new(
         ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
          .. Enumerable.Range(0, 10).SelectMany(i => new[] { $"COM{i}", $"LPT{i}" }),
