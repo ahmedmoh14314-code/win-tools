@@ -197,6 +197,37 @@ public sealed class JobSecretTests : IDisposable
         Assert.Equal((3, 0), (told.Finished, told.SecretNeeded));
     }
 
+    /// <summary>Holds each run until released, then answers "a password is needed".</summary>
+    private sealed class GatedLocked : IJobExecutor
+    {
+        public readonly TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool JobObjectAssigned => true;
+        public int LastLaneCount => 1;
+
+        public async Task<IReadOnlyList<JobResult>> RunAsync(IReadOnlyList<JobRequest> requests, CancellationToken cancellationToken, Action<int>? onFileDone = null)
+        {
+            Started.TrySetResult();
+            await Release.Task.ConfigureAwait(false);
+            return [.. requests.Select(r => JobResult.Fail(r.Id, ErrorCode.PasswordRequired, "needs one"))];
+        }
+    }
+
+    [Fact]
+    public async Task A_job_cancelled_while_it_ran_never_asks_for_a_password()
+    {
+        // Evaluator, PR 5.3: a run that ends "a password is needed" while the host is exiting must not open the dialog.
+        var told = new Told();
+        var executor = new GatedLocked();
+        var job = Scheduler(executor, told).Enqueue(Capability("extract", OnDemand), [@"C:\p\a.zip"])!;
+        await executor.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        job.Cancel();
+        executor.Release.TrySetResult();
+        await job.Completion.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(job.SecretNeeded);
+        Assert.Equal(0, told.SecretNeeded);
+    }
+
     [Fact]
     public void Windows_normalizes_to_nfkc_without_dotnet_globalization()
     {

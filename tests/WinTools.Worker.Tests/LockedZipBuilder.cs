@@ -16,7 +16,8 @@ public static class LockedZipBuilder
     public enum Cipher { None, ZipCrypto, Aes128, Aes192, Aes256 }
 
     /// <summary>One entry: a null content is a folder (never encrypted).</summary>
-    public sealed record Item(string Name, byte[]? Content, Cipher Cipher = Cipher.Aes256, bool Deflate = true, int AesVersion = 1);
+    /// <param name="Password">This entry's own password bytes, when not the archive's (one archive, two byte forms).</param>
+    public sealed record Item(string Name, byte[]? Content, Cipher Cipher = Cipher.Aes256, bool Deflate = true, int AesVersion = 1, byte[]? Password = null);
 
     /// <summary>Where each entry landed, for tests that damage one in a known place.</summary>
     public sealed record Placed(string Name, long LocalHeader, long Data, long Packed, long CentralRecord);
@@ -45,12 +46,12 @@ public static class LockedZipBuilder
                     packed = inner;
                     break;
                 case Cipher.ZipCrypto:
-                    packed = ZipCrypto(password, inner, (byte)(crc >> 24));
+                    packed = ZipCrypto(item.Password ?? password, inner, (byte)(crc >> 24));
                     flags |= 1;
                     break;
                 default:
                     var strength = cipher switch { Cipher.Aes128 => 1, Cipher.Aes192 => 2, _ => 3 };
-                    packed = WinZipAes(password, inner, strength);
+                    packed = WinZipAes(item.Password ?? password, inner, strength);
                     extra = [0x01, 0x99, 7, 0, (byte)item.AesVersion, 0, (byte)'A', (byte)'E', (byte)strength, (byte)innerMethod, 0];
                     flags |= 1;
                     method = 99;
