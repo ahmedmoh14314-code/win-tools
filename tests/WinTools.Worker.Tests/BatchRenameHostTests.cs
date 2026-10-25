@@ -74,6 +74,32 @@ public sealed class BatchRenameHostTests : IDisposable
     }
 
     [Fact]
+    public void A_rename_with_no_chain_goes_straight_to_the_new_names()
+    {
+        // Review, PR 7.2: a pass through temporary names makes OneDrive see each file leave and come back.
+        var a = File("a.txt");
+        var b = File("b.txt");
+        var seen = new List<string>();
+        using var watcher = new FileSystemWatcher(_dir.Path) { NotifyFilter = NotifyFilters.FileName, EnableRaisingEvents = true };
+        watcher.Renamed += (_, e) => { lock (seen) seen.Add(e.Name ?? ""); };
+        Assert.True(BatchRenamer.Apply(Request(new RenameRule(Prefix: "new "), a, b)).Success);
+        Thread.Sleep(300);
+        lock (seen) Assert.DoesNotContain(seen, n => n.Contains("wintools", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void A_failed_rename_says_what_happened_in_rename_words()
+    {
+        var words = FilesCapabilities.Catalog.Single(c => c.Id == FilesCapabilities.RenameId).Words;
+        string Detail(ErrorCode code) => FeedbackText.For(words, [new JobItem("3 items", JobResult.Fail("r", code, "x"), Inputs: 3)]).Detail;
+        Assert.Contains("already", Detail(ErrorCode.NoFreeOutputName), StringComparison.Ordinal);
+        Assert.Contains("not allowed", Detail(ErrorCode.OutputNameInvalid), StringComparison.Ordinal);
+        Assert.Contains("put back", Detail(ErrorCode.SourceNotReadable), StringComparison.Ordinal);
+        Assert.Contains("wintools-renaming", Detail(ErrorCode.Incomplete), StringComparison.Ordinal);
+        Assert.DoesNotContain("Nothing was saved", Detail(ErrorCode.OutputValidationFailed), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_file_that_cannot_be_moved_puts_the_others_back()
     {
         var a = File("a.txt");

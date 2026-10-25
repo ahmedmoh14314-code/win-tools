@@ -30,6 +30,29 @@ public sealed class BatchRenameTests
     }
 
     [Fact]
+    public void A_new_name_replaces_the_old_one_and_numbering_tells_the_files_apart()
+    {
+        // Review, PR 7.2: renaming photos keeps none of IMG_0001 when a new name is given.
+        var plan = BatchRename.Plan(["IMG_0002.JPG", "IMG_0001.JPG"], new(Name: "Holiday", Number: true));
+        Assert.Equal(["Holiday 02.JPG", "Holiday 01.JPG"], To(plan));
+        Assert.All(BatchRename.Plan(["a.jpg", "b.jpg"], new(Name: "Holiday")), i => Assert.Equal(RenameStatus.Clash, i.Status)); // one name, two files
+    }
+
+    [Fact]
+    public void Spaces_left_by_a_replace_are_tidied()
+    {
+        Assert.Equal(["photo.jpg"], To(BatchRename.Plan(["photo copy.jpg"], new(Find: "copy", Replace: ""))));
+        Assert.Equal(["a b.txt"], To(BatchRename.Plan(["a  x  b.txt"], new(Find: "x", Replace: ""))));
+    }
+
+    [Theory]
+    [InlineData("aux ", ".txt")]
+    [InlineData("con.backup", ".txt")]
+    [InlineData("ABC~1", ".TXT")]
+    public void Names_Windows_or_WinTools_would_not_use_are_refused(string stem, string extension) =>
+        Assert.Equal(RenameStatus.Invalid, BatchRename.Plan(["x" + extension], new(Name: stem))[0].Status);
+
+    [Fact]
     public void Numbering_follows_the_natural_order_of_the_names()
     {
         var plan = BatchRename.Plan(["img10.png", "img2.png", "img1.png"], new(Number: true, Start: 1, Digits: 2));
