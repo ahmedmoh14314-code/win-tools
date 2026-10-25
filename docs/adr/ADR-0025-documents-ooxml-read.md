@@ -43,8 +43,25 @@
   - formulas (their cached values are), merged-cell layout, and sheet names (sheets are numbered) in Excel.
 - Metadata removal and TXT/Markdown/CSV → PDF are later slices (removal writes the package; PDF needs the rendering backend spike, plan D2).
 
+## Evaluator review
+One round (2026-10-25), reproduced on the built worker with the reviewer's own probe. The four majors and most minors are fixed; each is a test that failed on the old code.
+- **Majors:**
+  - one bidi mark (RLM) in a title made the whole Info unbelievable;
+  - a paragraph holding a text box lost its own text;
+  - external links written with other quoting or case were not reported, and macros were found only by part name;
+  - Excel cells lost their columns when cells were skipped, and a rich inline string became several cells.
+- **Minors fixed:**
+  - `[Content_Types].xml` is parsed, not searched (a type named in a comment is not a document);
+  - headings alone are not text;
+  - a password-protected (compound) file says so;
+  - an unreadable source is not reported as an unwritable destination;
+  - parts differing only in case are refused;
+  - the whole package's declared size meets the archive ratio rule;
+  - clipping never cuts a character in two.
+- The Explorer `docx` scenario passed on the final build (runs of 3/3, 2/2 and 1/1).
+
 ## Evidence / experiments
-`DocumentWorkerTests` (8), written first and shown failing to build:
+`DocumentWorkerTests` (8 at first, written first and shown failing to build; 17 after the review):
 - Word paragraphs with Arabic and an entity;
 - PowerPoint slide order to 10;
 - Excel shared, inline and number cells;
