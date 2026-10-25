@@ -286,6 +286,10 @@ internal sealed class ZipLocks : IDisposable
 
     private static ZipRefused Wrong() => new(ErrorCode.PasswordIncorrect, "The password does not open the archive; nothing was extracted.");
 
+    /// <summary>Several candidates passed the first check and none proved itself: never a guess at one of them, whose
+    /// failure would read as bare damage (re-review, PR 5.3).</summary>
+    private static ZipRefused Unproven() => new(ErrorCode.DecodeFailed, "An entry is damaged, or the password is not its own (its check value does not match); nothing was kept.");
+
     private static byte Check(ZipRecord r, ushort time) => r.HasDataDescriptor ? (byte)(time >> 8) : (byte)(r.Crc >> 24);
 
     private byte[] Header(long start, ZipRecord r)
@@ -321,7 +325,7 @@ internal sealed class ZipLocks : IDisposable
             var passing = _aes.Where(c => Verifies(c, head, aes)).ToList();
             if (passing.Count == 0) throw Wrong();
             // Two candidates through a 16-bit verifier: the one whose code matches the data (no decompression needed).
-            var chosen = passing.Count == 1 ? passing[0] : passing.FirstOrDefault(c => Authenticates(c, start, r, aes)) ?? passing[0];
+            var chosen = passing.Count == 1 ? passing[0] : passing.FirstOrDefault(c => Authenticates(c, start, r, aes)) ?? throw Unproven();
             var (key, mac, _) = WinZipAesStream.Derive(chosen, head.AsSpan(0, aes.SaltLength), aes.KeyLength);
             var decrypted = new WinZipAesStream(new Window(_file, start + fields, r.Packed - fields), r.Packed - fields - WinZipAesStream.AuthLength, key, mac);
             return Inflated(decrypted, aes.Method, drain: true);
@@ -330,7 +334,7 @@ internal sealed class ZipLocks : IDisposable
         var accepted = _zipCrypto.Where(c => ZipCryptoKeys.Accepts(c, header, Check(r, time), out _)).ToList();
         if (accepted.Count == 0) throw Wrong();
         // Two candidates through a 1-in-256 check byte: the one whose decrypted entry has its CRC (evaluator, PR 5.3).
-        var password = accepted.Count == 1 ? accepted[0] : accepted.FirstOrDefault(c => Proves(c, start, r, header, time)) ?? accepted[0];
+        var password = accepted.Count == 1 ? accepted[0] : accepted.FirstOrDefault(c => Proves(c, start, r, header, time)) ?? throw Unproven();
         ZipCryptoKeys.Accepts(password, header, Check(r, time), out var keys);
         return Inflated(new ZipCryptoStream(new Window(_file, start + 12, r.Packed - 12), keys), r.Method, drain: false);
     }

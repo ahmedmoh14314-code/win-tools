@@ -50,8 +50,13 @@ internal static class ArchiveJobs
         var id = request.Id;
         if (id is not { Length: > 0 and <= 64 } || id.Any(c => !char.IsAsciiLetterOrDigit(c)))
             return JobResult.Fail("invalid", ErrorCode.InvalidRequest, "Request id must be 1-64 ASCII letters or digits.");
+        if (request.Inputs.Count == 0 || !request.Inputs.All(PathPolicy.IsSupported))
+            return JobResult.Fail(id, ErrorCode.InvalidRequest, "Every input must be a supported path.");
+        if (request.OutputDirectory is { } od && !PathPolicy.IsSupported(Path.Combine(od, "x.zip")))
+            return JobResult.Fail(id, ErrorCode.InvalidRequest, "The output folder must be a canonical, fully qualified path.");
         // Only Extract and Test take a parameter: the password of an encrypted ZIP, as typed and in its NFKC form, checked
-        // again here (ADR-0026, ADR-0027). Its text never appears in a message.
+        // again here (ADR-0026, ADR-0027). Its text never appears in a message. Its bytes are made last, just before the
+        // job, so every return after them zeroes them.
         IReadOnlyList<byte[]>? candidates = null;
         if (request.CapabilityId is ArchiveCapabilities.ExtractId or ArchiveCapabilities.TestId && request.Parameters is { Count: > 0 } p)
         {
@@ -67,10 +72,6 @@ internal static class ArchiveJobs
         else if (request.Parameters is { Count: > 0 }) return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters.");
         // The bytes made here are zeroed when the job ends; ZipLocks zeroes its own copies (evaluator, PR 5.3).
         var made = passwordBytes is null ? candidates : null;
-        if (request.Inputs.Count == 0 || !request.Inputs.All(PathPolicy.IsSupported))
-            return JobResult.Fail(id, ErrorCode.InvalidRequest, "Every input must be a supported path.");
-        if (request.OutputDirectory is { } od && !PathPolicy.IsSupported(Path.Combine(od, "x.zip")))
-            return JobResult.Fail(id, ErrorCode.InvalidRequest, "The output folder must be a canonical, fully qualified path.");
         try
         {
             if (request.CapabilityId != ArchiveCapabilities.ZipId && (request.Inputs.Count != 1 || Path.EndsInDirectorySeparator(request.Inputs[0])))
