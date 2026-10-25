@@ -7,8 +7,12 @@ namespace WinTools.Core.Feedback;
 /// of the command (Compress: "saved 62%", "already optimized"). <paramref name="PasswordRequired"/>: what to do about a
 /// file that needs a password, when the module has its own way (an archive: drop it on its own, V2 PR 5.3).
 /// </summary>
+/// <remarks><c>SuccessTitle</c>: the title of a success that created nothing ("Files renamed"), instead of
+/// "<i>name</i> created" (V2 PR 7.2).</remarks>
+/// <remarks><c>Reasons</c>: the module's own words for some failures (Batch rename: a name already used means nothing was
+/// renamed, not that no output name was free).</remarks>
 public sealed record FeedbackWords(string Working, string Verb, string Done, string NothingReason, string Noun, string Nouns, bool Savings = false,
-    string? PasswordRequired = null)
+    string? PasswordRequired = null, string? SuccessTitle = null, IReadOnlyDictionary<Jobs.ErrorCode, string>? Reasons = null)
 {
     /// <summary>Plain words from a command's label, for a module that gives none.</summary>
     public static FeedbackWords From(string label) =>

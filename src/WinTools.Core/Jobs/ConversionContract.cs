@@ -56,6 +56,8 @@ public enum ErrorCode
     LimitExceeded,
     /// <summary>The password given does not open the document (V2 PR 2.2); never reported as damage.</summary>
     PasswordIncorrect,
+    /// <summary>Part of the work was done and could not be undone (Batch rename: a file kept its temporary name).</summary>
+    Incomplete,
 }
 
 /// <summary>The worker's answer. Success carries the final output path; failure carries a code and a short message.</summary>
