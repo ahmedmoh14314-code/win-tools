@@ -65,6 +65,17 @@ Minors, fixed:
 
 The file is now read through one handle, which closes the reviewer's unreproduced concern of a file swapped between two opens.
 
+**Focused re-review** (the same day): all eight findings confirmed closed, on the reviewer's probes against the rebuilt worker. It found:
+- **One new minor:** when several candidates passed the first check and none proved itself, the fallback to the first gave Deflate's bare "damaged". Such an entry now fails at once as "damaged, or the password is not its own".
+- **The early returns** for a bad path came before the password bytes were zeroed. The paths are now checked first.
+
+It confirmed that these held:
+- a verifier collision found by brute force (885 s) is resolved by the code;
+- empty encrypted entries pass the overlap check;
+- a mixed archive read through the shared handle reads correctly;
+- CP437 and invalid UTF-8 names are not falsely refused;
+- the ZIP64 trigger matches .NET.
+
 After the fixes, all of the reviewer's probes fail cleanly or extract consistent data. 12 mutations, one per safeguard, each fail a test. Three needed tests of their own, because two safeguards caught the same case.
 
 ## Alternatives considered
@@ -86,7 +97,7 @@ After the fixes, all of the reviewer's probes fail cleanly or extract consistent
 
 ## Evidence / experiments
 - **WinRAR 6.24's samples** (`tests/samples/locked-*.zip`, with `New-EncryptedZipSamples.ps1`): AES-256 AE-1 and AE-2, ZipCrypto with the data-descriptor flag, and each with "سرّé1".
-- **`ArchivePasswordWorkerTests` (48 cases, 14 from the review):**
+- **`ArchivePasswordWorkerTests` (49 cases, 15 from the reviews):**
   - WinRAR's archives with the right, no, a wrong and an Arabic password;
   - AES-128, 192, 256, AE-1 and AE-2, ZipCrypto, Stored and Deflate (built from the specifications in `LockedZipBuilder`);
   - a changed byte in each scheme and place, including one only the HMAC sees and one only the CRC sees;
