@@ -491,6 +491,26 @@ public sealed class ArchivePasswordWorkerTests : IDisposable
     }
 
     [Fact]
+    public void When_no_candidate_proves_itself_the_message_says_the_password_or_damage_never_a_guess()
+    {
+        // Re-review, PR 5.3: two candidates passed the header, neither proved itself (the entry is changed), and the
+        // fallback to the first ended as Deflate's bare "damaged". It is the check value that failed.
+        var ansi = new byte[] { 0x3F, 0x3F, 0x3F, 0xE9, 0x31 };
+        var utf8 = Encoding.UTF8.GetBytes(Arabic);
+        byte[] bytes;
+        IReadOnlyList<Placed> placed;
+        var attempts = 0;
+        do bytes = Build(ansi, out placed, new Item("1.txt", Big, Cipher.ZipCrypto));
+        while (!HeaderAccepts(bytes, "1.txt", Big, utf8) && ++attempts < 20_000);
+        bytes[placed[0].Data + 12 + 5] ^= 0x40;
+        var zip = _dir.Write("changed.zip", bytes);
+        var r = ArchiveJobs.Run(Request(ArchiveCapabilities.ExtractId, zip, Arabic), ZipPasswords.Candidates(Arabic, null, 1252, 437));
+        Assert.Equal(ErrorCode.DecodeFailed, r.Error);
+        Assert.Contains("password", r.Message ?? "", StringComparison.Ordinal);
+        Assert.Equal(["changed.zip"], Everything());
+    }
+
+    [Fact]
     public void One_typed_password_opens_AES_written_as_UTF8_beside_ZipCrypto_written_in_the_code_page()
     {
         // Finding 5: as WinRAR writes them, one archive held both forms of one password, and narrowing by bytes refused it.
