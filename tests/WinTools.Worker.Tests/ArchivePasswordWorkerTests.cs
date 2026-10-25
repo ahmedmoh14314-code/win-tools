@@ -379,11 +379,42 @@ public sealed class ArchivePasswordWorkerTests : IDisposable
     public void A_true_AE2_entry_whose_method_differs_between_its_headers_is_damaged()
     {
         // Finding 2 (A1): the method inside is not authenticated; the two headers must at least agree.
+        // The size is set to the deflate stream's, so neither the length nor a CRC (AE-2 has none) can notice: only the
+        // local header, which still says Deflate.
         var bytes = Build("p"u8.ToArray(), out var placed, new Item("a.txt", Big, Cipher.Aes256, Deflate: true, AesVersion: 2));
-        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(CentralAesField(bytes, (int)placed[0].CentralRecord) + 5), 0);
+        var record = (int)placed[0].CentralRecord;
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(CentralAesField(bytes, record) + 5), 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(record + 24), (uint)(placed[0].Packed - 16 - 2 - 10));
         var zip = _dir.Write("flipped.zip", bytes);
         Assert.Equal(ErrorCode.DecodeFailed, ArchiveJobs.Run(Request(ArchiveCapabilities.ExtractId, zip, "p")).Error);
         Assert.Equal(["flipped.zip"], Everything());
+    }
+
+    [Fact]
+    public void An_AE2_entry_with_a_CRC_field_has_it_checked()
+    {
+        // AE-2's CRC is 0 by design and then skipped; one that is not 0 is checked, whatever the version says.
+        var bytes = Build("p"u8.ToArray(), out var placed, new Item("a.txt", Big, Cipher.Aes256, Deflate: true, AesVersion: 2));
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan((int)placed[0].LocalHeader + 14), 0x12345678);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan((int)placed[0].CentralRecord + 16), 0x12345678);
+        var zip = _dir.Write("crc.zip", bytes);
+        Assert.Equal(ErrorCode.DecodeFailed, ArchiveJobs.Run(Request(ArchiveCapabilities.ExtractId, zip, "p")).Error);
+        Assert.Equal(["crc.zip"], Everything());
+    }
+
+    [Fact]
+    public void A_wrong_password_is_said_as_such_even_when_one_entrys_check_byte_lets_it_through()
+    {
+        // The other entries refuse it before anything is read, so the user hears "wrong password", not "damaged".
+        var utf8 = Encoding.UTF8.GetBytes(Arabic);
+        byte[] bytes;
+        var attempts = 0;
+        do bytes = Build("the real one"u8.ToArray(), new Item("1.txt", "one"u8.ToArray(), Cipher.ZipCrypto, Deflate: false),
+            new Item("2.txt", "two"u8.ToArray(), Cipher.ZipCrypto, Deflate: false), new Item("3.txt", "three"u8.ToArray(), Cipher.ZipCrypto, Deflate: false));
+        while (!(HeaderAccepts(bytes, "1.txt", "one"u8, utf8) && !HeaderAccepts(bytes, "2.txt", "two"u8, utf8)) && ++attempts < 20_000);
+        var zip = _dir.Write("wrong.zip", bytes);
+        Assert.Equal(ErrorCode.PasswordIncorrect, ArchiveJobs.Run(Request(ArchiveCapabilities.ExtractId, zip, Arabic), [utf8]).Error);
+        Assert.Equal(["wrong.zip"], Everything());
     }
 
     [Fact]
