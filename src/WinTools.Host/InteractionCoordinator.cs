@@ -28,6 +28,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     private readonly HostLog _log;
     private readonly JobScheduler _jobs;
     private readonly FeedbackPresenter _feedback;
+    private int _secretOpen; // 1 while a password window is open (Interlocked)
     private readonly SoundPlayer _sounds;
     private readonly NavigationSounds _navigationSounds;
     private CapabilityResolver _resolver;
@@ -349,6 +350,14 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     {
         if (capability.Prompt is not null)
         {
+            // One password window at a time: a second, with the same title and no file name, could take the password
+            // meant for the first (evaluator, PR 2.2).
+            if (Interlocked.CompareExchange(ref _secretOpen, 1, 0) != 0)
+            {
+                _log.Event("secret.busy", new { op = capability.Id });
+                _feedback.SecretBusy();
+                return;
+            }
             _ = AskAndRunAsync(capability, capability.Prompt, paths, x, y);
             return;
         }
@@ -365,17 +374,34 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         // Fire and forget from Drop, like PickAndRunAsync: nothing here may throw unobserved.
         try
         {
-            var outcome = await DialogsClient.Default.AskSecretAsync(new SecretRequest(prompt.Title, prompt.Confirm, x, y)).ConfigureAwait(false);
+            SecretOutcome outcome;
+            try { outcome = await DialogsClient.Default.AskSecretAsync(new SecretRequest(prompt.Title, prompt.Confirm, x, y)).ConfigureAwait(false); }
+            finally { Volatile.Write(ref _secretOpen, 0); }
             _log.Event("secret.ask", new { op = capability.Id, end = outcome.End.ToString() });
             if (outcome.End == PickEnd.Unavailable) { _feedback.DialogUnavailable("the password window"); return; }
             if (outcome.End != PickEnd.Picked) return;
-            var check = PasswordPolicy.Check(outcome.Secret, WinTools.Windows.UnicodeText.ToFormKC);
-            if (!check.Ok) { _feedback.SecretRefused(check.Problem!); return; }
-            if (_jobs.Enqueue(capability, paths, new Dictionary<string, string> { [PasswordPolicy.ParameterName] = check.Password! }) is null)
+            // A new password is used as typed and must already be normalized; an existing one goes as typed, with its
+            // NFKC form beside it when that differs, tried second (evaluator, PR 2.2).
+            var parameters = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (prompt.Confirm)
+            {
+                var check = PasswordPolicy.CheckNew(outcome.Secret, WinTools.Windows.UnicodeText.ToFormKC);
+                if (!check.Ok) { _feedback.SecretRefused(check.Problem!); return; }
+                parameters[PasswordPolicy.ParameterName] = check.Password!;
+            }
+            else
+            {
+                var check = PasswordPolicy.CheckExisting(outcome.Secret, WinTools.Windows.UnicodeText.ToFormKC);
+                if (!check.Ok) { _feedback.SecretRefused(check.Problem!); return; }
+                parameters[PasswordPolicy.ParameterName] = check.Password!;
+                if (check.Normalized is { } normalized) parameters[PasswordPolicy.NormalizedParameterName] = normalized;
+            }
+            if (_jobs.Enqueue(capability, paths, parameters) is null)
                 _log.Event("job.refused", new { op = capability.Id, module = capability.Module });
         }
         catch (Exception ex)
         {
+            Volatile.Write(ref _secretOpen, 0);
             _log.Event("secret.error", new { type = ex.GetType().Name });
             _feedback.DialogUnavailable("the password window");
         }

@@ -18,8 +18,12 @@ public sealed class PdfPasswordWorkerTests : IDisposable
 
     private const string Password = "سرّ 😀 with spaces \"quotes\" and --dashes";
 
-    private static JobRequest Request(string capability, string input, string? password) =>
-        new(Guid.NewGuid().ToString("N"), capability, [input], Parameters: password is null ? null : new Dictionary<string, string> { [PasswordPolicy.ParameterName] = password });
+    private static JobRequest Request(string capability, string input, string? password, string? normalized = null)
+    {
+        Dictionary<string, string>? parameters = password is null ? null : new() { [PasswordPolicy.ParameterName] = password };
+        if (normalized is not null) parameters![PasswordPolicy.NormalizedParameterName] = normalized;
+        return new(Guid.NewGuid().ToString("N"), capability, [input], Parameters: parameters);
+    }
 
     private static string Hash(string path) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
 
@@ -119,6 +123,51 @@ public sealed class PdfPasswordWorkerTests : IDisposable
         Assert.Equal(ErrorCode.UnsupportedContent, r.Error);
         Assert.Contains("restrictions", r.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(["both.pdf", "plain.pdf"], _dir.Names());
+    }
+
+    [Theory]
+    [InlineData("x\u00B2")] // protected as typed, by a tool that does not normalize
+    [InlineData("x2")]       // protected normalized, by one that does
+    public void A_password_typed_with_a_compatibility_character_opens_either_way(string protectedWith)
+    {
+        var locked = _dir.Path + @"\locked.pdf";
+        Assert.True(Qpdf.RunWithArgumentsOnStdin([Pdf("plain.pdf", 1), "--encrypt", $"--user-password={protectedWith}", "--owner-password=o", "--bits=256", "--", locked], TimeSpan.FromSeconds(30)).Usable);
+        var r = PdfJobs.Run(Request(PdfCapabilities.UnprotectId, locked, "x\u00B2", normalized: "x2")); // what the host sends
+        Assert.True(r.Success, r.Message);
+        Assert.Equal(2, Opens(r.OutputPath!, null));
+    }
+
+    [Fact]
+    public void Protect_takes_no_normalized_variant()
+    {
+        Assert.Equal(ErrorCode.InvalidRequest, PdfJobs.Run(Request(PdfCapabilities.ProtectId, Pdf("plain.pdf", 1), "x2", normalized: "x2")).Error);
+        Assert.Equal(ErrorCode.InvalidRequest, PdfJobs.Run(Request(PdfCapabilities.ProtectId, Pdf("other.pdf", 1), "heart\u2764\uFE0F")).Error);
+    }
+
+    [Fact]
+    public void A_damaged_file_is_never_reported_as_not_protected()
+    {
+        var bytes = PdfSamples.Pages(3);
+        var cut = _dir.Write("cut.pdf", bytes[..(bytes.Length / 2)]);
+        var r = PdfJobs.Run(Request(PdfCapabilities.UnprotectId, cut, "any"));
+        Assert.NotEqual(ErrorCode.NothingToDo, r.Error);
+        Assert.False(r.Success);
+        Assert.Equal(["cut.pdf"], _dir.Names());
+    }
+
+    [Fact]
+    public void A_damaged_protected_pdf_is_neither_protected_again_nor_called_a_wrong_password()
+    {
+        var locked = _dir.Path + @"\locked.pdf";
+        Assert.True(Qpdf.Run([Pdf("plain.pdf", 3), "--encrypt", "--user-password=right", "--owner-password=o", "--bits=256", "--", locked], TimeSpan.FromSeconds(30)).Usable);
+        var bytes = File.ReadAllBytes(locked);
+        var cut = _dir.Write("cut.pdf", bytes[..(bytes.Length * 2 / 3)]); // the trailer with /Encrypt is gone
+        var p = PdfJobs.Run(Request(PdfCapabilities.ProtectId, cut, "new"));
+        Assert.False(p.Success);
+        var u = PdfJobs.Run(Request(PdfCapabilities.UnprotectId, cut, "right"));
+        Assert.False(u.Success);
+        Assert.NotEqual(ErrorCode.NothingToDo, u.Error);
+        Assert.Equal(["cut.pdf", "locked.pdf", "plain.pdf"], _dir.Names());
     }
 
     [Fact]

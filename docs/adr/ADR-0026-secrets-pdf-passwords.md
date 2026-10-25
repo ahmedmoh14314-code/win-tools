@@ -22,12 +22,14 @@
    - A cancel runs nothing and says nothing.
    - A missing dialog program says so.
    - The log records only how the dialog ended (`secret.ask`).
-2. **One policy (`PasswordPolicy`, Core), applied by the dialog, the host and the worker:**
-   - not empty;
-   - no line break (one argument per line on `@-`);
-   - no control or invisible formatting character;
-   - NFKC by the caller's normalizer (Windows' `NormalizeString`, `WinTools.Windows.UnicodeText`);
-   - at most 127 UTF-8 bytes after it (AES-256 PDF passwords are cut there).
+2. **One policy (`PasswordPolicy`, Core), applied by the dialog, the host and the worker.**
+   - **Always:** not empty, no control character. One argument per line goes on `@-`, and 0x1A ends that input.
+   - **A new password (Protect) is used exactly as typed.** It must equal its own NFKC form; "x²" is refused, not rewritten. So a reader that applies SASLprep and one that does not derive the same key.
+     - SASLprep's prohibitions are refused, judged by scalar value: invisible formatting, separators, private use, unassigned code points, non-characters.
+     - So are the characters SASLprep maps to nothing, such as variation selectors.
+     - At most 127 UTF-8 bytes.
+   - **An existing password (Remove protection) is tried as typed, then in its NFKC form when that differs.** It came from elsewhere, so it has no length rule and no SASLprep rule.
+   - NFKC comes from Windows' `NormalizeString` (`WinTools.Windows.UnicodeText`). The worker, which cannot call it, re-checks the rest.
 3. **Only that job gets it.**
    - It travels in its own `Parameters["password"]`, on top of the module's settings, and the scheduler drops it when the job ends.
    - A prompt command without a password, or any other command with parameters of its own, is refused.
@@ -37,10 +39,12 @@
    - The copy must need a password, open with this one, and keep every page.
 5. **Remove protection:**
    - only a PDF that needs a password to open, and only with a password that opens it;
+   - **never one with any restriction, whatever password is given, the owner's included** (the owner's decision);
    - a restriction-only PDF is refused;
-   - so is one with restrictions, unless the password is the owner's;
-   - a wrong password is `PasswordIncorrect`, never damage;
+   - a wrong password is `PasswordIncorrect`;
+   - **a file qpdf reads only by repairing it is damage, never "not protected"**: qpdf's exit 2 means "not encrypted" or "an error";
    - the copy must not be encrypted and must keep every page.
+   - Protect, too, accepts only a file read without a warning: a protected PDF cut short reads as plain.
 6. **The dialogs process keeps .NET globalization** (`InvariantGlobalization=false`). WPF's caret asks for the input language's culture, and invariant mode crashed it on an Arabic layout (found by the Explorer run). The host and workers stay invariant.
 
 ## Alternatives considered
@@ -74,4 +78,20 @@
 - **Explorer** (the real dialog, typed Unicode input): Protect 3/3, Remove protection 2/2, regressions passed; the password is in no host log.
 
 ## Evaluator review
-Pending.
+One round (2026-10-25), on the built worker, the real qpdf and samples in RC4-40/128, AES-128 and AES-256. No blocker.
+- **Majors, both fixed:**
+  - **NFKC rewrote the password.**
+    - "x²", full-width letters and similar characters failed against files that other tools had protected as typed.
+    - Protect wrote files that open with "x2", not with "x²".
+    - Now: a new password must already be normalized, and an existing one is tried both ways.
+  - **The owner password, an equal user and owner password, or an empty owner password lifted restrictions.** That is against the owner's "never". Now any restriction is refused.
+- **Minors fixed:**
+  - qpdf's exit 2 read as "not protected" for damaged files, and a cut protected PDF was protected again;
+  - format characters outside the BMP, U+2028/2029, private use and unassigned code points were allowed;
+  - the 127-byte rule applied to existing passwords;
+  - two password windows could be open at once (now one at a time, with a toast);
+  - "Already protected" was said for a restriction-only PDF ("Already encrypted" now).
+- **Recorded:**
+  - with Windows Error Reporting LocalDumps configured, a crash dump of the worker or the dialog process could hold the password (threat model);
+  - the reviewer found no injection through `@-`: only CR and LF split a line, and the policy refuses both.
+- Each finding is a test that failed on the old code. The reviewer's own probes now give the expected refusals.

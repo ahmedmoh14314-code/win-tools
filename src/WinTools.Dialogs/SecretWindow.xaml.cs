@@ -41,8 +41,9 @@ public partial class SecretWindow : Window
 
     private void OnOk(object sender, RoutedEventArgs e)
     {
-        var check = PasswordPolicy.Check(First.Password, UnicodeText.ToFormKC);
-        string? problem = check.Problem;
+        // A new password must already be in its normalized form; an existing one is taken as typed (ADR-0026).
+        var problem = _request.Confirm ? PasswordPolicy.CheckNew(First.Password, UnicodeText.ToFormKC).Problem
+            : PasswordPolicy.CheckExisting(First.Password, UnicodeText.ToFormKC).Problem;
         if (problem is null && _request.Confirm && !string.Equals(First.Password, Second.Password, StringComparison.Ordinal))
             problem = "The two passwords differ.";
         if (problem is not null)

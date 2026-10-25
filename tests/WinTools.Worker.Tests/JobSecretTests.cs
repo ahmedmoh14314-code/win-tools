@@ -97,6 +97,18 @@ public sealed class JobSecretTests : IDisposable
     }
 
     [Fact]
+    public void A_secret_job_may_carry_the_normalized_variant_and_nothing_else()
+    {
+        var scheduler = Scheduler(new Recording());
+        var both = new Dictionary<string, string> { [PasswordPolicy.ParameterName] = "x\u00B2", [PasswordPolicy.NormalizedParameterName] = "x2" };
+        Assert.NotNull(scheduler.Enqueue(Capability("with", new("Title", Confirm: false)), [@"C:\p\a.pdf"], both));
+        var other = new Dictionary<string, string> { [PasswordPolicy.ParameterName] = "a", ["more"] = "b" };
+        Assert.Null(scheduler.Enqueue(Capability("with", new("Title", Confirm: false)), [@"C:\p\a.pdf"], other));
+        Assert.Null(scheduler.Enqueue(Capability("with", new("Title", Confirm: false)), [@"C:\p\a.pdf"],
+            new Dictionary<string, string> { [PasswordPolicy.NormalizedParameterName] = "x2" })); // never the variant alone
+    }
+
+    [Fact]
     public void A_command_that_asks_for_none_takes_none()
     {
         var scheduler = Scheduler(new Recording());
@@ -126,6 +138,8 @@ public sealed class JobSecretTests : IDisposable
         Assert.Equal("a b", UnicodeText.ToFormKC("a\u00A0b"));
         Assert.Equal("plain", UnicodeText.ToFormKC("plain"));
         Assert.Null(UnicodeText.ToFormKC("lone \uD800 half"));
-        Assert.Equal("fine", PasswordPolicy.Check("\uFB01ne", UnicodeText.ToFormKC).Password);
+        Assert.False(PasswordPolicy.CheckNew("\uFB01ne", UnicodeText.ToFormKC).Ok); // changed by NFKC: refused as a new password
+        Assert.Equal("fine", PasswordPolicy.CheckExisting("\uFB01ne", UnicodeText.ToFormKC).Normalized);
+        Assert.Equal("2", UnicodeText.ToFormKC("\u00B2"));
     }
 }

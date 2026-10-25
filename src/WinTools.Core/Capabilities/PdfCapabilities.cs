@@ -61,7 +61,7 @@ public static class PdfCapabilities
             LongRunning: false, Feedback: Words("Reading", "read", "Read")),
         // V2 PR 2.2 (ADR-0026): the password is asked for after the drop and reaches qpdf only on its stdin.
         new(ProtectId, "Protect…", "protect", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File,
-            LongRunning: true, Feedback: new("Protecting", "protect", "Protected with a password", "Already protected", "PDF", "PDFs"),
+            LongRunning: true, Feedback: new("Protecting", "protect", "Protected with a password", "Already encrypted", "PDF", "PDFs"),
             Prompt: new("Protect with a password", Confirm: true)),
         new(UnprotectId, "Remove protection…", "protect", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File,
             LongRunning: true, Feedback: new("Removing the protection of", "remove the protection of", "Protection removed", "Not protected", "PDF", "PDFs"),

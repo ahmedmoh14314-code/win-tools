@@ -108,8 +108,10 @@ internal sealed class JobScheduler
     public ScheduledJob? Enqueue(CapabilityDescriptor capability, IReadOnlyList<string> paths, IReadOnlyDictionary<string, string>? parameters = null)
     {
         if (!_queues.TryGetValue(capability.Module, out var queue)) return null;
-        var secret = parameters is not null && parameters.TryGetValue(PasswordPolicy.ParameterName, out var p) && p.Length > 0;
-        if (capability.Prompt is not null ? !secret || parameters!.Count != 1 : parameters is { Count: > 0 })
+        // A prompt command: the password, and for an existing one at most its normalized form beside it (ADR-0026).
+        var secret = parameters is not null && parameters.TryGetValue(PasswordPolicy.ParameterName, out var p) && p.Length > 0
+            && parameters.Keys.All(k => k is PasswordPolicy.ParameterName || k is PasswordPolicy.NormalizedParameterName && capability.Prompt is { Confirm: false });
+        if (capability.Prompt is not null ? !secret : parameters is { Count: > 0 })
         {
             _log.Event("job.refused", new { op = capability.Id, reason = capability.Prompt is not null ? "noSecret" : "unexpectedParameters" });
             return null;
