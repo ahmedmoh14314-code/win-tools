@@ -23,6 +23,8 @@ internal static partial class Gdip
     [LibraryImport(Lib)] public static partial int GdipCreateBitmapFromScan0(int width, int height, int stride, int format, nint scan0, out nint bitmap);
     [LibraryImport(Lib)] public static partial int GdipGetImageGraphicsContext(nint image, out nint graphics);
     [LibraryImport(Lib)] public static partial int GdipDeleteGraphics(nint graphics);
+    [LibraryImport(Lib)] public static partial int GdipTranslateWorldTransform(nint graphics, float dx, float dy, int order);
+    [LibraryImport(Lib)] public static partial int GdipScaleWorldTransform(nint graphics, float sx, float sy, int order);
     [LibraryImport(Lib)] public static partial int GdipDisposeImage(nint image);
     [LibraryImport(Lib)] public static partial int GdipSetSmoothingMode(nint graphics, int mode);
     [LibraryImport(Lib)] public static partial int GdipSetPixelOffsetMode(nint graphics, int mode);

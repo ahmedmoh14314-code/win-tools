@@ -381,6 +381,8 @@
   "fact.EXIF": "EXIF",
   "fact.GPS location": "GPS location",
   "fact.Other metadata": "Other metadata",
+  "info.more1": "+1 more file",
+  "info.more": "+{0} more files",
   "say.Enter a password.": "Enter a password.",
   "say.Enter the password.": "Enter the password.",
   "say.The password contains characters that cannot be used.": "The password contains characters that cannot be used.",

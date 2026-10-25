@@ -22,7 +22,9 @@ if (args.Length >= 2 && args[0] == "--measure")
 // --settings-shot <exe> <png> [en|ar] [page] [tour]: the WinTools window in a language, on a page, or with its first-run tour.
 if (args.Length >= 3 && args[0] == "--settings-shot")
     return SettingsShot.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]), args.Length > 3 ? args[3] : "en", args.Length > 4 ? args[4] : "settings", args.Length > 5 && args[5] == "tour");
-if (args.Length < 1) { Console.Error.WriteLine("Usage: WinTools.Preview <output folder> [dpi ...] | --icon <file.ico>"); return 64; }
+// --lang en|ar first: the rings, toasts and panels in that language.
+if (args.Length >= 2 && args[0] == "--lang") { WinTools.Core.Localization.UiText.Use(args[1]); args = args[2..]; }
+if (args.Length < 1) { Console.Error.WriteLine("Usage: WinTools.Preview [--lang en|ar] <output folder> [dpi ...] | --icon <file.ico>"); return 64; }
 var outDir = Path.GetFullPath(args[0]);
 Directory.CreateDirectory(outDir);
 var dpis = args.Length > 1 ? args[1..].Select(uint.Parse).ToArray() : [96u, 144u];
@@ -76,18 +78,20 @@ foreach (var dpi in dpis)
         using (var p = surface.Begin(w, h, dpi)) ToastRenderer.Draw(p, w, h, content);
         surface.SavePng(Path.Combine(outDir, $"toast-{name}-{dpi}.png"));
     }
-    var webp = OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.WebP);
+    var webp = LocalWords.For(ImageCapabilities.Describe(OperationCatalog.Convert(WinTools.Core.Files.ImageFormat.WebP)));
     Toast("success", ToastContent.From(FeedbackText.For(webp, [new("photo.jpg", JobResult.Ok("1", new JobOutput(@"C:\x\photo.webp", "0")), 2_480_000, 612_000)])));
     Toast("batch", ToastContent.From(FeedbackText.For(webp, [.. Enumerable.Range(1, 48).Select(i => new JobItem($"p{i}.jpg", JobResult.Ok("1", new JobOutput($@"C:\x\p{i}.webp", "0")), 2_000_000, 500_000)),
         new JobItem("a.jpg", JobResult.Fail("1", ErrorCode.DecodeFailed, "")), new JobItem("b.jpg", JobResult.Fail("1", ErrorCode.DecodeFailed, ""))])));
     Toast("failure", ToastContent.From(FeedbackText.For(webp, [new("scan.tif", JobResult.Fail("1", ErrorCode.ImageTooLarge, ""))])));
-    Toast("nothing", ToastContent.From(FeedbackText.For(OperationCatalog.Get("resize.box-1920x1080"), [new("small.png", JobResult.Fail("1", ErrorCode.NothingToDo, ""))])));
+    Toast("nothing", ToastContent.From(FeedbackText.For(LocalWords.For(ImageCapabilities.Describe(OperationCatalog.Get("resize.box-1920x1080"))), [new("small.png", JobResult.Fail("1", ErrorCode.NothingToDo, ""))])));
     Toast("progress", new ToastContent(FeedbackKind.Success, "Converting 48 images", "12 of 48", 0.25));
 
     var info = new ImageInfo("JPEG", 4032, 3024, 2_480_000, 72, 72, false, 6, true, true, false, true, false, false);
     var info2 = new ImageInfo("PNG", 1920, 1080, 845_000, 96, 96, true, 0, false, false, false, false, true, false);
-    foreach (var (name, sections, more) in new[] { ("one", new[] { new InfoSection("IMG_2041.jpg", InfoRows.For(info)) }, 0),
-        ("three", new[] { new InfoSection("IMG_2041.jpg", InfoRows.For(info)), new InfoSection("screenshot with a rather long file name.png", InfoRows.For(info2)) }, 3) })
+    // The labels as the presenter shows them, in the language in use.
+    static IReadOnlyList<InfoRow> Rows(ImageInfo i) => [.. InfoRows.For(i).Select(r => r with { Label = WinTools.Core.Localization.UiText.TOr("fact." + r.Label, r.Label) })];
+    foreach (var (name, sections, more) in new[] { ("one", new[] { new InfoSection("IMG_2041.jpg", Rows(info)) }, 0),
+        ("three", new[] { new InfoSection("IMG_2041.jpg", Rows(info)), new InfoSection("screenshot with a rather long file name.png", Rows(info2)) }, 3) })
     {
         var (w, h) = InfoPanelRenderer.WindowSize(sections, more, dpi);
         using (var p = surface.Begin(w, h, dpi)) InfoPanelRenderer.Draw(p, w, h, sections, more);

@@ -59,7 +59,7 @@ public sealed class WheelLanguageTests
             var ok = FeedbackText.For(words, [new JobItem("photo.jpg", JobResult.Ok("1", new JobOutput(@"C:\p\photo.png", new string('a', 64))))]);
             Assert.Equal("تم إنشاء photo.png", ok.Title);
             var failed = FeedbackText.For(words, [new JobItem("photo.jpg", JobResult.Fail("1", ErrorCode.DecodeFailed, "x"))]);
-            Assert.Equal("تعذّر تنفيذ «إلى PNG»: photo.jpg", failed.Title);
+            Assert.Equal("تعذّر تنفيذ «إلى PNG»‏: photo.jpg", failed.Title); // a right-to-left mark keeps the Latin name in its place
             Assert.Equal("الصورة تالفة أو غير مكتملة.", failed.Detail);
             var pdf = FeedbackText.For(LocalWords.For(Resolver.Catalog.Single(c => c.Id == PdfCapabilities.RotateRightId)),
                 [new JobItem("a.pdf", JobResult.Fail("1", ErrorCode.DecodeFailed, "x"))]);
