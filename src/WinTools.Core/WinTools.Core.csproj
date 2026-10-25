@@ -8,5 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="WinTools.Core.Tests" />
+    <!-- The user-facing text in English and Arabic (UiText). -->
+    <EmbeddedResource Include="Localization\Strings.*.json" LogicalName="WinTools.Core.Localization.%(Filename).json" WithCulture="false" />
   </ItemGroup>
 </Project>

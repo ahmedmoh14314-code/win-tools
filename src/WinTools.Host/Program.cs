@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using WinTools.Core.Feedback;
+using WinTools.Core.Localization;
 using WinTools.Core.Settings;
 using WinTools.Host;
 using WinTools.Host.Jobs;
@@ -32,16 +33,26 @@ internal static class Program
     private static int Main(string[] args)
     {
         string? logPath = null, settingsPath = null;
+        var background = false;
         for (var i = 0; i < args.Length; i++)
         {
             if (args[i] == "--log" && i + 1 < args.Length) logPath = Path.GetFullPath(args[++i]);
             else if (args[i] == "--settings" && i + 1 < args.Length) settingsPath = Path.GetFullPath(args[++i]);
-            else { Console.Error.WriteLine("Usage: WinTools.Host [--log <path>] [--settings <path>]"); return 64; }
+            else if (args[i] == "--background") background = true;
+            else { Console.Error.WriteLine("Usage: WinTools.Host [--background] [--log <path>] [--settings <path>]"); return 64; }
         }
+        // Started by the user (the Start menu, the installer's last page): the WinTools window opens too. Started with
+        // Windows (--background) or by a tool with its own files (the test harness), only the tray icon appears.
+        var openWindow = args.Length == 0;
 
-        // Already running: the first instance's tray icon is there; a second start is a no-op (exit code 2).
+        // Already running: a second start by the user opens the WinTools window; otherwise it is a no-op (exit code 2).
         using var single = new Mutex(initiallyOwned: true, @"Local\WinTools.Host", out var firstInstance);
-        if (!firstInstance) return 2;
+        if (!firstInstance)
+        {
+            if (openWindow) OpenWindow(SettingsStore.Default().Path, "home", null, null);
+            return 2;
+        }
+        _ = background;
 
         var workerPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.exe");
         var textWorkerPath = Path.Combine(AppContext.BaseDirectory, "WinTools.Worker.Text.exe");
@@ -58,6 +69,7 @@ internal static class Program
         using var log = HostLog.Open(logPath);
         var store = settingsPath is null ? SettingsStore.Default() : new SettingsStore(settingsPath);
         var settings = store.Load();
+        UiText.Use(settings.Language, SystemPreferences.UiLanguageTag());
         log.Event("settings", new { store.LastLoad, store.ReadOnly, settings.TriggerKey, output = settings.OutputPolicy.ToString(), settings.JpegQuality, settings.WebPQuality, settings.UiSounds, settings.Animations });
         if (store.LastLoad == "defaults (no file)") // first run: write the defaults so the file exists for the settings window
             log.Event("settings.save", new { ok = store.Save(settings) });
@@ -93,11 +105,13 @@ internal static class Program
                 coordinator.Start();
                 using var tray = new TrayIcon(Tooltip(settings),
                 [
-                    new("Settings…", () => OpenSettings(store.Path, toast, log), IsDefault: true),
-                    new("Open logs folder", () => OpenFolder(Path.GetDirectoryName(log.Path)!)),
+                    new(UiText.T("tray.open"), () => OpenWindow(store.Path, "home", toast, log), IsDefault: true),
+                    new(UiText.T("tray.settings"), () => OpenWindow(store.Path, "settings", toast, log)),
+                    new(UiText.T("tray.logs"), () => OpenFolder(Path.GetDirectoryName(log.Path)!)),
                     TrayCommand.Separator,
-                    new("Exit WinTools", window.RequestClose),
+                    new(UiText.T("tray.exit"), window.RequestClose),
                 ], ex => log.Event("ui.error", new { type = ex.GetType().Name }));
+                if (openWindow) OpenWindow(store.Path, "home", toast, log);
                 // The settings window saves the file and raises the signal; the host reloads and applies it at once.
                 using var listener = SettingsSignal.TryListen(() => window.Post(() =>
                 {
@@ -110,6 +124,7 @@ internal static class Program
                         return;
                     }
                     Volatile.Write(ref current, changed);
+                    UiText.Use(changed.Language, SystemPreferences.UiLanguageTag()); // the tray menu keeps its words until the next start
                     sounds.Enabled = changed.UiSounds;
                     sounds.Warm();
                     coordinator.ApplySettings(changed);
@@ -132,7 +147,7 @@ internal static class Program
         return 0;
     }
 
-    private static string Tooltip(AppSettings s) => $"WinTools: drag files, press {s.TriggerKey}";
+    private static string Tooltip(AppSettings s) => UiText.F("tray.tooltip", s.TriggerKey);
 
     /// <summary>
     /// Copy path's clipboard write (V2 PR 1.4). It runs on the UI thread, which owns the window the clipboard needs, and
@@ -153,8 +168,9 @@ internal static class Program
         return false;
     }
 
-    /// <summary>Starts the settings window (a separate process, so WPF never loads into the resident host).</summary>
-    private static void OpenSettings(string settingsFile, ToastWindow toast, HostLog log)
+    /// <summary>Starts the WinTools window on a page (a separate process, so WPF never loads into the resident host). A
+    /// window already open comes to the front instead.</summary>
+    private static void OpenWindow(string settingsFile, string page, ToastWindow? toast, HostLog? log)
     {
         var exe = Path.Combine(AppContext.BaseDirectory, "WinTools.Settings.exe");
         try
@@ -163,15 +179,15 @@ internal static class Program
             {
                 UseShellExecute = false,
                 WorkingDirectory = AppContext.BaseDirectory,
-                ArgumentList = { "--settings", settingsFile },
+                ArgumentList = { "--settings", settingsFile, "--page", page },
             });
-            log.Event("settings.open", new { ok = p is not null });
+            log?.Event("window.open", new { ok = p is not null, page });
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            log.Event("settings.open", new { ok = false, type = ex.GetType().Name });
+            log?.Event("window.open", new { ok = false, type = ex.GetType().Name });
             var (x, y) = SystemPreferences.PointerPosition();
-            toast.Show(new ToastContent(FeedbackKind.Failure, "Settings could not be opened", "WinTools.Settings.exe is missing from this copy."), x, y);
+            toast?.Show(new ToastContent(FeedbackKind.Failure, "WinTools could not be opened", "WinTools.Settings.exe is missing from this copy."), x, y);
         }
     }
 

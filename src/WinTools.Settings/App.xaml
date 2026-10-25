@@ -67,6 +67,45 @@
         </Setter>
       </Style>
 
+      <!-- The side navigation: one choice at a time, the current page marked by an emerald bar and a raised fill. -->
+      <Style x:Key="NavItem" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
+        <Setter Property="FontFamily" Value="Segoe UI" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Margin" Value="0,2" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="RadioButton">
+              <Border x:Name="Back" CornerRadius="8" Background="Transparent" Padding="12,9">
+                <Grid>
+                  <Border x:Name="Bar" Width="3" CornerRadius="2" HorizontalAlignment="Left" Margin="-12,2,0,2" Background="{StaticResource Green}" Visibility="Hidden" />
+                  <ContentPresenter VerticalAlignment="Center" />
+                </Grid>
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter TargetName="Back" Property="Background" Value="{StaticResource Surface}" />
+                  <Setter Property="Foreground" Value="{StaticResource Text}" />
+                </Trigger>
+                <Trigger Property="IsChecked" Value="True">
+                  <Setter TargetName="Back" Property="Background" Value="{StaticResource Raised}" />
+                  <Setter TargetName="Bar" Property="Visibility" Value="Visible" />
+                  <Setter Property="Foreground" Value="{StaticResource Text}" />
+                  <Setter Property="FontWeight" Value="SemiBold" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+      <Style x:Key="PageTitle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+        <Setter Property="FontSize" Value="24" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Margin" Value="0,0,0,6" />
+      </Style>
+
       <!-- On/off switch. -->
       <Style x:Key="Switch" TargetType="CheckBox">
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
@@ -75,7 +114,7 @@
           <Setter.Value>
             <ControlTemplate TargetType="CheckBox">
               <StackPanel Orientation="Horizontal" Background="Transparent">
-                <TextBlock x:Name="State" Text="Off" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" FontSize="12" />
+                <TextBlock x:Name="State" Text="{DynamicResource SwitchOff}" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" FontSize="12" />
                 <Border x:Name="Track" Width="40" Height="22" CornerRadius="11" Background="{StaticResource Sunken}" BorderBrush="{StaticResource TextSecondary}" BorderThickness="1">
                   <Ellipse x:Name="Knob" Width="12" Height="12" Fill="{StaticResource TextSecondary}" HorizontalAlignment="Left" Margin="5,0,0,0" />
                 </Border>
@@ -89,7 +128,7 @@
                   <Setter TargetName="Knob" Property="Margin" Value="0,0,5,0" />
                   <Setter TargetName="Knob" Property="Width" Value="14" />
                   <Setter TargetName="Knob" Property="Height" Value="14" />
-                  <Setter TargetName="State" Property="Text" Value="On" />
+                  <Setter TargetName="State" Property="Text" Value="{DynamicResource SwitchOn}" />
                   <Setter TargetName="State" Property="Foreground" Value="{StaticResource Text}" />
                 </Trigger>
                 <Trigger Property="IsMouseOver" Value="True">
@@ -389,6 +428,13 @@
             </ControlTemplate>
           </Setter.Value>
         </Setter>
+      </Style>
+      <Style x:Key="Accent" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="{StaticResource Green}" />
+        <Setter Property="Foreground" Value="{StaticResource TextOnGreen}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Green}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Padding" Value="18,7" />
       </Style>
     </ResourceDictionary>
   </Application.Resources>
