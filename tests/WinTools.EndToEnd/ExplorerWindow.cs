@@ -128,6 +128,26 @@ internal sealed class ExplorerWindow : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// SPIKE (typing interference, ADR-0021): what a key could have changed in this window. The selected items' names
+    /// (type-ahead), the focused element (a rename box, the search box, the address bar, another pane) and the title.
+    /// </summary>
+    public string ProbeState()
+    {
+        try
+        {
+            var selected = _root.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem))
+                .Cast<AutomationElement>()
+                .Where(i => i.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var p) && ((SelectionItemPattern)p).Current.IsSelected)
+                .Select(i => i.Current.Name).Order(StringComparer.Ordinal);
+            var focus = AutomationElement.FocusedElement;
+            var focusText = focus is null ? "none" : $"{focus.Current.ControlType.ProgrammaticName}/{focus.Current.ClassName}/{focus.Current.AutomationId}";
+            Desktop.GetWindowRect(Hwnd, out var r); // full screen (F11) or a resized window changes it
+            return $"selected=[{string.Join(",", selected)}] focus={focusText} title={_root.Current.Name} rect={r.Left},{r.Top},{r.Right},{r.Bottom}";
+        }
+        catch (ElementNotAvailableException) { return "unavailable"; }
+    }
+
     /// <summary>Diagnostics: the status bar's texts ("100 items", "20 items selected").</summary>
     public string StatusText()
     {

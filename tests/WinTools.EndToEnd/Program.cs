@@ -12,6 +12,7 @@ using WinTools.EndToEnd;
 // Usage: WinTools.EndToEnd <png|jpg|bmp|tif|webp|photo|batch|escape|outside|unsupported|category|fast|edge|worker-crash|alt|file|folder>
 //          [--op <operation id>] [--target jpeg|png|webp|bmp|tiff] [--batch N] [--cycles N] [--fast-ms N] [--results file.jsonl]
 //          [--animations on|off|system]   (default on: the menu's animations run, the heavier path for latency)
+//          [--trigger Space|F2|...]       (default Space: the host's trigger key, written to its settings and pressed here)
 //          [--host <WinTools.Host.exe>]   (default: the host next to the harness; e.g. an installed copy)
 //          [--select ctrl-a|ctrl-click|shift-range] [--hold none|ctrl|shift] [--settle-ms N]   (batch selection;
 //          defaults ctrl-a, none, 250 as before; the release matrix uses 0: drag at once after selecting)
@@ -21,6 +22,11 @@ using WinTools.EndToEnd;
 // "file" and "folder" (V2 PR 1.4, UX-009): a text file and a folder, each with File info by default (--op files.sha256
 // for a file): the info panel must appear, nothing may be written. Copy path is not run here: it would overwrite the
 // user's clipboard (unit-tested in FilesModuleTests; manual protocol in docs/testing/release-matrix.md).
+// "keyprobe --key K" (SPIKE, ADR-0021): during a drag, K is pressed instead of the trigger; Explorer must not act on it
+// (selection, focus, title unchanged during and after the drag). Decides which keys may become trigger keys.
+// "keycontrol --key K" (SPIKE, the probe's positive control): the same window and files, K pressed with the item
+// selected and NO drag; Explorer is expected to react (F2 rename, F3 search, a letter's type-ahead), which shows that the
+// probe sees a reaction when there is one. Passes when the state changed.
 // "photo": a 960x720 photograph-like JPEG (tests/samples/New-PhotoSample.ps1), compressed (default compress.balanced):
 // the copy must be valid and save at least 8 %, the rule Compress promises (ADR-0017). With --expect already-optimized
 // the honest outcome is the other one: no file, a "Nothing to change" toast, the job reported as NothingToDo.
@@ -43,6 +49,8 @@ if (Desktop.ButtonsSwapped)
     Console.Error.WriteLine("The mouse buttons are swapped in Windows settings; injected clicks would be right-clicks. Not running.");
     return 6;
 }
+string probeKey = "F5";
+var triggerKey = "Space";
 var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; string? opArg = null; var batchSize = 12; var animations = "On"; string? hostArg = null; var selectMode = "ctrl-a"; var holdKey = "none"; var settleMs = 250; var pathStyle = "plain"; var expectNothing = false;
 for (var i = 1; i < args.Length; i++)
 {
@@ -58,6 +66,8 @@ for (var i = 1; i < args.Length; i++)
         case "--select": selectMode = args[++i] is "ctrl-a" or "ctrl-click" or "shift-range" ? args[i] : throw new ArgumentException($"--select {args[i]}"); break;
         case "--hold": holdKey = args[++i] is "none" or "ctrl" or "shift" ? args[i] : throw new ArgumentException($"--hold {args[i]}"); break;
         case "--settle-ms": settleMs = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
+        case "--key": probeKey = args[++i]; break;                   // keyprobe: F2..F12, A..Z or 0..9
+        case "--trigger": triggerKey = args[++i]; break;
         case "--expect": expectNothing = args[++i] switch { "copy" => false, "already-optimized" => true, var x => throw new ArgumentException($"--expect {x}") }; break;
         case "--path-style": pathStyle = args[++i] is "plain" or "unicode" or "long" ? args[i] : throw new ArgumentException($"--path-style {args[i]}"); break;
         case "--animations": animations = args[++i] switch { "on" => "On", "off" => "Off", "system" => "System", var a => throw new ArgumentException($"--animations {a}") }; break;
@@ -120,6 +130,9 @@ if (strip)
     var len = metadataMarker.Length + 2;
     File.WriteAllBytes(source, [.. original[..2], 0xFF, 0xFE, (byte)(len >> 8), (byte)len, .. metadataMarker, .. original[2..]]);
 }
+// keyprobe with a letter: a file that Explorer's type-ahead would select if the letter reached it during the drag.
+if (scenario is "keyprobe" or "keycontrol" && probeKey.Length == 1)
+    File.WriteAllText(Path.Combine(folder, $"{char.ToUpperInvariant(probeKey[0])}{char.ToUpperInvariant(probeKey[0])} probe.txt"), "type-ahead target");
 // A folder's "hash" is its listing: a dropped folder must keep its contents.
 string HashOf(string path) => isFolder ? string.Join("|", Directory.GetFileSystemEntries(path).Order(StringComparer.Ordinal)) : Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
 var sourceHash = HashOf(source);
@@ -143,7 +156,9 @@ if ((producing || facts) && capability is not null && groupIndex < 0) { Console.
 var hostLog = Path.Combine(folder, "..", $"host-{scenario}-{stamp}.jsonl");
 var settingsFile = Path.Combine(folder, "..", $"settings-{scenario}-{stamp}.json");
 // Default settings except the animations (on unless asked otherwise), so the menu's commands are the defaults' ones.
-File.WriteAllText(settingsFile, new AppSettings { Animations = animations }.ToJson());
+if (!AppSettings.TriggerKeys.TryGetValue(triggerKey, out var triggerVk)) { Console.Error.WriteLine($"--trigger {triggerKey} is not an allowed trigger key."); return 64; }
+Desktop.TriggerVk = triggerVk;
+File.WriteAllText(settingsFile, new AppSettings { Animations = animations, TriggerKey = triggerKey }.ToJson());
 resultsPath ??= Path.Combine(folder, "..", $"e2e-{scenario}-{stamp}.jsonl");
 using var results = new StreamWriter(resultsPath, append: false) { AutoFlush = true };
 void Record(object o) { var line = JsonSerializer.Serialize(o); results.WriteLine(line); Console.WriteLine(line); }
@@ -222,6 +237,18 @@ catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.Int
 }
 using (var explorer = opened)
 {
+    // SPIKE: the letter types what the window's keyboard layout says ("ش" for A on an Arabic layout), so a type-ahead
+    // target named with that character is added as well; otherwise a layout other than English hides any reaction.
+    if (scenario is "keyprobe" or "keycontrol" && probeKey.Length == 1)
+    {
+        var typed = Desktop.CharOf(char.ToUpperInvariant(probeKey[0]), explorer.Hwnd);
+        Record(new { probeKey, layoutChar = typed?.ToString() });
+        if (typed is { } t && char.ToUpperInvariant(t) != char.ToUpperInvariant(probeKey[0]))
+        {
+            File.WriteAllText(Path.Combine(folder, $"{t}{t} probe.txt"), "type-ahead target");
+            Thread.Sleep(1000);
+        }
+    }
     var explorerScale = Math.Max(Desktop.GetDpiForWindow(explorer.Hwnd), 96u) / 96.0;
     int Px(int v) => (int)Math.Round(v * explorerScale);
     var work = Desktop.WorkAreaOf(explorer.Hwnd);
@@ -384,6 +411,27 @@ using (var explorer = opened)
                 pressGapMs = Math.Round(Stopwatch.GetElapsedTime(selectedAt).TotalMilliseconds, 1);
                 Desktop.LeftDown(); Thread.Sleep(80);
             }
+            else if (scenario == "keycontrol")
+            {
+                // SPIKE control: select the item with a click, no drag, then press the key as the probe does.
+                Desktop.MoveTo(cx, cy); Thread.Sleep(60);
+                Click();
+                Thread.Sleep((int)Desktop.GetDoubleClickTime() + 200);
+                var vkc = probeKey is { Length: 1 } l1 ? char.ToUpperInvariant(l1[0])
+                    : probeKey is ['F', ..] && int.TryParse(probeKey[1..], out var fc) && fc is >= 2 and <= 24 ? 0x6F + fc
+                    : throw new ArgumentException($"--key {probeKey}");
+                var beforeC = explorer.ProbeState();
+                Desktop.KeyDown(vkc); Thread.Sleep(60); Desktop.KeyUp(vkc);
+                Thread.Sleep(700);
+                var duringC = explorer.ProbeState();
+                if (probeKey == "F11") { Desktop.Tap(vkc); Thread.Sleep(500); } // full screen is left with the same key
+                Desktop.Tap(Desktop.VkEscape); Thread.Sleep(300); Desktop.Tap(Desktop.VkEscape); Thread.Sleep(300);
+                var reacted = duringC != beforeC;
+                Record(new { scenario, cycle, key = probeKey, reacted, before = beforeC, during = duringC, restored = explorer.ProbeState() == beforeC });
+                if (reacted) passed++; else exitCode = 1;
+                Thread.Sleep(400);
+                continue;
+            }
             else
             {
                 Desktop.MoveTo(cx, cy); Thread.Sleep(60);
@@ -440,8 +488,31 @@ using (var explorer = opened)
                 Thread.Sleep(30);
                 Desktop.Tap(Desktop.VkEscape);
             }
+            if (scenario == "keyprobe")
+            {
+                // SPIKE (typing interference, ADR-0021, plan D8): press a candidate trigger key during a drag over this
+                // window, as a user would press the trigger, and see whether Explorer acted on it: a changed selection
+                // (type-ahead), a rename box, the search box or address bar, another pane, or a new title. The drag is
+                // then cancelled and anything the key started is closed with Escape, so the window is left as it was.
+                var vk = probeKey is { Length: 1 } letter ? char.ToUpperInvariant(letter[0])
+                    : probeKey is ['F', ..] && int.TryParse(probeKey[1..], out var fn) && fn is >= 1 and <= 24 ? 0x6F + fn
+                    : throw new ArgumentException($"--key {probeKey}");
+                var before = explorer.ProbeState();
+                Desktop.KeyDown(vk); Thread.Sleep(60); Desktop.KeyUp(vk);
+                Thread.Sleep(700);
+                var during = explorer.ProbeState();
+                CancelDrag(); Thread.Sleep(150);
+                Desktop.LeftUp(); Thread.Sleep(700);
+                var after = explorer.ProbeState();
+                var inert = during == before && after == before;
+                if (!inert) { Desktop.Tap(Desktop.VkEscape); Thread.Sleep(300); }
+                Record(new { scenario, cycle, key = probeKey, inert, before, during, after, restored = explorer.ProbeState() == before });
+                if (inert) passed++; else exitCode = 1;
+                Thread.Sleep(400);
+                continue;
+            }
             var tKey = Stopwatch.GetTimestamp();
-            Desktop.KeyDown(Desktop.VkSpace);
+            Desktop.KeyDown(triggerVk);
             if (scenario == "fast")
             {
                 // As fast as a hand can: category and command right after the overlay appears, release at --fast-ms.
@@ -468,12 +539,12 @@ using (var explorer = opened)
                 if (releasedOver is null) { CancelDrag(); Thread.Sleep(150); }
                 Desktop.LeftUp();
                 Thread.Sleep(40);
-                Desktop.KeyUp(Desktop.VkSpace);
+                Desktop.KeyUp(triggerVk);
             }
             else
             {
                 Thread.Sleep(40);
-                Desktop.KeyUp(Desktop.VkSpace);
+                Desktop.KeyUp(triggerVk);
                 Thread.Sleep(250);
                 var o = LastOverlay() ?? assumed;
                 if (scenario == "escape")
@@ -677,7 +748,7 @@ if (hostAlive) { host.Refresh(); hostPrivateMb = Math.Round(host.PrivateMemorySi
 if (hostAlive) { Desktop.CloseWindowsOf(host.Id, "WinTools.InfoPanel"); host.Kill(); host.WaitForExit(5000); }
 // The harness must leave no injected input behind; say so in the summary and fail if it did.
 var leftDownAtEnd = Desktop.IsDown(0x01);
-var spaceDownAtEnd = Desktop.IsDown(Desktop.VkSpace);
+var spaceDownAtEnd = Desktop.IsDown(Desktop.VkSpace) || Desktop.IsDown(triggerVk); // the trigger key, whichever it is
 var modifiersDownAtEnd = Desktop.IsDown(Desktop.VkControl) || Desktop.IsDown(Desktop.VkShift) || Desktop.IsDown(Desktop.VkAlt);
 if (leftDownAtEnd || spaceDownAtEnd || modifiersDownAtEnd)
 {
