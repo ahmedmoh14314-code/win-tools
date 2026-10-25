@@ -139,6 +139,86 @@ public sealed class DocumentWorkerTests : IDisposable
         Assert.Equal(ErrorCode.LimitExceeded, DocumentJobs.Run(Request(DocumentCapabilities.InfoId, path)).Error);
     }
 
+    // Evaluator, PR 6.1: each finding as its failing input.
+
+    [Fact]
+    public void A_bidi_mark_in_a_title_is_dropped_not_fatal_to_the_whole_info()
+    {
+        var parts = OoxmlSamples.Docx("<w:p><w:r><w:t>x</w:t></w:r></w:p>");
+        parts[2] = ("docProps/core.xml", """<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>تقرير&#x200F; 2026&#x202E;</dc:title></cp:coreProperties>""");
+        var docx = Make("rtl.docx", parts);
+        var request = Request(DocumentCapabilities.InfoId, docx);
+        var r = DocumentJobs.Run(request);
+        Assert.True(r.Success, r.Message);
+        Assert.Equal("تقرير 2026", r.Facts.Single(f => f.Label == "Title").Value);
+        Assert.True(DocumentJobModule.Instance.IsBelievable(request, r));
+    }
+
+    [Fact]
+    public void A_paragraph_holding_a_text_box_keeps_its_own_text_and_line_breaks()
+    {
+        var docx = Make("box.docx", OoxmlSamples.Docx("""<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="720"/></w:tabs></w:pPr><w:r><w:t xml:space="preserve">BEFORE </w:t></w:r><w:r><w:drawing><w:txbxContent><w:p><w:r><w:t>BOX</w:t></w:r></w:p></w:txbxContent></w:drawing></w:r><w:r><w:t>AFTER</w:t><w:tab/><w:t>X</w:t><w:br/><w:t>Line2</w:t></w:r></w:p><w:p><w:r><w:t>NEXT</w:t></w:r></w:p>"""));
+        var r = DocumentJobs.Run(Request(DocumentCapabilities.ExtractTextId, docx));
+        Assert.True(r.Success, r.Message);
+        Assert.Equal("BEFORE AFTER\tX\r\nLine2\r\nNEXT\r\n", File.ReadAllText(r.OutputPath!, Encoding.UTF8));
+    }
+
+    [Theory]
+    [InlineData("""<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="r1" Type="t" Target="http://evil.example/t.dotm" TargetMode='External'/></Relationships>""", "word/_rels/settings.xml.rels")]
+    [InlineData("""<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="r1" Type="t" Target="http://x" TargetMode="External"/></Relationships>""", "word/_rels/document.xml.RELS")]
+    public void An_external_link_is_reported_however_it_is_written(string rels, string part)
+    {
+        var docx = Make("linked.docx", [.. OoxmlSamples.Docx("<w:p/>"), (part, rels)]);
+        Assert.Contains(DocumentJobs.Run(Request(DocumentCapabilities.InfoId, docx)).Facts, f => f is { Label: "Links", Notice: true });
+    }
+
+    [Fact]
+    public void Macros_are_reported_from_the_content_type_whatever_the_part_is_called()
+    {
+        var parts = OoxmlSamples.Docx("<w:p/>");
+        parts[0] = ("[Content_Types].xml", """<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override PartName="/word/document.xml" ContentType="application/vnd.ms-word.document.macroEnabled.main+xml"/></Types>""");
+        var docx = Make("macro.docx", [.. parts, ("word/m.bin", "code")]);
+        Assert.Contains(DocumentJobs.Run(Request(DocumentCapabilities.InfoId, docx)).Facts, f => f is { Label: "Macros", Notice: true });
+    }
+
+    [Fact]
+    public void Excel_cells_keep_their_columns_and_rich_text_is_one_cell()
+    {
+        var xlsx = Make("cells.xlsx", OoxmlSamples.Xlsx([], """<row r="1"><c r="A1" t="inlineStr"><is><r><t>ab</t></r><r><t>cd</t></r></is></c><c r="B1"><v>2</v></c></row><row r="2"><c r="A2"><v>1</v></c><c r="C2"><v>3</v></c></row>"""));
+        var r = DocumentJobs.Run(Request(DocumentCapabilities.ExtractTextId, xlsx));
+        Assert.True(r.Success, r.Message);
+        Assert.Equal("Sheet 1\r\nabcd\t2\r\n1\t\t3\r\n", File.ReadAllText(r.OutputPath!, Encoding.UTF8));
+    }
+
+    [Fact]
+    public void A_deck_of_empty_slides_has_no_text_to_extract()
+    {
+        var pptx = Make("empty.pptx", OoxmlSamples.Pptx(""));
+        Assert.Equal(ErrorCode.NothingToDo, DocumentJobs.Run(Request(DocumentCapabilities.ExtractTextId, pptx)).Error);
+    }
+
+    [Fact]
+    public void A_zip_that_only_mentions_the_type_in_a_comment_is_not_a_document()
+    {
+        var parts = OoxmlSamples.Docx("<w:p><w:r><w:t>x</w:t></w:r></w:p>");
+        parts[0] = ("[Content_Types].xml", "<!-- wordprocessingml.document.main+xml --><x/>");
+        Assert.Equal(ErrorCode.ContentMismatch, DocumentJobs.Run(Request(DocumentCapabilities.ExtractTextId, Make("fake.docx", parts))).Error);
+    }
+
+    [Fact]
+    public void A_password_protected_document_says_so()
+    {
+        var locked = _dir.Write("locked.docx", [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, .. new byte[504]]);
+        Assert.Equal(ErrorCode.PasswordRequired, DocumentJobs.Run(Request(DocumentCapabilities.InfoId, locked)).Error);
+    }
+
+    [Fact]
+    public void Two_parts_whose_names_differ_only_in_case_are_refused()
+    {
+        var pptx = Make("dup.pptx", [.. OoxmlSamples.Pptx("A"), ("ppt/slides/Slide1.xml", "<p:sld xmlns:p=\"p\"/>")]);
+        Assert.Equal(ErrorCode.DecodeFailed, DocumentJobs.Run(Request(DocumentCapabilities.ExtractTextId, pptx)).Error);
+    }
+
     [Fact]
     public void The_menu_offers_text_and_info_for_office_files()
     {
