@@ -131,10 +131,10 @@ public sealed class PdfPasswordTests
     public void A_pdf_gets_a_protect_category_with_both_commands_each_asking_for_the_password()
     {
         var menu = RadialMenu.Build(Resolver, [@"C:\p\a.pdf"]);
-        Assert.Equal(["Organize", "Optimize", "Rotate", "Protect", "Tools"], menu.Select(g => g.Label));
+        Assert.Equal(["Tools", "Organize", "Optimize", "Rotate", "Protect", "Actions"], menu.Select(g => g.Label));
         var protect = menu.Single(g => g.Label == "Protect").Commands;
         Assert.Equal([PdfCapabilities.ProtectId, PdfCapabilities.UnprotectId], protect.Select(c => c.Id));
-        Assert.Equal(["Protect…", "Remove protection…"], protect.Select(c => c.Label));
+        Assert.Equal(["Protect…", "Unlock…"], protect.Select(c => c.Label)); // "Remove protection…" did not fit its sector
         Assert.True(protect[0].Prompt is { Confirm: true });  // a new password is typed twice
         Assert.True(protect[1].Prompt is { Confirm: false }); // the existing one once
         Assert.All(protect, c => Assert.Equal(CapabilityShape.PerFile, c.Shape));

@@ -13,10 +13,10 @@ public sealed class RadialMenuTests
     public void Jpeg_gets_all_five_categories_in_fixed_order()
     {
         var menu = MenuFor(@"C:\p\photo.jpg");
-        Assert.Equal(["Convert", "Compress", "Resize", "Rotate", "Tools"], menu.Select(g => g.Label));
+        Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Rotate"], menu.Select(g => g.Label)); // Tools second since the wheel PR
         Assert.Equal(["To PNG", "To WebP", "To BMP", "To TIFF"], menu[0].Commands.Select(c => c.Label));
-        Assert.Equal(["High quality", "Balanced", "Smallest"], menu[1].Commands.Select(c => c.Label));
-        Assert.Equal(["Remove metadata", "Image info"], menu[4].Commands.Select(c => c.Label));
+        Assert.Equal(["High quality", "Balanced", "Smallest"], menu[2].Commands.Select(c => c.Label));
+        Assert.Equal(["Remove metadata", "Image info"], menu[1].Commands.Select(c => c.Label));
     }
 
     [Fact]
@@ -35,8 +35,8 @@ public sealed class RadialMenuTests
     public void Categories_without_commands_are_left_out()
     {
         var bmp = MenuFor(@"C:\p\scan.bmp");
-        Assert.Equal(["Convert", "Resize", "Rotate", "Tools"], bmp.Select(g => g.Label)); // no compression, no metadata
-        Assert.Equal(["Image info"], bmp[^1].Commands.Select(c => c.Label));
+        Assert.Equal(["Convert", "Tools", "Resize", "Rotate"], bmp.Select(g => g.Label)); // no compression, no metadata
+        Assert.Equal(["Image info"], bmp[1].Commands.Select(c => c.Label));
         Assert.Equal(["Lossless"], MenuFor(@"C:\p\a.png").Single(g => g.Category.Id == "compress").Commands.Select(c => c.Label));
     }
 
@@ -131,7 +131,7 @@ public sealed class MenuNavigatorTests
         Move(n, At(RingGeometry.SectorCentre(0, 5), 60), Ms(500));
         Assert.Null(n.Open);                       // a graze into a category does not open it
         Assert.Null(n.Armed(TimeSpan.FromSeconds(5)));
-        Assert.Equal(["Convert", "Compress", "Resize", "Rotate", "Tools"], n.View(Ms(0)).Labels);
+        Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Rotate"], n.View(Ms(0)).Labels);
         Assert.Equal(0, n.View(Ms(500)).Hot);
     }
 
@@ -166,7 +166,7 @@ public sealed class MenuNavigatorTests
     public void Back_returns_to_the_categories_and_nothing_is_armed_there()
     {
         var n = new MenuNavigator(MenuFor(@"C:\p\photo.jpg"), 96);
-        OpenCategory(n, 2, Ms(0));
+        OpenCategory(n, 3, Ms(0)); // Resize: Convert, Tools, Compress, Resize, Rotate
         var view = n.View(Ms(0));
         var back = RingGeometry.SectorCentre(0, view.Labels.Count, view.Start, view.FirstSweep);
         Move(n, At(back, 50), Ms(300));
@@ -176,7 +176,7 @@ public sealed class MenuNavigatorTests
         Assert.True(n.Move(bx, by, Ms(350)));
         n.Shown(0, 0, Ms(350), 96);
         Assert.Null(n.Open);
-        OpenCategory(n, 3, Ms(500));                   // and another category opens from there
+        OpenCategory(n, 4, Ms(500));                   // and another category opens from there
         Assert.Equal("rotate", n.Open!.Category.Id);
     }
 

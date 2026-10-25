@@ -242,6 +242,6 @@ public sealed class DocumentWorkerTests : IDisposable
             Assert.Contains(DocumentCapabilities.ExtractTextId, ids);
             Assert.Contains(DocumentCapabilities.InfoId, ids);
         }
-        Assert.Equal(["Convert", "Tools"], RadialMenu.Build(resolver, [@"C:\p\a.docx"]).Select(g => g.Label));
+        Assert.Equal(["Convert", "Tools", "Actions"], RadialMenu.Build(resolver, [@"C:\p\a.docx"]).Select(g => g.Label));
     }
 }

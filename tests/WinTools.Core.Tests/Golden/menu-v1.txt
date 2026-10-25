@@ -5,6 +5,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -18,15 +21,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.jpg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -42,15 +45,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.jpeg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -66,15 +69,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.JFIF
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -90,15 +93,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.webp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -114,15 +117,14 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\a.bmp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -134,14 +136,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.dib
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -153,14 +155,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -172,15 +175,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.tiff
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -192,14 +195,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.png + C:\p\b.jpg
   [Convert] Convert
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
+    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Jpeg
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Jpeg
@@ -211,15 +214,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Png,Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
-    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
 # C:\p\a.png + C:\p\b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
+    metadata.info | Image info | writes False | suffix - | out Png,Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png,Png
   [Resize] Resize
@@ -233,14 +236,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Png
     rotate.right | Right | writes True | suffix rotated right | out Png,Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
-    metadata.info | Image info | writes False | suffix - | out Png,Png
 # C:\p\a.jpg + C:\p\b.webp
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png,Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
+    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg,WebP
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg,WebP
@@ -256,13 +259,12 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg,WebP
     rotate.right | Right | writes True | suffix rotated right | out Jpeg,WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg,WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
-    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
 # C:\p\a.png + C:\p\b.bmp + C:\p\c.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP,WebP
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Bmp,Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Bmp,Tiff
@@ -274,8 +276,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Bmp,Tiff
     rotate.right | Right | writes True | suffix rotated right | out Png,Bmp,Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Bmp,Tiff
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
 # C:\p\a.txt
 # C:\p\a.pdf
 # C:\p\a.png + C:\p\b.txt
@@ -287,6 +287,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -300,9 +303,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.png:stream
 # C:\p\a.png.
 # C:\p\a.jpe
@@ -311,6 +311,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -326,15 +329,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.TIF
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -346,15 +349,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.Png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -368,9 +371,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.gif
 # C:\p\a.heic
 # C:\p.png\a.jpg
@@ -379,6 +379,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -394,15 +397,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -416,9 +419,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\.png
 # C:\p\a.PNG 
 # C:\صور\😀 a.webp
@@ -427,6 +427,9 @@
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -442,15 +445,15 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…(261 chars)
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -464,9 +467,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 ## custom resize: resize.width-800
 # C:\p\a.png
   [Convert] Convert
@@ -474,6 +474,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -488,15 +491,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.jpg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -513,15 +516,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.jpeg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -538,15 +541,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.JFIF
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -563,15 +566,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.webp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -588,15 +591,14 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\a.bmp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -609,14 +611,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.dib
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -629,14 +631,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -649,15 +652,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.tiff
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -670,14 +673,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.png + C:\p\b.jpg
   [Convert] Convert
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
+    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Jpeg
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Jpeg
@@ -690,15 +693,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Png,Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
-    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
 # C:\p\a.png + C:\p\b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
+    metadata.info | Image info | writes False | suffix - | out Png,Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png,Png
   [Resize] Resize
@@ -713,14 +716,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Png
     rotate.right | Right | writes True | suffix rotated right | out Png,Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
-    metadata.info | Image info | writes False | suffix - | out Png,Png
 # C:\p\a.jpg + C:\p\b.webp
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png,Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
+    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg,WebP
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg,WebP
@@ -737,13 +740,12 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg,WebP
     rotate.right | Right | writes True | suffix rotated right | out Jpeg,WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg,WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
-    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
 # C:\p\a.png + C:\p\b.bmp + C:\p\c.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP,WebP
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Bmp,Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Bmp,Tiff
@@ -756,8 +758,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Bmp,Tiff
     rotate.right | Right | writes True | suffix rotated right | out Png,Bmp,Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Bmp,Tiff
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
 # C:\p\a.txt
 # C:\p\a.pdf
 # C:\p\a.png + C:\p\b.txt
@@ -769,6 +769,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -783,9 +786,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.png:stream
 # C:\p\a.png.
 # C:\p\a.jpe
@@ -794,6 +794,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -810,15 +813,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.TIF
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -831,15 +834,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.Png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -854,9 +857,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.gif
 # C:\p\a.heic
 # C:\p.png\a.jpg
@@ -865,6 +865,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -881,15 +884,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -904,9 +907,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\.png
 # C:\p\a.PNG 
 # C:\صور\😀 a.webp
@@ -915,6 +915,9 @@
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -931,15 +934,15 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…(261 chars)
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -954,9 +957,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 ## custom resize: resize.box-1920x1080-stretch
 # C:\p\a.png
   [Convert] Convert
@@ -964,6 +964,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -978,15 +981,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.jpg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -1003,15 +1006,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.jpeg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -1028,15 +1031,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.JFIF
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -1053,15 +1056,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.webp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -1078,15 +1081,14 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\a.bmp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -1099,14 +1101,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.dib
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -1119,14 +1121,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -1139,15 +1142,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.tiff
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -1160,14 +1163,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.png + C:\p\b.jpg
   [Convert] Convert
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
+    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Jpeg
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Jpeg
@@ -1180,15 +1183,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Png,Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
-    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
 # C:\p\a.png + C:\p\b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
+    metadata.info | Image info | writes False | suffix - | out Png,Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png,Png
   [Resize] Resize
@@ -1203,14 +1206,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Png
     rotate.right | Right | writes True | suffix rotated right | out Png,Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
-    metadata.info | Image info | writes False | suffix - | out Png,Png
 # C:\p\a.jpg + C:\p\b.webp
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png,Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
+    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg,WebP
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg,WebP
@@ -1227,13 +1230,12 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg,WebP
     rotate.right | Right | writes True | suffix rotated right | out Jpeg,WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg,WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
-    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
 # C:\p\a.png + C:\p\b.bmp + C:\p\c.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP,WebP
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Bmp,Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Bmp,Tiff
@@ -1246,8 +1248,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Bmp,Tiff
     rotate.right | Right | writes True | suffix rotated right | out Png,Bmp,Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Bmp,Tiff
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
 # C:\p\a.txt
 # C:\p\a.pdf
 # C:\p\a.png + C:\p\b.txt
@@ -1259,6 +1259,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -1273,9 +1276,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.png:stream
 # C:\p\a.png.
 # C:\p\a.jpe
@@ -1284,6 +1284,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -1300,15 +1303,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.TIF
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -1321,15 +1324,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.Png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -1344,9 +1347,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.gif
 # C:\p\a.heic
 # C:\p.png\a.jpg
@@ -1355,6 +1355,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -1371,15 +1374,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -1394,9 +1397,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\.png
 # C:\p\a.PNG 
 # C:\صور\😀 a.webp
@@ -1405,6 +1405,9 @@
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -1421,15 +1424,15 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…(261 chars)
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -1444,9 +1447,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 ## custom resize: resize.height-600-upscale
 # C:\p\a.png
   [Convert] Convert
@@ -1454,6 +1454,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -1468,15 +1471,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.jpg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -1493,15 +1496,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.jpeg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -1518,15 +1521,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.JFIF
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -1543,15 +1546,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.webp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -1568,15 +1571,14 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\a.bmp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -1589,14 +1591,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.dib
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -1609,14 +1611,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -1629,15 +1632,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.tiff
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -1650,14 +1653,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.png + C:\p\b.jpg
   [Convert] Convert
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
+    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Jpeg
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Jpeg
@@ -1670,15 +1673,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Png,Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
-    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
 # C:\p\a.png + C:\p\b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
+    metadata.info | Image info | writes False | suffix - | out Png,Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png,Png
   [Resize] Resize
@@ -1693,14 +1696,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Png
     rotate.right | Right | writes True | suffix rotated right | out Png,Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
-    metadata.info | Image info | writes False | suffix - | out Png,Png
 # C:\p\a.jpg + C:\p\b.webp
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png,Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
+    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg,WebP
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg,WebP
@@ -1717,13 +1720,12 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg,WebP
     rotate.right | Right | writes True | suffix rotated right | out Jpeg,WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg,WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
-    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
 # C:\p\a.png + C:\p\b.bmp + C:\p\c.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP,WebP
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Bmp,Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Bmp,Tiff
@@ -1736,8 +1738,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Bmp,Tiff
     rotate.right | Right | writes True | suffix rotated right | out Png,Bmp,Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Bmp,Tiff
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
 # C:\p\a.txt
 # C:\p\a.pdf
 # C:\p\a.png + C:\p\b.txt
@@ -1749,6 +1749,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -1763,9 +1766,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.png:stream
 # C:\p\a.png.
 # C:\p\a.jpe
@@ -1774,6 +1774,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -1790,15 +1793,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.TIF
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -1811,15 +1814,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.Png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -1834,9 +1837,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.gif
 # C:\p\a.heic
 # C:\p.png\a.jpg
@@ -1845,6 +1845,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -1861,15 +1864,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -1884,9 +1887,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\.png
 # C:\p\a.PNG 
 # C:\صور\😀 a.webp
@@ -1895,6 +1895,9 @@
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -1911,15 +1914,15 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…(261 chars)
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -1934,9 +1937,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 ## custom resize: resize.box-1920x1080
 # C:\p\a.png
   [Convert] Convert
@@ -1944,6 +1944,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -1957,15 +1960,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.jpg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -1981,15 +1984,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.jpeg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -2005,15 +2008,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.JFIF
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -2029,15 +2032,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.webp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -2053,15 +2056,14 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\a.bmp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -2073,14 +2075,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.dib
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -2092,14 +2094,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -2111,15 +2114,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.tiff
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -2131,14 +2134,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.png + C:\p\b.jpg
   [Convert] Convert
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
+    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Jpeg
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Jpeg
@@ -2150,15 +2153,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Png,Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
-    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
 # C:\p\a.png + C:\p\b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
+    metadata.info | Image info | writes False | suffix - | out Png,Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png,Png
   [Resize] Resize
@@ -2172,14 +2175,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Png
     rotate.right | Right | writes True | suffix rotated right | out Png,Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
-    metadata.info | Image info | writes False | suffix - | out Png,Png
 # C:\p\a.jpg + C:\p\b.webp
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png,Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
+    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg,WebP
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg,WebP
@@ -2195,13 +2198,12 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg,WebP
     rotate.right | Right | writes True | suffix rotated right | out Jpeg,WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg,WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
-    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
 # C:\p\a.png + C:\p\b.bmp + C:\p\c.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP,WebP
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Bmp,Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Bmp,Tiff
@@ -2213,8 +2215,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Bmp,Tiff
     rotate.right | Right | writes True | suffix rotated right | out Png,Bmp,Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Bmp,Tiff
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
 # C:\p\a.txt
 # C:\p\a.pdf
 # C:\p\a.png + C:\p\b.txt
@@ -2226,6 +2226,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -2239,9 +2242,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.png:stream
 # C:\p\a.png.
 # C:\p\a.jpe
@@ -2250,6 +2250,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -2265,15 +2268,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.TIF
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -2285,15 +2288,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.Png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -2307,9 +2310,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.gif
 # C:\p\a.heic
 # C:\p.png\a.jpg
@@ -2318,6 +2318,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -2333,15 +2336,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -2355,9 +2358,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\.png
 # C:\p\a.PNG 
 # C:\صور\😀 a.webp
@@ -2366,6 +2366,9 @@
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -2381,15 +2384,15 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…(261 chars)
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -2403,9 +2406,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 ## custom resize: resize.box-1920x1080-upscale
 # C:\p\a.png
   [Convert] Convert
@@ -2413,6 +2413,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -2427,15 +2430,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.jpg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -2452,15 +2455,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.jpeg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -2477,15 +2480,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.JFIF
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -2502,15 +2505,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.webp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -2527,15 +2530,14 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\a.bmp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -2548,14 +2550,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.dib
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -2568,14 +2570,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -2588,15 +2591,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.tiff
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -2609,14 +2612,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.png + C:\p\b.jpg
   [Convert] Convert
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
+    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Jpeg
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Jpeg
@@ -2629,15 +2632,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Png,Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
-    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
 # C:\p\a.png + C:\p\b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
+    metadata.info | Image info | writes False | suffix - | out Png,Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png,Png
   [Resize] Resize
@@ -2652,14 +2655,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Png
     rotate.right | Right | writes True | suffix rotated right | out Png,Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
-    metadata.info | Image info | writes False | suffix - | out Png,Png
 # C:\p\a.jpg + C:\p\b.webp
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png,Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
+    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg,WebP
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg,WebP
@@ -2676,13 +2679,12 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg,WebP
     rotate.right | Right | writes True | suffix rotated right | out Jpeg,WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg,WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
-    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
 # C:\p\a.png + C:\p\b.bmp + C:\p\c.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP,WebP
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Bmp,Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Bmp,Tiff
@@ -2695,8 +2697,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Bmp,Tiff
     rotate.right | Right | writes True | suffix rotated right | out Png,Bmp,Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Bmp,Tiff
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
 # C:\p\a.txt
 # C:\p\a.pdf
 # C:\p\a.png + C:\p\b.txt
@@ -2708,6 +2708,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -2722,9 +2725,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.png:stream
 # C:\p\a.png.
 # C:\p\a.jpe
@@ -2733,6 +2733,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -2749,15 +2752,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.TIF
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -2770,15 +2773,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.Png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -2793,9 +2796,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.gif
 # C:\p\a.heic
 # C:\p.png\a.jpg
@@ -2804,6 +2804,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -2820,15 +2823,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -2843,9 +2846,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\.png
 # C:\p\a.PNG 
 # C:\صور\😀 a.webp
@@ -2854,6 +2854,9 @@
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -2870,15 +2873,15 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…(261 chars)
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -2893,9 +2896,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 ## custom resize: resize.width-0
 # C:\p\a.png
   [Convert] Convert
@@ -2903,6 +2903,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -2916,15 +2919,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.jpg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -2940,15 +2943,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.jpeg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -2964,15 +2967,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.JFIF
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -2988,15 +2991,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.webp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -3012,15 +3015,14 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\a.bmp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -3032,14 +3034,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.dib
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -3051,14 +3053,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -3070,15 +3073,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.tiff
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -3090,14 +3093,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.png + C:\p\b.jpg
   [Convert] Convert
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
+    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Jpeg
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Jpeg
@@ -3109,15 +3112,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Png,Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
-    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
 # C:\p\a.png + C:\p\b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
+    metadata.info | Image info | writes False | suffix - | out Png,Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png,Png
   [Resize] Resize
@@ -3131,14 +3134,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Png
     rotate.right | Right | writes True | suffix rotated right | out Png,Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
-    metadata.info | Image info | writes False | suffix - | out Png,Png
 # C:\p\a.jpg + C:\p\b.webp
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png,Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
+    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg,WebP
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg,WebP
@@ -3154,13 +3157,12 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg,WebP
     rotate.right | Right | writes True | suffix rotated right | out Jpeg,WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg,WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
-    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
 # C:\p\a.png + C:\p\b.bmp + C:\p\c.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP,WebP
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Bmp,Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Bmp,Tiff
@@ -3172,8 +3174,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Bmp,Tiff
     rotate.right | Right | writes True | suffix rotated right | out Png,Bmp,Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Bmp,Tiff
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
 # C:\p\a.txt
 # C:\p\a.pdf
 # C:\p\a.png + C:\p\b.txt
@@ -3185,6 +3185,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -3198,9 +3201,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.png:stream
 # C:\p\a.png.
 # C:\p\a.jpe
@@ -3209,6 +3209,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -3224,15 +3227,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.TIF
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -3244,15 +3247,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.Png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -3266,9 +3269,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.gif
 # C:\p\a.heic
 # C:\p.png\a.jpg
@@ -3277,6 +3277,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -3292,15 +3295,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -3314,9 +3317,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\.png
 # C:\p\a.PNG 
 # C:\صور\😀 a.webp
@@ -3325,6 +3325,9 @@
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -3340,15 +3343,15 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…(261 chars)
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -3362,9 +3365,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 ## custom resize: resize.width-65536
 # C:\p\a.png
   [Convert] Convert
@@ -3372,6 +3372,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -3385,15 +3388,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.jpg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -3409,15 +3412,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.jpeg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -3433,15 +3436,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.JFIF
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -3457,15 +3460,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.webp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -3481,15 +3484,14 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\a.bmp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -3501,14 +3503,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.dib
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -3520,14 +3522,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -3539,15 +3542,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.tiff
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -3559,14 +3562,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.png + C:\p\b.jpg
   [Convert] Convert
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
+    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Jpeg
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Jpeg
@@ -3578,15 +3581,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Png,Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
-    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
 # C:\p\a.png + C:\p\b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
+    metadata.info | Image info | writes False | suffix - | out Png,Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png,Png
   [Resize] Resize
@@ -3600,14 +3603,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Png
     rotate.right | Right | writes True | suffix rotated right | out Png,Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
-    metadata.info | Image info | writes False | suffix - | out Png,Png
 # C:\p\a.jpg + C:\p\b.webp
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png,Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
+    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg,WebP
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg,WebP
@@ -3623,13 +3626,12 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg,WebP
     rotate.right | Right | writes True | suffix rotated right | out Jpeg,WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg,WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
-    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
 # C:\p\a.png + C:\p\b.bmp + C:\p\c.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP,WebP
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Bmp,Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Bmp,Tiff
@@ -3641,8 +3643,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Bmp,Tiff
     rotate.right | Right | writes True | suffix rotated right | out Png,Bmp,Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Bmp,Tiff
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
 # C:\p\a.txt
 # C:\p\a.pdf
 # C:\p\a.png + C:\p\b.txt
@@ -3654,6 +3654,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -3667,9 +3670,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.png:stream
 # C:\p\a.png.
 # C:\p\a.jpe
@@ -3678,6 +3678,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -3693,15 +3696,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.TIF
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -3713,15 +3716,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.Png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -3735,9 +3738,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.gif
 # C:\p\a.heic
 # C:\p.png\a.jpg
@@ -3746,6 +3746,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -3761,15 +3764,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -3783,9 +3786,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\.png
 # C:\p\a.PNG 
 # C:\صور\😀 a.webp
@@ -3794,6 +3794,9 @@
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -3809,15 +3812,15 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…(261 chars)
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -3831,9 +3834,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 ## custom resize: garbage
 # C:\p\a.png
   [Convert] Convert
@@ -3841,6 +3841,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -3854,15 +3857,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.jpg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -3878,15 +3881,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.jpeg
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -3902,15 +3905,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.JFIF
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -3926,15 +3929,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.webp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -3950,15 +3953,14 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\a.bmp
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -3970,14 +3972,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.dib
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Bmp
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Bmp
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Bmp
@@ -3989,14 +3991,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Bmp
     rotate.right | Right | writes True | suffix rotated right | out Bmp
     rotate.180 | 180° | writes True | suffix rotated 180 | out Bmp
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Bmp
 # C:\p\a.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -4008,15 +4011,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.tiff
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -4028,14 +4031,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.png + C:\p\b.jpg
   [Convert] Convert
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
+    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Jpeg
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Jpeg
@@ -4047,15 +4050,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Png,Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Jpeg
-    metadata.info | Image info | writes False | suffix - | out Png,Jpeg
 # C:\p\a.png + C:\p\b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
+    metadata.info | Image info | writes False | suffix - | out Png,Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png,Png
   [Resize] Resize
@@ -4069,14 +4072,14 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Png
     rotate.right | Right | writes True | suffix rotated right | out Png,Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png,Png
-    metadata.info | Image info | writes False | suffix - | out Png,Png
 # C:\p\a.jpg + C:\p\b.webp
   [Convert] Convert
     convert.to-png | To PNG | writes True | suffix - | out Png,Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp,Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff,Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
+    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg,WebP
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg,WebP
@@ -4092,13 +4095,12 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg,WebP
     rotate.right | Right | writes True | suffix rotated right | out Jpeg,WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg,WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg,WebP
-    metadata.info | Image info | writes False | suffix - | out Jpeg,WebP
 # C:\p\a.png + C:\p\b.bmp + C:\p\c.tif
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg,Jpeg,Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP,WebP,WebP
+  [Tools] Tools
+    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Png,Bmp,Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Png,Bmp,Tiff
@@ -4110,8 +4112,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png,Bmp,Tiff
     rotate.right | Right | writes True | suffix rotated right | out Png,Bmp,Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png,Bmp,Tiff
-  [Tools] Tools
-    metadata.info | Image info | writes False | suffix - | out Png,Bmp,Tiff
 # C:\p\a.txt
 # C:\p\a.pdf
 # C:\p\a.png + C:\p\b.txt
@@ -4123,6 +4123,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -4136,9 +4139,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.png:stream
 # C:\p\a.png.
 # C:\p\a.jpe
@@ -4147,6 +4147,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -4162,15 +4165,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.TIF
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
+    metadata.info | Image info | writes False | suffix - | out Tiff
   [Resize] Resize
     resize.percent-25 | 25% | writes True | suffix resized 25% | out Tiff
     resize.percent-50 | 50% | writes True | suffix resized 50% | out Tiff
@@ -4182,15 +4185,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Tiff
     rotate.right | Right | writes True | suffix rotated right | out Tiff
     rotate.180 | 180° | writes True | suffix rotated 180 | out Tiff
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Tiff
-    metadata.info | Image info | writes False | suffix - | out Tiff
 # C:\p\a.Png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -4204,9 +4207,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\a.gif
 # C:\p\a.heic
 # C:\p.png\a.jpg
@@ -4215,6 +4215,9 @@
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
+    metadata.info | Image info | writes False | suffix - | out Jpeg
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out Jpeg
     compress.balanced | Balanced | writes True | suffix compressed | out Jpeg
@@ -4230,15 +4233,15 @@
     rotate.left | Left | writes True | suffix rotated left | out Jpeg
     rotate.right | Right | writes True | suffix rotated right | out Jpeg
     rotate.180 | 180° | writes True | suffix rotated 180 | out Jpeg
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Jpeg
-    metadata.info | Image info | writes False | suffix - | out Jpeg
 # C:\p\a.b.png
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -4252,9 +4255,6 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 # C:\p\.png
 # C:\p\a.PNG 
 # C:\صور\😀 a.webp
@@ -4263,6 +4263,9 @@
     convert.to-png | To PNG | writes True | suffix - | out Png
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
+    metadata.info | Image info | writes False | suffix - | out WebP
   [Compress] Compress
     compress.high | High quality | writes True | suffix compressed | out WebP
     compress.balanced | Balanced | writes True | suffix compressed | out WebP
@@ -4278,15 +4281,15 @@
     rotate.left | Left | writes True | suffix rotated left | out WebP
     rotate.right | Right | writes True | suffix rotated right | out WebP
     rotate.180 | 180° | writes True | suffix rotated 180 | out WebP
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out WebP
-    metadata.info | Image info | writes False | suffix - | out WebP
 # C:\p\xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…(261 chars)
   [Convert] Convert
     convert.to-jpeg | To JPEG | writes True | suffix - | out Jpeg
     convert.to-webp | To WebP | writes True | suffix - | out WebP
     convert.to-bmp | To BMP | writes True | suffix - | out Bmp
     convert.to-tiff | To TIFF | writes True | suffix - | out Tiff
+  [Tools] Tools
+    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
+    metadata.info | Image info | writes False | suffix - | out Png
   [Compress] Compress
     compress.lossless | Lossless | writes True | suffix compressed | out Png
   [Resize] Resize
@@ -4300,8 +4303,5 @@
     rotate.left | Left | writes True | suffix rotated left | out Png
     rotate.right | Right | writes True | suffix rotated right | out Png
     rotate.180 | 180° | writes True | suffix rotated 180 | out Png
-  [Tools] Tools
-    metadata.strip | Remove metadata | writes True | suffix no metadata | out Png
-    metadata.info | Image info | writes False | suffix - | out Png
 ## 1000 png files: convert.to-jpeg convert.to-webp convert.to-bmp convert.to-tiff resize.percent-25 resize.percent-50 resize.percent-75 resize.box-1920x1080 resize.box-1280x720 resize.box-1080x1080 compress.lossless rotate.left rotate.right rotate.180 metadata.strip metadata.info
 ## 1001 png files: 

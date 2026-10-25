@@ -14,7 +14,8 @@ public sealed class GeneralFilesTests
     private static readonly CapabilityResolver Resolver = CapabilityResolver.For(customResizeId: null);
     private static string[] Ids(params string[] paths) => [.. Resolver.Resolve(paths).Select(c => c.Id)];
     // Add to ZIP (V2 PR 5.1) accepts any file or folder too and comes last in Tools.
-    private static readonly string[] General = ["files.info", "files.copy-path", "files.rename", "files.copy-name", "files.copy-folder", "files.sha256", "archive.zip"];
+    // Tools: the file's information and location; Actions: what to do with it (Convert / Tools / Actions, Tangerine parity).
+    private static readonly string[] General = ["files.info", "files.sha256", "files.copy-path", "files.copy-name", "files.rename", "files.copy-folder", "archive.zip"];
 
     [Theory]
     [InlineData(@"C:\p\notes.xyz")]
@@ -41,24 +42,27 @@ public sealed class GeneralFilesTests
         // A sixth category would narrow V1's top ring until "Compress" reaches into the hub gap (UiSurfaceTests): the
         // module shares Tools, as categories are designed to be shared (ADR-0019).
         var menu = RadialMenu.Build(Resolver, [@"C:\p\a.png"]);
-        Assert.Equal(["Convert", "Compress", "Resize", "Rotate", "Tools"], menu.Select(g => g.Label));
+        // Convert, Tools and Actions (Tangerine parity): the file commands have their own group since the wheel PR.
+        Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Rotate", "Actions"], menu.Select(g => g.Label));
         // V2 PR 7.2: seven do not fit; the commands a normal user needs first stay on the ring, the rest go under "More…".
-        Assert.Equal(["Remove metadata", "Image info", "File info", "Copy path", "Rename files", "More…"], menu[^1].Commands.Select(c => c.Label));
+        // File info only where no module has its own: an image has Image info.
+        Assert.Equal(["Remove metadata", "Image info", "SHA-256", "Folder path"], menu[1].Commands.Select(c => c.Label));
+        Assert.Equal(["Copy path", "Copy name", "Rename files", "Add to ZIP"], menu[^1].Commands.Select(c => c.Label));
     }
 
     [Fact]
     public void A_mixed_selection_gets_only_what_every_item_allows()
     {
-        Assert.Equal(["files.info", "files.copy-path", "files.copy-name", "files.copy-folder", "archive.zip"], Ids(@"C:\p\a.png", @"C:\p\holiday\"));
-        Assert.Equal(General, Ids(@"C:\p\a.png", @"C:\p\notes.txt"));
+        Assert.Equal(["files.copy-path", "files.copy-name", "files.copy-folder", "archive.zip"], Ids(@"C:\p\a.png", @"C:\p\holiday\")); // File info is not for an image
+        Assert.Equal(General.Where(id => id != "files.info"), Ids(@"C:\p\a.png", @"C:\p\notes.txt")); // the image has its own info
     }
 
     [Fact]
-    public void A_file_no_module_reads_gets_a_usable_one_category_menu()
+    public void A_file_no_module_reads_gets_a_usable_two_group_menu()
     {
         var menu = RadialMenu.Build(Resolver, [@"C:\p\notes.xyz"]);
-        Assert.Equal(["Tools"], menu.Select(g => g.Label));
-        Assert.True(MenuNavigator.BackSweep(menu.Count, menu[0].Commands.Count) < Math.PI); // commands are reachable
+        Assert.Equal(["Tools", "Actions"], menu.Select(g => g.Label));
+        Assert.True(MenuNavigator.BackSweep(menu.Count, menu[0].Commands.Count) <= Math.PI); // Back takes at most half: commands are reachable
     }
 
     [Fact]
