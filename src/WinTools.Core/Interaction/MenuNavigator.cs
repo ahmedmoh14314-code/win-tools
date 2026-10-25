@@ -61,7 +61,7 @@ public sealed class MenuNavigator
     public MenuGroup? Open => _level >= 0 ? _groups[_level] : null;
 
     /// <summary>The command under the pointer, armed or not.</summary>
-    public Operation? Hot => _level >= 0 && _hot >= 1 ? _groups[_level].Commands[_hot - 1] : null;
+    public CapabilityDescriptor? Hot => _level >= 0 && _hot >= 1 ? _groups[_level].Commands[_hot - 1] : null;
 
     /// <summary>
     /// Width of Back on a category's ring: an equal share, but never narrower than a category sector, so the reverse of
@@ -115,7 +115,7 @@ public sealed class MenuNavigator
     }
 
     /// <summary>The command a drop at this moment would run, or null.</summary>
-    public Operation? Armed(TimeSpan now) => Hot is { } op && now - _shownAt >= ArmDelay ? op : null;
+    public CapabilityDescriptor? Armed(TimeSpan now) => Hot is { } op && now - _shownAt >= ArmDelay ? op : null;
 
     /// <summary>How long the current ring has been on screen.</summary>
     public TimeSpan ShownFor(TimeSpan now) => now - _shownAt;

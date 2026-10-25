@@ -13,4 +13,7 @@
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\WinTools.Core\WinTools.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Golden\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

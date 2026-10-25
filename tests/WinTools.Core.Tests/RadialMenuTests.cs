@@ -7,7 +7,7 @@ namespace WinTools.Core.Tests;
 public sealed class RadialMenuTests
 {
     private static IReadOnlyList<MenuGroup> MenuFor(params string[] paths) =>
-        RadialMenu.Build(new CapabilityResolver(RadialMenu.Catalog(new AppSettings().CustomResizeId())).Resolve(paths));
+        RadialMenu.Build(CapabilityResolver.For(new AppSettings().CustomResizeId()).Resolve(paths));
 
     [Fact]
     public void Jpeg_gets_all_five_categories_in_fixed_order()
@@ -26,9 +26,9 @@ public sealed class RadialMenuTests
         Assert.Equal("resize.box-1600x1600", resize[^1]);
         Assert.Equal(7, resize.Length);
 
-        var preset = RadialMenu.Catalog(new AppSettings { ResizeWidth = 1920, ResizeHeight = 1080 }.CustomResizeId());
+        var preset = ImageCapabilities.Operations(new AppSettings { ResizeWidth = 1920, ResizeHeight = 1080 }.CustomResizeId());
         Assert.Equal(OperationCatalog.All.Count, preset.Count);
-        Assert.Same(OperationCatalog.All, RadialMenu.Catalog(null));
+        Assert.Same(OperationCatalog.All, ImageCapabilities.Operations(null));
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public sealed class RadialMenuTests
     public void A_new_operation_appears_without_any_menu_change()
     {
         var mirror = new Operation("rotate.mirror", "Mirror", OperationKind.Rotate);
-        var menu = RadialMenu.Build(new CapabilityResolver([.. OperationCatalog.All, mirror]).Resolve([@"C:\p\photo.webp"]));
+        var menu = RadialMenu.Build(new CapabilityResolver([.. OperationCatalog.All.Select(ImageCapabilities.Describe), ImageCapabilities.Describe(mirror)]).Resolve([@"C:\p\photo.webp"]));
         Assert.Equal(["Left", "Right", "180°", "Mirror"], menu.Single(g => g.Category == MenuCategory.Rotate).Commands.Select(c => c.Label));
     }
 
@@ -72,7 +72,7 @@ public sealed class RadialMenuTests
     [InlineData(OperationKind.Info, MenuCategory.Tools)]
     public void Each_operation_kind_has_its_category(OperationKind kind, MenuCategory expected)
     {
-        Assert.Equal(expected, RadialMenu.CategoryOf(kind));
+        Assert.Equal(expected, RadialMenu.CategoryOf(ImageCapabilities.CategoryOf(kind)));
     }
 
     [Theory]
@@ -81,7 +81,7 @@ public sealed class RadialMenuTests
     public void Exact_size_that_differs_from_a_preset_only_in_behaviour_gets_a_distinct_label(int w, int h, bool noUpscaleOff, bool keepAspect)
     {
         var settings = new AppSettings { ResizeWidth = w, ResizeHeight = h, NoUpscale = !noUpscaleOff, KeepAspectRatio = keepAspect };
-        var resize = RadialMenu.Build(new CapabilityResolver(RadialMenu.Catalog(settings.CustomResizeId())).Resolve([@"C:\p\a.png"]))
+        var resize = RadialMenu.Build(CapabilityResolver.For(settings.CustomResizeId()).Resolve([@"C:\p\a.png"]))
             .Single(g => g.Category == MenuCategory.Resize).Commands;
         Assert.Equal(resize.Count, resize.Select(c => c.Label).Distinct().Count());
     }
@@ -93,7 +93,7 @@ public sealed class MenuNavigatorTests
     private static TimeSpan Ms(double ms) => TimeSpan.FromMilliseconds(ms);
 
     private static IReadOnlyList<MenuGroup> MenuFor(params string[] paths) =>
-        RadialMenu.Build(new CapabilityResolver(RadialMenu.Catalog(new AppSettings().CustomResizeId())).Resolve(paths));
+        RadialMenu.Build(CapabilityResolver.For(new AppSettings().CustomResizeId()).Resolve(paths));
 
     private static (int, int) At(double angle, double radius96, uint dpi = 96)
     {
