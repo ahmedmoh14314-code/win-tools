@@ -118,6 +118,6 @@ var
 begin
   if CurUninstallStep <> usPostUninstall then Exit;
   Ours := '"' + ExpandConstant('{app}\WinTools.Host.exe') + '"';
-  if RegQueryStringValue(HKCU, RunKey, 'WinTools', Stored) and (CompareText(Trim(Stored), Ours) = 0) then
+  if RegQueryStringValue(HKCU, RunKey, 'WinTools', Stored) and ((CompareText(Trim(Stored), Ours) = 0) or (CompareText(Trim(Stored), Ours + ' --background') = 0)) then
     RegDeleteValue(HKCU, RunKey, 'WinTools');
 end;

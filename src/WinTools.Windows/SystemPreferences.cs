@@ -11,6 +11,13 @@ public static class SystemPreferences
     /// </summary>
     public static bool ReducedMotion() => Ui.SystemParametersInfoW(Ui.SPI_GETCLIENTAREAANIMATION, 0, out var on, 0) && on == 0;
 
+    /// <summary>"ar" when Windows' display language for this user is Arabic (any region), otherwise "en"; the product
+    /// runs with invariant globalization, so the language id comes from Windows itself.</summary>
+    public static string UiLanguageTag() => (GetUserDefaultUILanguage() & 0x3FF) == 0x01 ? "ar" : "en";
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern ushort GetUserDefaultUILanguage();
+
     /// <summary>The pointer's position in physical screen pixels.</summary>
     public static (int X, int Y) PointerPosition() => Ui.GetCursorPos(out var p) ? (p.X, p.Y) : (0, 0);
 }
