@@ -61,7 +61,7 @@ One round (2026-10-25), reproduced on the built worker with the reviewer's own p
 - The Explorer `docx` scenario passed on the final build (runs of 3/3, 2/2 and 1/1).
 
 ## Evidence / experiments
-`DocumentWorkerTests` (8 at first, written first and shown failing to build; 17 after the review):
+`DocumentWorkerTests` (8 at first, written first and shown failing to build; 18 after the review; 19 with the `app.xml` Office writes, whose vectors made Info fail until PR 6.2's work found it):
 - Word paragraphs with Arabic and an entity;
 - PowerPoint slide order to 10;
 - Excel shared, inline and number cells;

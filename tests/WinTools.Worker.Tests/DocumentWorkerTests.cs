@@ -105,6 +105,19 @@ public sealed class DocumentWorkerTests : IDisposable
     }
 
     [Fact]
+    public void Info_reads_the_app_part_office_writes_with_its_vectors()
+    {
+        // Word, Excel and PowerPoint write HeadingPairs and TitlesOfParts as vt:vector elements; a property with child
+        // elements is not text and must not make the part unreadable.
+        const string app = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Template>Normal.dotm</Template><TotalTime>1</TotalTime><Pages>3</Pages><Words>120</Words><Application>Microsoft Office Word</Application><HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Title</vt:lpstr></vt:variant><vt:variant><vt:i4>1</vt:i4></vt:variant></vt:vector></HeadingPairs><TitlesOfParts><vt:vector size="1" baseType="lpstr"><vt:lpstr></vt:lpstr></vt:vector></TitlesOfParts><Company></Company><AppVersion>16.0000</AppVersion></Properties>""";
+        var docx = Make("office.docx", [.. OoxmlSamples.Docx("<w:p><w:r><w:t>x</w:t></w:r></w:p>"), ("docProps/app.xml", app)]);
+        var r = DocumentJobs.Run(Request(DocumentCapabilities.InfoId, docx));
+        Assert.True(r.Success, r.Message);
+        Assert.Equal("3", r.Facts.Single(f => f.Label == "Pages").Value);
+        Assert.Equal("120", r.Facts.Single(f => f.Label == "Words").Value);
+    }
+
+    [Fact]
     public void A_dtd_is_refused_so_entity_expansion_never_happens()
     {
         var bomb = """<?xml version="1.0"?><!DOCTYPE w [<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">]><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>&b;</w:t></w:r></w:p></w:body></w:document>""";

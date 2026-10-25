@@ -419,24 +419,29 @@ internal static class DocumentJobs
     private static string Showable(string value) =>
         new([.. value.Where(c => !char.IsControl(c) && CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.Format)]);
 
-    /// <summary>The text of each top-level element of a properties part, by local name.</summary>
+    /// <summary>
+    /// The text of each top-level element of a properties part, by local name. An element with child elements (Office's
+    /// HeadingPairs and TitlesOfParts vectors, a custom property) is not text and is left out, never an error.
+    /// </summary>
     private static Dictionary<string, string> Properties(string xml)
     {
         var props = new Dictionary<string, string>(StringComparer.Ordinal);
         using var r = Xml(xml);
         r.MoveToContent();
         var depth = r.Depth;
-        var onNext = false;
-        while (onNext || r.Read())
+        while (r.Read())
         {
-            onNext = false;
-            if (r.NodeType == XmlNodeType.Element && r.Depth == depth + 1 && !r.IsEmptyElement)
+            if (r.NodeType != XmlNodeType.Element || r.Depth != depth + 1 || r.IsEmptyElement) continue;
+            var name = r.LocalName;
+            var value = new StringBuilder();
+            var simple = true;
+            while (r.Read() && r.Depth > depth + 1)
             {
-                var name = r.LocalName;
-                var value = r.ReadElementContentAsString();
-                onNext = true;
-                props.TryAdd(name, Showable(value)); // one RLM must not make the whole Info unbelievable (evaluator, PR 6.1)
+                if (r.NodeType == XmlNodeType.Element) simple = false;
+                else if (r.NodeType is XmlNodeType.Text or XmlNodeType.CDATA or XmlNodeType.Whitespace or XmlNodeType.SignificantWhitespace) value.Append(r.Value);
             }
+            // One RLM must not make the whole Info unbelievable (evaluator, PR 6.1).
+            if (simple) props.TryAdd(name, Showable(value.ToString()));
         }
         return props;
     }
