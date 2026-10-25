@@ -11,8 +11,13 @@
 param(
     [Parameter(Mandatory = $true)] [string] $Iscc,
     [string] $Version = '0.1.0',
-    [string] $Label = '0.1.0-beta'
+    [string] $Label = '0.1.0-beta',
+    # The name shown in Setup and Apps ("0.2.0 Beta", "0.2.0 Preview") and the one in the file name ("0.2.0-Beta").
+    [string] $DisplayLabel = '',
+    [string] $FileLabel = ''
 )
+if (-not $DisplayLabel) { $DisplayLabel = "$Version Beta" }
+if (-not $FileLabel) { $FileLabel = "$Version-Beta" }
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $payload = Join-Path $root 'artifacts\installer\payload'
@@ -53,7 +58,13 @@ foreach ($file in Get-ChildItem -LiteralPath (Join-Path $root 'third-party') -Re
 }
 [System.IO.File]::WriteAllText((Join-Path $payload 'THIRD-PARTY-NOTICES.txt'), $notices.ToString(), [System.Text.UTF8Encoding]::new($false))
 
-& $Iscc "/DPayloadDir=$payload" "/DOutputDir=$(Join-Path $root 'artifacts\installer')" (Join-Path $PSScriptRoot 'WinTools.iss')
+& $Iscc "/DPayloadDir=$payload" "/DOutputDir=$(Join-Path $root 'artifacts\installer')" "/DAppVersion=$Version" "/DAppVersionLabel=$DisplayLabel" "/DAppFileLabel=$FileLabel" (Join-Path $PSScriptRoot 'WinTools.iss')
 if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
-$setup = Join-Path $root "artifacts\installer\WinTools-$Version-Beta-Setup.exe"
+$setup = Join-Path $root "artifacts\installer\WinTools-$FileLabel-Setup.exe"
+
+# The portable package: the same payload as a ZIP (no installer, no Start menu entry, no uninstall entry).
+$portable = Join-Path $root "artifacts\installer\WinTools-$FileLabel-portable.zip"
+if (Test-Path -LiteralPath $portable) { Remove-Item -LiteralPath $portable -Force }
+Compress-Archive -Path (Join-Path $payload '*') -DestinationPath $portable -CompressionLevel Optimal
+Get-FileHash -Algorithm SHA256 -LiteralPath $portable | Format-List
 Get-FileHash -Algorithm SHA256 -LiteralPath $setup | Format-List
