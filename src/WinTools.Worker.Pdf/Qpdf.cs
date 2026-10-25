@@ -4,8 +4,12 @@ using System.Text;
 namespace WinTools.Worker.Pdf;
 
 /// <summary>What one qpdf run returned: its exit code and the start of what it printed.</summary>
-internal sealed record QpdfRun(int ExitCode, string Output, bool TimedOut)
+internal sealed record QpdfRun(int ExitCode, string Output, bool TimedOut, string StdErr = "")
 {
+    /// <summary>qpdf could not open a file at all ("qpdf: open name: Permission denied"): a lock, not a damaged PDF.</summary>
+    public bool CouldNotOpen => ExitCode == Errors && StdErr.Contains(": open ", StringComparison.Ordinal);
+
+
     /// <summary>qpdf's exit codes (manual, "Exit Status"): 0 success, 2 errors, 3 warnings but a usable result.</summary>
     public const int Success = 0, Errors = 2, Warnings = 3;
 
@@ -64,7 +68,8 @@ internal static class Qpdf
         process.StandardInput.Close(); // nothing is ever read from the terminal (a password prompt would wait forever)
         var output = new StringBuilder();
         var stdout = Drain(process.StandardOutput, output);
-        var stderr = Drain(process.StandardError, null);
+        var errors = new StringBuilder();
+        var stderr = Drain(process.StandardError, errors);
         if (!process.WaitForExit(timeout))
         {
             try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
@@ -72,7 +77,9 @@ internal static class Qpdf
             return new QpdfRun(-1, "", TimedOut: true);
         }
         Task.WaitAll([stdout, stderr], TimeSpan.FromSeconds(5));
-        lock (output) return new QpdfRun(process.ExitCode, output.ToString(), TimedOut: false);
+        string err;
+        lock (errors) err = errors.ToString();
+        lock (output) return new QpdfRun(process.ExitCode, output.ToString(), TimedOut: false, err);
     }
 
     private static Task Drain(StreamReader reader, StringBuilder? into) => Task.Run(async () =>

@@ -193,7 +193,19 @@ internal static class PdfJobs
         return new Source(path, copyName, version, copied, MarkOfTheWeb.ZoneToCarry(path));
     }
 
-    private static QpdfRun Q(string work, params string[] arguments) => Qpdf.Run(arguments, QpdfTimeout, work);
+    /// <summary>
+    /// One qpdf run in the work folder. A run that could not open its input at all is tried again a few times: an antivirus
+    /// or indexer may hold a file the worker has just written (seen on a CI machine as a valid PDF reported "damaged").
+    /// </summary>
+    private static QpdfRun Q(string work, params string[] arguments)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var run = Qpdf.Run(arguments, QpdfTimeout, work);
+            if (!run.CouldNotOpen || attempt == 5) return run;
+            Thread.Sleep(200 * attempt);
+        }
+    }
 
     /// <summary>
     /// The page count, which also proves qpdf can open the file. A file that needs a password to open is refused: the
