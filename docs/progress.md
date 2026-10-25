@@ -20,9 +20,13 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 | #26 | Documents 6.1: DOCX/XLSX/PPTX text and info (ADR-0025) | Merged |
 | #24 | Archives 5.2: TAR, TAR.GZ and GZIP extract, test, info; GZIP decompress (ADR-0023 decision 9) | Merged |
 | #27 | Documents 6.2: Remove properties (ADR-0025 decision 6) | Merged |
+| #28–#30 | Checkpoint docs and release-matrix rows; portable ZIP names; the dialog-focus spike | Merged |
+| #31 | PDF 2.2: Protect and Remove protection, the password dialog and the secret channel (ADR-0026) | Merged |
 
 ## Last known-good commit
-- `main` at `b67ae8f`, the merge of #24, with CI `build-and-test` green.
+- `main` at `fe01125`, the merge of #31, with CI `build-and-test` green.
+- #31's own Explorer runs on its final build passed: Protect 2/2, Remove protection 2/2, PDF info 1/1.
+- The full matrix below was run on `b67ae8f`, before #31.
 - The full release matrix on that build: **36 of 36 rows, 55 of 55 cycles**, with no key left down (`docs/testing/2026-10-25-release-matrix-v2.md`). It covers the 26 V1 and Stage 1 rows and 10 new V2 module rows.
 - `main` is protected: a pull request and a green `build-and-test` are required.
 
@@ -49,7 +53,6 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 
 ## Not done (V2 Definition of Done, §9 and §15)
 - **PDF:**
-  - protect and unprotect (2.2: needs the password dialog and a secret channel);
   - PDFium rendering, text and image extraction (3.x);
   - Images→PDF;
   - Organize Pages (4.1);
@@ -83,6 +86,8 @@ ADR-0017 to ADR-0025 (see `docs/adr/README.md`). ADR-0018 to ADR-0025 are **Prop
   - It then passed 3/3 in isolation, in the next full runs, and in a 15-run loop of its class with the PDF and archive tests (900 tests).
   - The cause is unknown and the failure message was not kept. Capture it the next time it fails.
 - **Owner checks:**
+  - a drop by hand on "Protect…", then the protected PDF opened in Acrobat with the same password (an Arabic one ideally: SASLprep's bidi rule is not enforced);
+  - the Settings window with an Arabic keyboard layout: click into the width box. The dialogs process crashed there (fixed in #31); Settings has the same setting and was not changed;
   - the Explorer behaviour on a OneDrive-synced folder (archives);
   - real Office files saved by Office (Documents, Remove properties): the tests use packages shaped like Office's.
 - Owner decisions that are still open: ADR-0002 (Windows baseline), ADR-0008 (packaging), the ADR-0017 gate values.
@@ -92,8 +97,6 @@ None. The remaining V2 items need the dialogs (passwords, rename patterns, offse
 - The dialog keyboard-focus question (ADR-0019) has a positive spike: `docs/research/2026-10-25-dialog-focus-after-drop.md`, 4 of 4 automated drops. A manual drop by the owner is still pending.
 
 ## Next recommended task
-1. PR 2.2: the password dialog and secret channel, then PDF protect/unprotect. The encrypted-ZIP extract reuses both.
-   - The spike `docs/research/2026-10-25-qpdf-password-stdin.md` shows qpdf takes every argument, passwords included, on stdin through `@-`: AES-256 with a Unicode password, and a wrong password exits 2 with no output.
-   - Its constraints: no line break in a password, never `--show-encryption` (it prints the password), and an amendment to ADR-0022.
+1. Encrypted-ZIP extract: it reuses #31's prompt, policy and channel (ADR-0026).
 2. PR 3.1: the PDFium spike and ADR.
 3. PR 7.2: batch rename.
