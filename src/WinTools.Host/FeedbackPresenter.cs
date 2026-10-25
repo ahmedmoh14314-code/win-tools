@@ -170,6 +170,18 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         log.Event("toast", new { kind = "secretRefused" });
     });
 
+    /// <summary>
+    /// One archive needs a password (V2 PR 5.3, ADR-0027): no toast and no sound, since the password window follows at
+    /// once. Its progress, shown or still pending, ends here.
+    /// </summary>
+    public void SecretNeeded(CapabilityDescriptor capability) => ui.Post(() =>
+    {
+        if (capability.LongRunning) _done = _total;
+        var shown = toast.Content is { Progress: not null };
+        if (shown) toast.Hide();
+        log.Event("toast", new { kind = "secretNeeded", progressHidden = shown });
+    });
+
     public void Crashed(CapabilityDescriptor capability, int files) => ui.Post(() =>
     {
         if (capability.LongRunning) _done = _total;

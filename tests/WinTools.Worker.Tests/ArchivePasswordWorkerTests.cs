@@ -39,7 +39,7 @@ public sealed class ArchivePasswordWorkerTests : IDisposable
     /// <summary>Everything in the test folder, hidden staging folders included.</summary>
     private string[] Everything() => [.. Directory.EnumerateFileSystemEntries(_dir.Path).Select(p => Path.GetFileName(p)!).Order(StringComparer.Ordinal)];
 
-    private void AssertSamplesTree(JobRequest request, JobResult r)
+    private static void AssertSamplesTree(JobRequest request, JobResult r)
     {
         Assert.True(r.Success, r.Message);
         var folder = r.Outputs.Single().Path;
@@ -170,6 +170,18 @@ public sealed class ArchivePasswordWorkerTests : IDisposable
         Assert.Contains(r.Error, new[] { ErrorCode.DecodeFailed, ErrorCode.PasswordIncorrect });
         Assert.Equal(["changed.zip", "source.zip"], Everything());
         Assert.False(ArchiveJobs.Run(Request(ArchiveCapabilities.TestId, zip, Right)).Success);
+    }
+
+    [Fact]
+    public void A_changed_byte_in_a_stored_ZipCrypto_entry_fails_on_its_CRC_the_only_check_it_has()
+    {
+        // No decompressor and no HMAC to notice: without the CRC-32 the changed file would be extracted as a success.
+        var bytes = Build("p"u8.ToArray(), out var placed, new Item("a.txt", "abcdefghij"u8.ToArray(), Cipher.ZipCrypto, Deflate: false));
+        bytes[placed[0].Data + 12 + 3] ^= 0x01;
+        var zip = _dir.Write("changed.zip", bytes);
+        var r = ArchiveJobs.Run(Request(ArchiveCapabilities.ExtractId, zip, "p"));
+        Assert.Equal(ErrorCode.DecodeFailed, r.Error);
+        Assert.Equal(["changed.zip"], Everything());
     }
 
     [Fact]

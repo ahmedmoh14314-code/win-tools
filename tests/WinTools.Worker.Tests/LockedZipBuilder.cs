@@ -194,7 +194,9 @@ public static class LockedZipBuilder
             aes.EncryptEcb(counter, stream, PaddingMode.None);
             for (var j = 0; j < 16 && i + j < data.Length; j++) encrypted[i + j] = (byte)(data[i + j] ^ stream[j]);
         }
-        var auth = HMACSHA1.HashData(keys[keyLength..(keyLength * 2)], encrypted)[..10];
+        using var hmac = IncrementalHash.CreateHMAC(HashAlgorithmName.SHA1, keys[keyLength..(keyLength * 2)]); // the format's own choice
+        hmac.AppendData(encrypted);
+        var auth = hmac.GetHashAndReset()[..10];
         return [.. salt, .. keys[(keyLength * 2)..], .. encrypted, .. auth];
     }
 }

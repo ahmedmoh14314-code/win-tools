@@ -33,8 +33,10 @@ public sealed record InputRule(IReadOnlySet<string> Kinds, int MinCount = 1, int
 /// <summary>
 /// A secret a command needs before it runs (V2 PR 2.2, ADR-0026): the dialog's title, and whether the secret is new and
 /// typed twice. The host asks the dialogs process for it after the drop and passes it to this job only.
+/// <paramref name="WhenRequired"/> (V2 PR 5.3, ADR-0027): the command runs first without it, and the host asks only when
+/// that run ends with "a password is needed" (an archive, which may or may not be encrypted).
 /// </summary>
-public sealed record SecretPrompt(string Title, bool Confirm);
+public sealed record SecretPrompt(string Title, bool Confirm, bool WhenRequired = false);
 
 /// <summary>
 /// One command the radial menu can offer, as the resolver and the menu see it, whatever module provides it (ADR-0007,

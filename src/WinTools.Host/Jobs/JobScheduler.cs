@@ -14,6 +14,9 @@ internal interface IJobFeedback
     void Progress(CapabilityDescriptor capability, int done, int total);
     void Finished(CapabilityDescriptor capability, IReadOnlyList<JobItem> items);
     void Crashed(CapabilityDescriptor capability, int files);
+
+    /// <summary>One archive needs a password (ADR-0027): the host asks for it instead of a toast; any progress shown ends.</summary>
+    void SecretNeeded(CapabilityDescriptor capability);
 }
 
 /// <summary>What runs one module's requests: its pool of workers (<see cref="WorkerClient"/>), or a fake in tests.</summary>
@@ -40,6 +43,16 @@ internal sealed class ScheduledJob(string id, CapabilityDescriptor capability, I
     internal IReadOnlyDictionary<string, string>? Parameters => _parameters;
 
     internal void DropParameters() => _parameters = null;
+
+    private volatile bool _secretNeeded;
+
+    /// <summary>
+    /// The job ran without a secret and its one input needs one (V2 PR 5.3, ADR-0027): the user was told nothing, and the
+    /// host asks for the password and queues the job again with it. Set before <see cref="Completion"/> completes.
+    /// </summary>
+    public bool SecretNeeded => _secretNeeded;
+
+    internal void MarkSecretNeeded() => _secretNeeded = true;
 
     private readonly CancellationTokenSource _cancel = new();
     private readonly TaskCompletionSource _done = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -103,7 +116,8 @@ internal sealed class JobScheduler
     /// <summary>
     /// Queues a job for the capability's module; null when no module of that name is registered. A command that declares
     /// a secret prompt runs only with a non-empty password in <paramref name="parameters"/>, and only such a command takes
-    /// parameters of its own (ADR-0026).
+    /// parameters of its own (ADR-0026). One whose prompt comes only when required runs without, or with the password
+    /// (ADR-0027).
     /// </summary>
     public ScheduledJob? Enqueue(CapabilityDescriptor capability, IReadOnlyList<string> paths, IReadOnlyDictionary<string, string>? parameters = null)
     {
@@ -111,7 +125,8 @@ internal sealed class JobScheduler
         // A prompt command: the password, and for an existing one at most its normalized form beside it (ADR-0026).
         var secret = parameters is not null && parameters.TryGetValue(PasswordPolicy.ParameterName, out var p) && p.Length > 0
             && parameters.Keys.All(k => k is PasswordPolicy.ParameterName || k is PasswordPolicy.NormalizedParameterName && capability.Prompt is { Confirm: false });
-        if (capability.Prompt is not null ? !secret : parameters is { Count: > 0 })
+        var none = parameters is not { Count: > 0 };
+        if (!(capability.Prompt switch { null => none, { WhenRequired: true } => none || secret, _ => secret }))
         {
             _log.Event("job.refused", new { op = capability.Id, reason = capability.Prompt is not null ? "noSecret" : "unexpectedParameters" });
             return null;
@@ -178,6 +193,15 @@ internal sealed class JobScheduler
             _log.Event("job.done", new { job = job.Id, op = capability.Id, ok = results.Count(r => r.Success), nothingToDo = results.Count(r => r.Error == ErrorCode.NothingToDo),
                 failed = results.Count(r => !r.Success && r.Error != ErrorCode.NothingToDo), cancelled = results.Count(r => r.Error == ErrorCode.Cancelled),
                 ms = Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 1), jobObject = runner.Client.JobObjectAssigned, workers = runner.Client.LastLaneCount });
+            // One archive that needs a password (ADR-0027): asked for instead of a toast, and the job runs again with it.
+            // Only a run without a secret asks, so a wrong password is a toast and never a loop.
+            if (capability.Prompt is { WhenRequired: true } && job.Parameters is null && results is [{ Success: false, Error: ErrorCode.PasswordRequired }])
+            {
+                job.MarkSecretNeeded();
+                _log.Event("job.secretNeeded", new { job = job.Id, op = capability.Id });
+                _feedback.SecretNeeded(capability);
+                return;
+            }
             var items = requests.Zip(results, (q, r) => new JobItem(q.Inputs.Count == 1 ? NameOf(q.Inputs[0]) : $"{q.Inputs.Count} items", r,
                 q.Inputs.Count == 1 ? SizeOf(q.Inputs[0]) : null, r.OutputPath is { } o ? SizeOf(o) : null, q.Inputs.Count)).ToArray();
             _feedback.Finished(capability, items);

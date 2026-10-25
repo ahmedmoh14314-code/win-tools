@@ -62,6 +62,7 @@ public sealed class JobSchedulerTests : IDisposable
         public void Progress(CapabilityDescriptor capability, int done, int total) { }
         void IJobFeedback.Finished(CapabilityDescriptor capability, IReadOnlyList<JobItem> items) { lock (Events) { Events.Add($"done {capability.Id}"); Finished.Add(items); } }
         public void Crashed(CapabilityDescriptor capability, int files) { lock (Events) Events.Add($"crash {capability.Id}"); }
+        public void SecretNeeded(CapabilityDescriptor capability) { lock (Events) Events.Add($"secret {capability.Id}"); }
     }
 
     private static CapabilityDescriptor Capability(string id, string module, CapabilityShape shape = CapabilityShape.PerFile) =>
@@ -77,6 +78,7 @@ public sealed class JobSchedulerTests : IDisposable
         public void Progress(CapabilityDescriptor capability, int done, int total) => throw new InvalidOperationException("progress");
         public void Finished(CapabilityDescriptor capability, IReadOnlyList<JobItem> items) => throw new InvalidOperationException("finished");
         public void Crashed(CapabilityDescriptor capability, int files) => throw new InvalidOperationException("crashed");
+        public void SecretNeeded(CapabilityDescriptor capability) => throw new InvalidOperationException("secret");
     }
 
     [Fact]

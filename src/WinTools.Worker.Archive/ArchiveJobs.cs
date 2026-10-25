@@ -17,7 +17,9 @@ namespace WinTools.Worker.Archive;
 /// new folder. Links, devices and encrypted entries are skipped or refused. Bytes are counted as they decompress, against
 /// the entry count, total size, ratio and free-space limits (<see cref="ArchiveLimits"/>). Each file's CRC-32 is checked
 /// (.NET does not check it on read). Everything goes into an exclusive staging folder in the destination, which takes its
-/// final name only when the whole archive succeeded; nothing is ever written outside it, overwritten, or opened.</item>
+/// final name only when the whole archive succeeded; nothing is ever written outside it, overwritten, or opened.
+/// Encrypted entries are read with the password in the request (V2 PR 5.3, ADR-0027, <see cref="ZipLocks"/>); without
+/// one, an archive that has any is refused before anything is written.</item>
 /// <item><b>Test</b>: the same reading and checks, with nothing written.</item>
 /// <item><b>Info</b>: counts and sizes from the archive's directory, nothing decompressed.</item>
 /// <item><b>Add to ZIP</b>: the selected files and folders (links and online-only files skipped, never followed or
@@ -39,12 +41,30 @@ internal static class ArchiveJobs
         public ErrorCode Code { get; } = code;
     }
 
-    public static JobResult Run(JobRequest request)
+    public static JobResult Run(JobRequest request) => Run(request, null);
+
+    /// <param name="passwordBytes">The password bytes to try, for tests that fix the code pages; null derives them from the
+    /// request's password with this machine's (<see cref="ZipPasswords"/>).</param>
+    internal static JobResult Run(JobRequest request, IReadOnlyList<byte[]>? passwordBytes)
     {
         var id = request.Id;
         if (id is not { Length: > 0 and <= 64 } || id.Any(c => !char.IsAsciiLetterOrDigit(c)))
             return JobResult.Fail("invalid", ErrorCode.InvalidRequest, "Request id must be 1-64 ASCII letters or digits.");
-        if (request.Parameters is { Count: > 0 }) return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters.");
+        // Only Extract and Test take a parameter: the password of an encrypted ZIP, as typed and in its NFKC form, checked
+        // again here (ADR-0026, ADR-0027). Its text never appears in a message.
+        IReadOnlyList<byte[]>? candidates = null;
+        if (request.CapabilityId is ArchiveCapabilities.ExtractId or ArchiveCapabilities.TestId && request.Parameters is { Count: > 0 } p)
+        {
+            if (p.Count > 2 || !p.TryGetValue(PasswordPolicy.ParameterName, out var given)
+                || p.Keys.Any(k => k is not (PasswordPolicy.ParameterName or PasswordPolicy.NormalizedParameterName)))
+                return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes a password and nothing else.");
+            var normalized = p.GetValueOrDefault(PasswordPolicy.NormalizedParameterName);
+            foreach (var value in normalized is null ? [given] : new[] { given, normalized })
+                if (PasswordPolicy.CheckExisting(value) is { Ok: false } check)
+                    return JobResult.Fail(id, ErrorCode.InvalidRequest, $"The password was refused: {check.Problem}");
+            candidates = passwordBytes ?? ZipPasswords.Candidates(given, normalized);
+        }
+        else if (request.Parameters is { Count: > 0 }) return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters.");
         if (request.Inputs.Count == 0 || !request.Inputs.All(PathPolicy.IsSupported))
             return JobResult.Fail(id, ErrorCode.InvalidRequest, "Every input must be a supported path.");
         if (request.OutputDirectory is { } od && !PathPolicy.IsSupported(Path.Combine(od, "x.zip")))
@@ -56,8 +76,8 @@ internal static class ArchiveJobs
             return request.CapabilityId switch
             {
                 ArchiveCapabilities.InfoId => Info(id, request.Inputs[0]),
-                ArchiveCapabilities.TestId => Test(id, request.Inputs[0]),
-                ArchiveCapabilities.ExtractId => Extract(request),
+                ArchiveCapabilities.TestId => Test(id, request.Inputs[0], candidates),
+                ArchiveCapabilities.ExtractId => Extract(request, candidates),
                 ArchiveCapabilities.ZipId => Zip(request),
                 ArchiveCapabilities.DecompressId => Decompress(request),
                 _ => JobResult.Fail(id, ErrorCode.UnsupportedOperation, "This worker does not run that command."),
@@ -65,6 +85,7 @@ internal static class ArchiveJobs
         }
         catch (ArchiveFailure ex) { return JobResult.Fail(id, ex.Code, ex.Message); }
         catch (TarRefused ex) { return JobResult.Fail(id, ex.Code, ex.Message); }
+        catch (ZipRefused ex) { return JobResult.Fail(id, ex.Code, ex.Message); }
         catch (NotSupportedException) { return JobResult.Fail(id, ErrorCode.UnsupportedContent, "The archive holds an entry of a kind WinTools does not read."); }
         catch (InvalidDataException) { return JobResult.Fail(id, ErrorCode.DecodeFailed, "The archive is damaged."); }
         catch (EndOfStreamException) { return JobResult.Fail(id, ErrorCode.DecodeFailed, "The archive is cut short."); }
@@ -94,12 +115,16 @@ internal static class ArchiveJobs
     /// One entry of any archive format, as the checks see it (V2 PR 5.2): its name and kind, how to read it, and the
     /// check values the format carries (ZIP: CRC-32 and sizes; TAR: none, its GZIP wrapper checks itself at the end).
     /// </summary>
-    private sealed record Entry(string Name, bool IsFolder, bool IsLink, bool IsSpecial, bool IsEncrypted, Func<Stream> Open,
+    /// <param name="IsLocked">Encrypted, and no password was given: it cannot be read (V2 PR 5.3).</param>
+    private sealed record Entry(string Name, bool IsFolder, bool IsLink, bool IsSpecial, bool IsEncrypted, bool IsLocked, Func<Stream> Open,
         long? Length, uint? Crc, long CompressedLength, DateTime Modified);
 
-    private static IEnumerable<Entry> EntriesOf(ZipArchive zip) => zip.Entries.Select(e => new Entry(e.FullName,
-        e.FullName.EndsWith('/') || e.FullName.EndsWith('\\'), IsLink(e), IsSpecial(e), e.IsEncrypted, e.Open, e.Length, e.Crc32, e.CompressedLength,
-        e.LastWriteTime.LocalDateTime));
+    /// <summary>A ZIP's entries; an encrypted one is read through <paramref name="locks"/> when a password was given. An
+    /// AE-2 entry's CRC field is 0 by design: its HMAC, checked by the stream, is its check value (ADR-0027).</summary>
+    private static IEnumerable<Entry> EntriesOf(ZipArchive zip, ZipLocks? locks) => zip.Entries.Select((e, i) => new Entry(e.FullName,
+        e.FullName.EndsWith('/') || e.FullName.EndsWith('\\'), IsLink(e), IsSpecial(e), e.IsEncrypted, e.IsEncrypted && locks is null,
+        e.IsEncrypted && locks is not null ? () => locks.Open(i) : e.Open, e.Length,
+        e.IsEncrypted && locks is not null && locks.SkipsCrc(i) ? null : e.Crc32, e.CompressedLength, e.LastWriteTime.LocalDateTime));
 
     /// <summary>The archive formats this worker reads, told by their content.</summary>
     private enum Kind { Zip, Tar, TarGz }
@@ -113,13 +138,27 @@ internal static class ArchiveJobs
     {
         private readonly FileStream _file;
         private readonly ZipArchive? _zip;
+        private readonly ZipLocks? _locks;
         private readonly Stream? _tarStream;
 
         public Kind Kind { get; }
         public long Length => _file.Length;
         public string TypeName => Kind switch { Kind.Zip => "ZIP archive", Kind.Tar => "TAR archive", _ => "TAR.GZ archive" };
 
-        public Source(string path)
+        /// <summary>Whether a ZIP has encrypted entries and no password was given to read them.</summary>
+        public bool HasLockedEntries => _zip is not null && _locks is null && _zip.Entries.Any(e => e.IsEncrypted);
+
+        /// <summary>The ZIP's directory records, read only for an archive with encrypted entries (Info's method); null
+        /// otherwise, or when this worker would not read them.</summary>
+        public IReadOnlyList<ZipRecord>? EncryptedRecords()
+        {
+            if (_zip is null || !_zip.Entries.Any(e => e.IsEncrypted)) return null;
+            try { return ZipDirectory.Read(_file, _zip); }
+            catch (ZipRefused) { return null; }
+        }
+
+        /// <param name="passwordBytes">The password bytes to try on a ZIP's encrypted entries; null for none (V2 PR 5.3).</param>
+        public Source(string path, IReadOnlyList<byte[]>? passwordBytes = null)
         {
             if (Directory.Exists(path)) throw new ArchiveFailure(ErrorCode.IsAFolder, "The source is a folder, not a file.");
             var info = new FileInfo(path);
@@ -141,6 +180,7 @@ internal static class ArchiveJobs
                     Kind = Kind.Zip;
                     _zip = new ZipArchive(_file, ZipArchiveMode.Read, leaveOpen: true);
                     if (_zip.Entries.Count > ArchiveLimits.MaxEntries) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"The archive has more than {ArchiveLimits.MaxEntries:N0} entries.");
+                    if (passwordBytes is not null && _zip.Entries.Any(e => e.IsEncrypted)) _locks = new ZipLocks(path, _zip, passwordBytes);
                 }
                 else if (read >= 2 && head[0] == 0x1F && head[1] == 0x8B)
                 {
@@ -170,7 +210,7 @@ internal static class ArchiveJobs
             }
         }
 
-        public IEnumerable<Entry> Entries() => _zip is not null ? EntriesOf(_zip) : TarEntries();
+        public IEnumerable<Entry> Entries() => _zip is not null ? EntriesOf(_zip, _locks) : TarEntries();
 
         private IEnumerable<Entry> TarEntries()
         {
@@ -185,7 +225,7 @@ internal static class ArchiveJobs
                 var isLink = type is TarEntryType.SymbolicLink or TarEntryType.HardLink;
                 var name = isFolder && !e.Name.EndsWith('/') ? e.Name + "/" : e.Name;
                 var data = e.DataStream;
-                yield return new Entry(name, isFolder, isLink, !isFile && !isFolder && !isLink, false,
+                yield return new Entry(name, isFolder, isLink, !isFile && !isFolder && !isLink, false, false,
                     () => data ?? Stream.Null, isFile ? e.Length : 0, null, -1, e.ModificationTime.LocalDateTime);
             }
             // The GZIP wrapper checks its CRC-32 and length only at its end: read what follows the TAR's last entry, bounded.
@@ -215,6 +255,7 @@ internal static class ArchiveJobs
 
         public void Dispose()
         {
+            _locks?.Dispose();
             _zip?.Dispose();
             if (_tarStream is not null && !ReferenceEquals(_tarStream, _file)) _tarStream.Dispose();
             _file.Dispose();
@@ -246,12 +287,21 @@ internal static class ArchiveJobs
             new("Size", $"{FeedbackText.Size(size)} unpacked, {FeedbackText.Size(new FileInfo(path).Length)} packed"),
             new("Top level", top.Count == 1 ? $"One folder or file: {Truncate(top.Single(), 60)}" : $"{top.Count:N0} items"),
         };
-        if (encrypted > 0) facts.Add(new("Protection", $"{encrypted:N0} entries need a password", Notice: true));
+        if (encrypted > 0) facts.Add(new("Protection", $"{encrypted:N0} entries need a password{MethodsOf(source)}", Notice: true));
         if (links > 0) facts.Add(new("Links", $"{links:N0} links (never extracted)", Notice: true));
         // Judged against the archive's own size too: declared sizes can lie and entries can share data (evaluator, PR 5.1).
         if ((packed > 0 && size / Math.Max(packed, 1) > ArchiveLimits.MaxRatio) || ArchiveLimits.IsArchiveBomb(size, new FileInfo(path).Length))
             facts.Add(new("Ratio", "Unusually high compression; it may be an archive bomb", Notice: true));
         return JobResult.WithFacts(id, facts);
+    }
+
+    /// <summary>" (AES-256)", " (ZipCrypto, a weak, old method)", or both; nothing when the directory does not say.</summary>
+    private static string MethodsOf(Source source)
+    {
+        if (source.EncryptedRecords() is not { } records) return "";
+        var methods = records.Where(r => r.IsEncrypted).Select(ZipLocks.MethodOf).Distinct().Order(StringComparer.Ordinal)
+            .Select(m => m == "ZipCrypto" ? "ZipCrypto, a weak, old method" : m).ToArray();
+        return methods.Length == 0 ? "" : $" ({string.Join("; ", methods)})";
     }
 
     private static string Truncate(string s, int n) => s.Length <= n ? s : s[..(n - 1)] + "…";
@@ -275,7 +325,7 @@ internal static class ArchiveJobs
         void Skip(string why) { skipped++; if (problems.Count < 5) problems.Add(why); }
         foreach (var entry in entries)
         {
-            if (entry.IsEncrypted) throw new ArchiveFailure(ErrorCode.PasswordRequired, "The archive has entries protected with a password.");
+            if (entry.IsLocked) throw new ArchiveFailure(ErrorCode.PasswordRequired, "The archive has entries protected with a password.");
             if (entry.IsLink || entry.IsSpecial) { Skip("a link or device entry"); continue; } // never followed, never created
             var verdict = ArchiveEntryPolicy.Judge(entry.Name);
             if (verdict.Refusal is not null) { Skip(verdict.Refusal); continue; }
@@ -330,7 +380,9 @@ internal static class ArchiveJobs
                 }
             }
             if ((entry.Length is { } length && written != length) || (entry.Crc is { } expected && crc.Value != expected))
-                throw new ArchiveFailure(ErrorCode.DecodeFailed, "An entry is damaged (its check value does not match).");
+                throw new ArchiveFailure(ErrorCode.DecodeFailed, entry.IsEncrypted
+                    ? "An entry is damaged, or the password is not its own (its check value does not match); nothing was kept."
+                    : "An entry is damaged (its check value does not match).");
             if (target is not null) File.SetLastWriteTime(target, ClampDate(entry.Modified));
             files++;
         }
@@ -352,9 +404,10 @@ internal static class ArchiveJobs
         }
     }
 
-    private static JobResult Test(string id, string path)
+    private static JobResult Test(string id, string path, IReadOnlyList<byte[]>? passwordBytes)
     {
-        using var source = new Source(path);
+        using var source = new Source(path, passwordBytes);
+        if (source.HasLockedEntries) throw new ArchiveFailure(ErrorCode.PasswordRequired, "The archive has entries protected with a password.");
         var pass = ReadAll(source.Entries(), into: null, freeBytes: null, source.Length, ratioRules: true);
         var facts = new List<JobFact>
         {
@@ -440,11 +493,13 @@ internal static class ArchiveJobs
         }
     }
 
-    private static JobResult Extract(JobRequest request)
+    private static JobResult Extract(JobRequest request, IReadOnlyList<byte[]>? passwordBytes)
     {
         var path = request.Inputs[0];
         var dest = Destination(request, path);
-        using var source = new Source(path);
+        using var source = new Source(path, passwordBytes);
+        // Asked before the staging folder exists, so the host can ask for the password with nothing to clean (ADR-0027).
+        if (source.HasLockedEntries) throw new ArchiveFailure(ErrorCode.PasswordRequired, "The archive has entries protected with a password.");
         // A ZIP's directory is read before anything is written, so a damaged one fails here with nothing to clean.
         var zone = MarkOfTheWeb.ZoneToCarry(path);
         var staging = ArchiveCapabilities.TempPath(request.Id, request.Inputs, request.OutputDirectory);
@@ -570,7 +625,7 @@ internal static class ArchiveJobs
                 // not apply: these are the user's own files, which may be highly compressible.
                 fs.Position = 0;
                 using var check = new ZipArchive(fs, ZipArchiveMode.Read, leaveOpen: true);
-                var pass = ReadAll(EntriesOf(check), into: null, freeBytes: null, fs.Length, ratioRules: false);
+                var pass = ReadAll(EntriesOf(check, null), into: null, freeBytes: null, fs.Length, ratioRules: false);
                 if (pass.Files != items.Count || pass.Skipped > 0) throw new ArchiveFailure(ErrorCode.OutputValidationFailed, "The new archive did not check out; nothing was saved.");
             }
             if (zone is { } z) MarkOfTheWeb.Apply(temp, z);

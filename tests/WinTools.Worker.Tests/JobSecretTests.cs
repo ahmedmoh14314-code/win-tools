@@ -60,6 +60,7 @@ public sealed class JobSecretTests : IDisposable
         public void Progress(CapabilityDescriptor capability, int done, int total) { }
         public void Finished(CapabilityDescriptor capability, IReadOnlyList<JobItem> items) { }
         public void Crashed(CapabilityDescriptor capability, int files) { }
+        public void SecretNeeded(CapabilityDescriptor capability) { }
     }
 
     private static CapabilityDescriptor Capability(string id, SecretPrompt? prompt = null) =>
