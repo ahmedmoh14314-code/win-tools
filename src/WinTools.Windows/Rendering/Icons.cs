@@ -3,7 +3,7 @@ using WinTools.Windows.Native;
 
 namespace WinTools.Windows.Rendering;
 
-internal enum Glyph { Convert, Compress, Resize, Rotate, Tools, Back, Check, Alert, Info, None, Mark, More, Pages, Archive, Timing }
+internal enum Glyph { Convert, Compress, Resize, Rotate, Tools, Back, Check, Alert, Info, None, Mark, More, Pages, Archive, Timing, Edit, Sound }
 
 /// <summary>
 /// The product's line icons, drawn as vectors on a 24-unit grid (stroke 2 units, round caps), so they are crisp at every
@@ -22,6 +22,8 @@ internal static class Icons
         "pages" => Glyph.Pages,
         "archive" => Glyph.Archive,
         "timing" => Glyph.Timing,
+        "edit" => Glyph.Edit,
+        "sound" => Glyph.Sound,
         _ => Glyph.Tools,
     };
 
@@ -91,6 +93,16 @@ internal static class Icons
             case Glyph.Timing: // a clock face with its hands: when something shows
                 p.StrokeCircle(cx, cy, 8.5f * u, colour, w);
                 L(12, 12, 12, 7); L(12, 12, 15.5f, 14);
+                break;
+            case Glyph.Edit: // scissors: cut, join, change the speed
+                p.Arc(P(7, 17).X, P(7, 17).Y, 3f * u, 0, Math.PI * 2, colour, w);
+                p.Arc(P(17, 17).X, P(17, 17).Y, 3f * u, 0, Math.PI * 2, colour, w);
+                L(9, 15, 18, 4); L(15, 15, 6, 4);
+                break;
+            case Glyph.Sound: // a speaker and two sound waves
+                Poly(P(4, 9), P(8, 9), P(13, 5), P(13, 19), P(8, 15), P(4, 15), P(4, 9));
+                p.Arc(P(13, 12).X, P(13, 12).Y, 4f * u, -Math.PI * 0.3, Math.PI * 0.6, colour, w);
+                p.Arc(P(13, 12).X, P(13, 12).Y, 7.5f * u, -Math.PI * 0.3, Math.PI * 0.6, colour, w);
                 break;
             case Glyph.More: // three dots: there is more than the ring shows
                 foreach (var x in new[] { 5f, 12f, 19f }) p.FillCircle(P(x, 12).X, P(x, 12).Y, 2f * u, colour);

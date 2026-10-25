@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- On-demand worker of the Media module (V2 media sprint, ADR-0028): runs the bundled FFmpeg and ffprobe (LGPL build)
+       as child processes for video and audio; decodes nothing itself. One JSON line per job, like the other workers. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <FfmpegDir>$(MSBuildThisFileDirectory)..\..\artifacts\engines\ffmpeg-8.1.3\</FfmpegDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WinTools.Core\WinTools.Core.csproj" />
+    <ProjectReference Include="..\WinTools.Worker.Common\WinTools.Worker.Common.csproj" />
+    <InternalsVisibleTo Include="WinTools.Worker.Tests" />
+  </ItemGroup>
+  <!-- FFmpeg, fetched and hash-checked by scripts\Get-Engines.ps1, goes in a folder of its own next to the worker. -->
+  <ItemGroup>
+    <None Include="$(FfmpegDir)*.exe;$(FfmpegDir)*.dll;$(FfmpegDir)LICENSE.txt" Link="ffmpeg\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+  <Target Name="RequireFfmpeg" BeforeTargets="Build" Condition="!Exists('$(FfmpegDir)ffmpeg.exe')">
+    <Error Text="The media engine is missing: run scripts\Get-Engines.ps1 (it fetches FFmpeg 8.1.3, LGPL build, and checks its hashes, ADR-0028)." />
+  </Target>
+</Project>
