@@ -90,7 +90,17 @@ $rows = @(
     @('long-batch-10',        'batch --batch 10 --path-style long --cycles 1',                    'long paths, 10 files'),
     @('general-file-info',    'file --cycles 2',                                                  'a file no module reads: File info under Tools, nothing written (V2 PR 1.4)'),
     @('general-sha256',       'file --op files.sha256 --cycles 1',                                'SHA-256 of a file: the info panel, nothing written'),
-    @('folder-info',          'folder --cycles 2',                                                'a dropped folder: File info, its contents unchanged (UX-009)')
+    @('folder-info',          'folder --cycles 2',                                                'a dropped folder: File info, its contents unchanged (UX-009)'),
+    @('pdf-rotate',           'pdf --cycles 2',                                                   'PDF rotate right: a new PDF, the original unchanged (V2 PR 2.1)'),
+    @('pdf-info',             'pdf --op pdf.info --cycles 1',                                     'PDF info: the info panel, nothing written'),
+    @('zip-extract',          'zip --cycles 2',                                                   'ZIP extract: a new folder with exactly the archive''s tree (V2 PR 5.1)'),
+    @('zip-test',             'zip --op archive.test --cycles 1',                                 'ZIP test: the info panel, nothing written'),
+    @('tgz-extract',          'tgz --cycles 2',                                                   'TAR.GZ extract: the same tree from a PAX TAR.GZ (V2 PR 5.2)'),
+    @('srt-to-vtt',           'srt --cycles 2',                                                   'Arabic SRT with an emoji to WebVTT (V2 PR 7.1)'),
+    @('srt-shift',            'srt --op subtitles.shift-plus-1000 --cycles 1',                    'subtitle timing 1 s later: a new SRT'),
+    @('docx-text',            'docx --cycles 2',                                                  'Word text: a new UTF-8 text file (V2 PR 6.1)'),
+    @('docx-info',            'docx --op documents.info --cycles 1',                              'document info with Office-shaped properties: the info panel'),
+    @('docx-clean',           'docx --op documents.clean --cycles 1',                             'Remove properties: a copy without author or title (V2 PR 6.2)')
 )
 if ($HostPath) {
     $hostArgs = '--host "' + $HostPath + '"'
