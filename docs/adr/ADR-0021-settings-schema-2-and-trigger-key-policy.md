@@ -12,19 +12,28 @@ The low-level keyboard hook passes every key on (rules/windows-integration.md: h
 
 ## Decision
 1. **Schema 2 groups the file in sections:** `trigger`, `output`, `images`, `ui`. A module adds its own section when it has settings (YAGNI: no empty `pdf` or `archive` sections yet). In memory `AppSettings` stays flat, so no caller changes. A schema 1 file (flat) is read as it is and written back as schema 2. Missing sections take their defaults, and odd values are repaired by the existing normalisation.
-2. **Trigger keys: Space, F2–F4 and F6–F12, decided by the typing-interference spike** (`docs/research/2026-10-25-typing-interference.md`).
-   - Explorer ignored each of these keys during a drag (two cycles per key). A control without a drag showed that the probe sees Explorer's reaction to F2, F3, F4, F6, F10, F11 and type-ahead when there is one.
-   - A conversion with F2, F4, F6 and F11 as the trigger passed end to end.
-   - **F5** is refused: a refresh is invisible to the probe.
-   - **F1** is refused: Help, not measured.
-   - **Letters and digits** are refused although Explorer ignored them during a drag. The ring opens on any left-button drag, not only on a file drag, so a letter pressed while holding the mouse in a game or a drawing program would open it there. They wait for a file-drag-only condition.
-   - `TriggerKeyPolicy` gives the reason for every refusal. A refused key in the settings file is reported in the load note, and the window names the keys it does not offer and why.
+2. **Trigger keys: Space, F7, F8, F9 and F12, the keys that do nothing in Explorer** (spike: `docs/research/2026-10-25-typing-interference.md`).
+   - The spike showed that Explorer ignores F2–F12, letters and digits while a file is dragged. A control without a drag proved that the probe sees F2, F3, F4, F6, F10, F11 and type-ahead when Explorer does act.
+   - Two paths were not measured (evaluator review): a key held past the drop repeats into Explorer after the drag ends, and with Ctrl, Shift or Alt it is another shortcut (Alt+F4, Shift+F10).
+   - So only keys whose stray press is harmless are offered.
+   - **Refused:**
+     - F2–F4, F6, F10 and F11 (rename, search, address bar, focus, menu bar, full screen);
+     - F5 (refresh);
+     - F1 (Help);
+     - letters and digits: the ring opens on any left-button drag, so in a game or a drawing program they would open it there.
+   - V1 users who chose F10 or F11 get Space and a load note with the reason.
+   - `TriggerKeyPolicy` gives the reason for every refusal. A refused key in the file is reported in the load note, and the window says which keys are not offered and why.
+   - **Limits:**
+     - one PC and one layout (Arabic);
+     - Explorer as the only drag source;
+     - keys pressed and released without a modifier.
 3. **Reset to defaults** in the settings window asks first, then restores every value in the file and clears any message about the old values. "Start with Windows" is not in the file and stays as it is.
 4. **Sections are read only when there are some and the file does not say schema 1.** A file that says schema 1 is read flat whatever its fields; anything else without sections is read flat too, as V1 did, which keeps the known fields of a newer flat file. A newer number is never lowered when written.
 
 ## Alternatives considered
 - **Allow F2–F12 before the spike, as D8 says.** Rejected at the time: with a pass-through hook, F5 during a drag could refresh the view and F2 could start a rename. The spike then measured them; F5 stays refused.
 - **Offer letters, since Explorer ignored them during a drag.** Rejected for now: the risk is outside Explorer (any left-button drag opens the ring), and the spike measured Explorer only.
+- **Offer F2–F6, F10 and F11, which the probe showed Explorer ignores during a drag** (the first version of this decision). Rejected after review: held past the drop or pressed with a modifier, they reach Explorer as rename, address bar, menu or full screen, and neither path was measured.
 - **Remove F8–F12 before the spike, since they were unmeasured too.** Rejected: V1 users who chose them would silently have got Space. The spike kept them.
 - **Also write the flat schema 1 fields beside the sections**, so a downgrade keeps the user's values. Rejected: two copies of every value invite them to disagree; a downgrade shows defaults but never overwrites the file.
 - **A nested record in memory.** Rejected for now: every caller would change, for no behaviour.
@@ -37,8 +46,8 @@ The low-level keyboard hook passes every key on (rules/windows-integration.md: h
 ## Evidence / experiments
 - `SettingsSchemaTests` (15): migration keeps every value, the section layout, round trip, repair of a partial file, Reset, and every key's verdict.
 - `SettingsHardeningTests`: a newer schema (3 and 4, flat and in sections) is never moved aside or overwritten; the load note reports an invalid output folder in both layouts and a refused trigger key with its reason.
-- Spike (2026-10-25): `keyprobe` (during a drag) and `keycontrol` (no drag) for F2–F12, A, B, D, E, Q, Z, 0, 1 and 5; the results table is in the research note. Trigger end to end with F2 (3/3), F4, F6 and F11 (2/2 each).
-- `SettingsSchemaTests.Every_key_offered_or_refused_has_a_reason`: every offered key and every refusal (F1, F5, letters, a digit, a modifier), shown failing on the earlier policy (5 of 16).
+- Spike (2026-10-25): `keyprobe` (during a drag) and `keycontrol` (no drag) for F2–F12, A, B, D, E, Q, Z, 0, 1 and 5; the results table is in the research note. Trigger end to end with F7, F9 and F12 (2/2 each), and before the review F2, F4, F6 and F11.
+- `SettingsSchemaTests.Every_key_offered_or_refused_has_a_reason`: every offered key and every refusal (F1, F5, letters, a digit, a modifier), shown failing on the earlier policy.
 
 ## Evaluator review
 One round (2026-10-24), no blocker. Major, fixed: the policy refused F2–F7 for lack of evidence while allowing F8–F12 with none either (decision 2 now says so and the spike measures all of F2–F12). Minors fixed: the refusal reasons reached no one (load note and window hint); Reset left stale error messages and had no confirmation; the footer could overlap the buttons; a schema 1 file with an object field named like a section lost its values (decision 4); the output-folder load note missed schema 2 files; no newer-schema test used sections; `ToJson` lowered a newer schema number; the ADR index row and ADR-0013's schema note. Open: Reset and the window are not yet checked by hand (the desktop was in use).
