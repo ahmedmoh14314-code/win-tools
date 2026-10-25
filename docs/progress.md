@@ -89,6 +89,7 @@ ADR-0017 to ADR-0025 (see `docs/adr/README.md`). ADR-0018 to ADR-0025 are **Prop
 
 ## Current blockers
 None. The remaining V2 items need the dialogs (passwords, rename patterns, offsets) and the PDFium spike.
+- The dialog keyboard-focus question (ADR-0019) has a positive spike: `docs/research/2026-10-25-dialog-focus-after-drop.md`, 4 of 4 automated drops. A manual drop by the owner is still pending.
 
 ## Next recommended task
 1. PR 2.2: the password dialog and secret channel, then PDF protect/unprotect. The encrypted-ZIP extract reuses both.
