@@ -5,6 +5,7 @@
     <Project Path="src/WinTools.Host/WinTools.Host.csproj" />
     <Project Path="src/WinTools.Worker/WinTools.Worker.csproj" />
     <Project Path="src/WinTools.Settings/WinTools.Settings.csproj" />
+    <Project Path="src/WinTools.Dialogs/WinTools.Dialogs.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/WinTools.Core.Tests/WinTools.Core.Tests.csproj" />

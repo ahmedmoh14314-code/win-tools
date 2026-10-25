@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using WinTools.Core.Capabilities;
+using WinTools.Core.Jobs;
 using WinTools.Core.Feedback;
 using WinTools.Core.Files;
 using WinTools.Core.Interaction;
@@ -16,7 +17,8 @@ namespace WinTools.Host;
 /// Connects input, session, overlay, capabilities and jobs on the UI thread. It translates events into calls on
 /// <see cref="InteractionSession"/> and carries out the actions the session returns; the rules live in the session.
 /// It also plays the navigation sounds (<see cref="NavigationSounds"/> decides which) and tells the feedback layer where
-/// the user dropped.
+/// the user dropped. One exception: a "More…" pick is awaited on a pool thread and then enqueued from there (the
+/// scheduler, the log and the presenter are thread-safe).
 /// </summary>
 internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
 {
@@ -224,9 +226,16 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     private bool BuildMenu(IReadOnlyList<string> paths, int startDx, int startDy, TimeSpan shownAt)
     {
         if (_navigator is not null && (_navigator.Groups.Count > 0 || paths.Count == 0)) return false;
-        _navigator = new MenuNavigator(RadialMenu.Build(_sessionResolver.Resolve(paths)), _dpi);
+        _navigator = new MenuNavigator(RadialMenu.Build(_sessionResolver, paths), _dpi, RadialMenu.EmptyReason(paths));
         _navigator.Shown(startDx, startDy, shownAt, _dpi);
         return true;
+    }
+
+    /// <summary>The open category's place on the ring (the navigation sounds key on it).</summary>
+    private static int IndexOf(IReadOnlyList<MenuGroup> groups, MenuGroup open)
+    {
+        for (var i = 0; i < groups.Count; i++) if (ReferenceEquals(groups[i], open)) return i;
+        return -1;
     }
 
     void IOverlayEvents.DropData(DropDataEvent report) => _log.Event(report.Stage switch
@@ -266,7 +275,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         }
         var view = nav.View(now);
         _overlay.SetView(view);
-        if (_navigationSounds.OnView(nav.Open is { } open ? (int)open.Category : -1, view.Hot, now) is { } sound) _sounds.Play(sound);
+        if (_navigationSounds.OnView(nav.Open is { } open ? IndexOf(nav.Groups, open) : -1, view.Hot, now) is { } sound) _sounds.Play(sound);
         return nav.Hot is not null;
     }
 
@@ -310,8 +319,10 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             _log.Event("drop", new { accepted = false, reason, hot = hot?.Id, openMs, files = paths.Count, at = $"{dx},{dy}", sounds = SoundCounts(), frames });
             return false;
         }
-        // Re-resolve from the drop's own data object; run only if it still offers the command that was armed.
-        if (!_sessionResolver.Resolve(paths).Any(o => o.Id == chosen.Id))
+        // Re-resolve from the drop's own data object; run only if it still offers the command that was armed (for
+        // "More…", every command it holds).
+        var offered = _sessionResolver.Resolve(paths).Select(o => o.Id).ToHashSet(StringComparer.Ordinal);
+        if (RadialMenu.IsMore(chosen) ? !RadialMenu.Overflow(chosen).All(o => offered.Contains(o.Id)) : !offered.Contains(chosen.Id))
         {
             _sounds.Play(UiSound.Nothing);
             _log.Event("drop", new { accepted = false, reason = "commandsChanged", files = paths.Count });
@@ -319,15 +330,42 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         }
         // Never throw here: this runs inside OLE's Drop. A command no module runs is refused like a changed one, with the
         // Nothing sound: a drop that runs nothing never reads as accepted (evaluator, PR #15).
-        if (!_jobs.Runs(chosen.Module))
+        // "More…" belongs to the menu, not a module: it needs a module for the commands it holds.
+        if (RadialMenu.IsMore(chosen) ? !RadialMenu.Overflow(chosen).Any(o => _jobs.Runs(o.Module)) : !_jobs.Runs(chosen.Module))
         {
             _sounds.Play(UiSound.Nothing);
             _log.Event("drop", new { accepted = false, reason = "noModule", op = chosen.Id, module = chosen.Module, files = paths.Count });
             return false;
         }
         _log.Event("drop", new { accepted = true, op = chosen.Id, openMs, files = paths.Count, sounds = SoundCounts(), frames });
-        if (_jobs.Enqueue(chosen, paths) is null) _log.Event("job.refused", new { op = chosen.Id, module = chosen.Module });
+        if (RadialMenu.IsMore(chosen)) _ = PickAndRunAsync(RadialMenu.Overflow(chosen), paths, _centre.X + dx, _centre.Y + dy);
+        else Run(chosen, paths);
         return true;
+    }
+
+    private void Run(CapabilityDescriptor capability, IReadOnlyList<string> paths)
+    {
+        if (_jobs.Enqueue(capability, paths) is null) _log.Event("job.refused", new { op = capability.Id, module = capability.Module }); // no runner for that module
+    }
+
+    /// <summary>"More…": the commands that did not fit the ring, in a list (the dialogs process); the pick runs on the dropped files.</summary>
+    private async Task PickAndRunAsync(IReadOnlyList<CapabilityDescriptor> commands, IReadOnlyList<string> paths, int x, int y)
+    {
+        // Fire and forget from Drop: nothing here may throw unobserved (evaluator, PR #17). Runs on a pool thread; the
+        // scheduler, the log and the presenter are thread-safe.
+        try
+        {
+            var request = new PickRequest("More commands", [.. commands.Select(c => new PickItem(c.Id, c.Label))], x, y);
+            var outcome = await DialogsClient.Default.PickAsync(request).ConfigureAwait(false);
+            _log.Event("more.pick", new { offered = commands.Count, end = outcome.End.ToString(), chosen = outcome.Id });
+            if (outcome.End == PickEnd.Unavailable) _feedback.DialogUnavailable(); // an accepted drop that runs nothing must say so
+            else if (commands.FirstOrDefault(c => c.Id == outcome.Id) is { } capability) Run(capability, paths);
+        }
+        catch (Exception ex)
+        {
+            _log.Event("more.error", new { type = ex.GetType().Name });
+            _feedback.DialogUnavailable();
+        }
     }
 
     public void Dispose()

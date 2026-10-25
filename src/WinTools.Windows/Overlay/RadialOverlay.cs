@@ -85,7 +85,7 @@ public sealed class RadialOverlay : IDisposable, IDropSink
         var size = RadialRenderer.WindowSize(dpi);
         var anim = new RingAnimation(reducedMotion: false);
         var sample = new MenuView(["Convert", "Compress", "Resize", "Rotate", "Tools"], 0, 0, false, "", 0,
-            [MenuCategory.Convert, MenuCategory.Compress, MenuCategory.Resize, MenuCategory.Rotate, MenuCategory.Tools]);
+            ["convert", "compress", "resize", "rotate", "tools"]);
         foreach (var view in new[] { RadialRenderer.Waiting, sample })
         {
             anim.Start(view.Labels.Count, TimeSpan.Zero);

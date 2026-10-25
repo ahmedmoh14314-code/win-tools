@@ -26,7 +26,7 @@ Directory.CreateDirectory(outDir);
 var dpis = args.Length > 1 ? args[1..].Select(uint.Parse).ToArray() : [96u, 144u];
 
 var catalog = ImageCapabilities.Operations(new AppSettings().CustomResizeId());
-var menu = RadialMenu.Build(new CapabilityResolver(catalog.Select(ImageCapabilities.Describe).ToArray()).Resolve([@"C:\images\photo.jpg"]));
+var menu = RadialMenu.Build(new CapabilityResolver(catalog.Select(ImageCapabilities.Describe).ToArray()), [@"C:\images\photo.jpg"]);
 var renderer = new RadialRenderer();
 using var surface = new Surface();
 
@@ -59,7 +59,7 @@ foreach (var dpi in dpis)
         var count = menu[g].Commands.Count;
         var labels = new[] { MenuNavigator.BackLabel }.Concat(menu[g].Commands.Select(c => c.Label)).ToArray();
         MenuView Level(int hot, bool armed) => new(labels, MenuNavigator.LevelStart(g, menu.Count, count), hot, armed, menu[g].Label,
-            MenuNavigator.BackSweep(menu.Count, count), null, menu[g].Category);
+            MenuNavigator.BackSweep(menu.Count, count), null, menu[g].Category.Icon);
         var key = menu[g].Label.ToLowerInvariant();
         Ring($"{key}", dpi, Level(-1, false), a => Settle(a, -1, false));
         Ring($"{key}-pending", dpi, Level(2, false), a => Settle(a, 2, false));
@@ -145,7 +145,7 @@ internal static class Bench
     public static void Run(uint dpi)
     {
         var catalog = ImageCapabilities.Operations(new AppSettings().CustomResizeId());
-        var menu = RadialMenu.Build(new CapabilityResolver(catalog.Select(ImageCapabilities.Describe).ToArray()).Resolve([@"C:\images\photo.jpg"]));
+        var menu = RadialMenu.Build(new CapabilityResolver(catalog.Select(ImageCapabilities.Describe).ToArray()), [@"C:\images\photo.jpg"]);
         var nav = new MenuNavigator(menu, dpi);
         var renderer = new RadialRenderer();
         using var surface = new Surface();
@@ -153,7 +153,7 @@ internal static class Bench
         var g = 0;
         var labels = new[] { MenuNavigator.BackLabel }.Concat(menu[g].Commands.Select(c => c.Label)).ToArray();
         var level = new MenuView(labels, MenuNavigator.LevelStart(g, menu.Count, menu[g].Commands.Count), 2, true, menu[g].Label,
-            MenuNavigator.BackSweep(menu.Count, menu[g].Commands.Count), null, menu[g].Category);
+            MenuNavigator.BackSweep(menu.Count, menu[g].Commands.Count), null, menu[g].Category.Icon);
         foreach (var (name, view) in new[] { ("top", nav.View(TimeSpan.Zero)), ("level-armed", level) })
         {
             var anim = new RingAnimation(false);
@@ -191,7 +191,7 @@ internal static class Live
         {
             WinTools.Windows.OleApartment.Initialize();
             using var overlay = new RadialOverlay(new NoEvents());
-            var menu = RadialMenu.Build(CapabilityResolver.Default.Resolve([@"C:\images.jpg"]));
+            var menu = RadialMenu.Build(CapabilityResolver.Default, [@"C:\images.jpg"]);
             overlay.ShowAt(300, 300);
             overlay.SetView(new MenuNavigator(menu, 96).View(TimeSpan.Zero));
             var until = DateTime.UtcNow.AddMilliseconds(500);

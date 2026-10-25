@@ -68,7 +68,7 @@ internal sealed class RadialRenderer
             p.FillAnnularSector(c, c, inner, outer, 0, 2 * Math.PI, 0, Palette.Surface, Palette.Surface);
             Hub(p, c, k, view, fade);
             var y = c - p.S(68) * k;
-            p.Text("No actions", c - p.S(50), y - p.S(9), c + p.S(50), y + p.S(9), Argb.Lerp(Palette.Surface, Palette.TextSecondary, fade), (int)Math.Round(p.S(RingLabelMetrics.LabelText96)), LabelWeight);
+            p.Text(view.EmptyText ?? "No actions", c - p.S(70), y - p.S(9), c + p.S(70), y + p.S(9), Argb.Lerp(Palette.Surface, Palette.TextSecondary, fade), (int)Math.Round(p.S(RingLabelMetrics.LabelText96)), LabelWeight);
             return;
         }
 

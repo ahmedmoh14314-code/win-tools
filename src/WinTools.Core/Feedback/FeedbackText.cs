@@ -101,6 +101,7 @@ public static class FeedbackText
         ErrorCode.WorkerCrashed or ErrorCode.WorkerProtocolError => "The converter stopped unexpectedly. The original is unchanged.",
         ErrorCode.Cancelled => "The job was cancelled.",
         ErrorCode.InvalidRequest => "The file's path is not supported.",
+        ErrorCode.IsAFolder => "It is a folder; this command works on files.",
         _ => "Something went wrong. The original is unchanged.",
     };
 
