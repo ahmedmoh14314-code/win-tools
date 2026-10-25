@@ -36,7 +36,7 @@ internal static class DocumentJobs
         var id = request.Id;
         if (id is not { Length: > 0 and <= 64 } || id.Any(c => !char.IsAsciiLetterOrDigit(c)))
             return JobResult.Fail("invalid", ErrorCode.InvalidRequest, "Request id must be 1-64 ASCII letters or digits.");
-        if (request.CapabilityId is not (DocumentCapabilities.ExtractTextId or DocumentCapabilities.InfoId))
+        if (request.CapabilityId is not (DocumentCapabilities.ExtractTextId or DocumentCapabilities.InfoId or DocumentCapabilities.RemovePropertiesId))
             return JobResult.Fail(id, ErrorCode.UnsupportedOperation, "This worker does not run that command.");
         if (request.Parameters is { Count: > 0 }) return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters.");
         if (request.Inputs is not [var path] || !PathPolicy.IsSupported(path) || Path.EndsInDirectorySeparator(path))
@@ -53,7 +53,12 @@ internal static class DocumentJobs
                 _ => throw new DocFailure(ErrorCode.UnsupportedContent, "Not a Word, Excel or PowerPoint file."),
             };
             using var zip = Open(path, kind);
-            return request.CapabilityId == DocumentCapabilities.InfoId ? Info(id, zip, kind) : ExtractText(request, path, zip, kind);
+            return request.CapabilityId switch
+            {
+                DocumentCapabilities.InfoId => Info(id, zip, kind),
+                DocumentCapabilities.ExtractTextId => ExtractText(request, path, zip, kind),
+                _ => RemoveProperties(request, path, zip, kind),
+            };
         }
         catch (DocFailure ex) { return JobResult.Fail(id, ex.Code, ex.Message); }
         catch (XmlException) { return JobResult.Fail(id, ErrorCode.DecodeFailed, "A part of the document is not valid XML (or declares a DTD, which is never read)."); }
@@ -318,10 +323,15 @@ internal static class DocumentJobs
         if (!content) return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "The document has no text.");
         var output = kind == Kind.PowerPoint ? text.ToString().TrimEnd('\r', '\n') + "\r\n" : text.ToString();
         byte[] bytes = [0xEF, 0xBB, 0xBF, .. Encoding.UTF8.GetBytes(output)];
-        return Commit(request, path, bytes);
+        return Commit(request, path, DocumentCapabilities.Candidates(path, request.OutputDirectory), s => s.Write(bytes),
+            temp => File.ReadAllBytes(temp).AsSpan().SequenceEqual(bytes), []);
     }
 
-    private static JobResult Commit(JobRequest request, string source, byte[] bytes)
+    /// <summary>
+    /// Writes the output to an exclusive hidden temp, checks it, carries the source's zone and claims the first free
+    /// candidate name; the temp never survives a failure.
+    /// </summary>
+    private static JobResult Commit(JobRequest request, string source, IEnumerable<string> candidates, Action<FileStream> write, Func<string, bool> valid, IReadOnlyList<JobFact> facts)
     {
         var dir = new DirectoryInfo(request.OutputDirectory ?? Path.GetDirectoryName(source)!);
         if (!dir.Exists) return JobResult.Fail(request.Id, request.OutputDirectory is null ? ErrorCode.SourceNotFound : ErrorCode.OutputDirectoryNotWritable, "The destination folder does not exist.");
@@ -331,23 +341,24 @@ internal static class DocumentJobs
         var committed = false;
         try
         {
-            using (var fs = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            using (var fs = new FileStream(temp, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
             {
-                fs.Write(bytes);
+                write(fs);
                 fs.Flush(flushToDisk: true);
             }
             File.SetAttributes(temp, FileAttributes.Hidden);
-            if (!File.ReadAllBytes(temp).AsSpan().SequenceEqual(bytes)) return JobResult.Fail(request.Id, ErrorCode.OutputValidationFailed, "The new file did not check out; nothing was saved.");
+            if (!valid(temp)) return JobResult.Fail(request.Id, ErrorCode.OutputValidationFailed, "The new file did not check out; nothing was saved.");
             if (MarkOfTheWeb.ZoneToCarry(source) is { } z) MarkOfTheWeb.Apply(temp, z);
             File.SetAttributes(temp, FileAttributes.Normal);
-            var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
-            foreach (var candidate in DocumentCapabilities.Candidates(source, request.OutputDirectory))
+            string hash;
+            using (var check = new FileStream(temp, FileMode.Open, FileAccess.Read, FileShare.Read)) hash = Convert.ToHexStringLower(SHA256.HashData(check));
+            foreach (var candidate in candidates)
             {
                 try
                 {
                     File.Move(temp, candidate, overwrite: false);
                     committed = true;
-                    return JobResult.Ok(request.Id, new JobOutput(candidate, hash));
+                    return new JobResult(request.Id, true, ErrorCode.None, null, [new JobOutput(candidate, hash)], facts);
                 }
                 catch (IOException ex) when (ex.HResult is ErrorFileExists or ErrorAlreadyExists) { }
             }
@@ -357,6 +368,260 @@ internal static class DocumentJobs
         {
             if (!committed) try { File.Delete(temp); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }
+    }
+
+    // Relationship types of the package's property parts, transitional and strict (ADR-0025 decision 6).
+    private static readonly string[] PropertyRelationships = ["/metadata/core-properties", "/extended-properties", "/custom-properties", "/extendedProperties", "/customProperties"];
+
+    /// <summary>
+    /// Remove properties (V2 PR 6.2): a copy of the package whose property parts (found through the package's
+    /// relationships, and at their usual names) hold only their empty root element; every other part is copied byte for
+    /// byte, in the same order, and checked again in the copy. A signed package is refused: the copy would break its
+    /// signature. What stays (comment and revision authors, custom XML data) is said, not silently kept.
+    /// </summary>
+    private static JobResult RemoveProperties(JobRequest request, string path, ZipArchive zip, Kind kind)
+    {
+        if (zip.Entries.Any(e => e.FullName.StartsWith("_xmlsignatures/", StringComparison.OrdinalIgnoreCase)))
+            throw Signed();
+        // A backslash is not a part name Office writes; which part a reader takes for it is anyone's guess (evaluator, PR 6.2).
+        if (zip.Entries.Any(e => e.FullName.Contains('\\', StringComparison.Ordinal)))
+            throw new DocFailure(ErrorCode.UnsupportedContent, "The document's package uses part names Office does not write; nothing was changed.");
+        var empty = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        var found = false;
+        foreach (var part in PropertyParts(zip))
+        {
+            var xml = ReadPart(zip, part)!;
+            // Only a part that is a properties part is emptied: a relationship cannot make the body one (evaluator, PR 6.2).
+            if (!IsPropertiesRoot(xml)) throw new DocFailure(ErrorCode.UnsupportedContent, "A part the document calls its properties is not a properties part; nothing was changed.");
+            found |= HasContent(xml);
+            empty[part] = Encoding.UTF8.GetBytes(EmptyRoot(xml));
+        }
+        if (!found) return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "The document has no properties to remove.");
+
+        void Write(FileStream fs)
+        {
+            using var output = new ZipArchive(fs, ZipArchiveMode.Create, leaveOpen: true);
+            foreach (var e in zip.Entries)
+            {
+                var copy = output.CreateEntry(e.FullName, CompressionLevel.Optimal);
+                copy.LastWriteTime = e.LastWriteTime;
+                using var to = copy.Open();
+                if (empty.TryGetValue(e.FullName, out var bytes)) to.Write(bytes);
+                else
+                {
+                    using var from = e.Open();
+                    CopyDeclared(from, to, e.Length, e.Crc32);
+                }
+            }
+        }
+
+        bool Valid(string temp)
+        {
+            try
+            {
+                using var copy = Open(temp, kind);
+                if (!copy.Entries.Select(e => e.FullName).SequenceEqual(zip.Entries.Select(e => e.FullName), StringComparer.Ordinal)) return false;
+                foreach (var e in copy.Entries)
+                {
+                    if (empty.ContainsKey(e.FullName)) { if (HasContent(ReadPart(copy, e.FullName)!)) return false; }
+                    else if (!PartHash(e).AsSpan().SequenceEqual(PartHash(zip.GetEntry(e.FullName)!))) return false;
+                }
+                return true;
+            }
+            catch (Exception ex) when (ex is DocFailure or InvalidDataException or XmlException or IOException) { return false; }
+        }
+
+        return Commit(request, path, DocumentCapabilities.CleanCandidates(path, request.OutputDirectory), Write, Valid, Kept(zip, kind));
+    }
+
+    private static readonly Uri PackageRoot = new("http://package/");
+
+    private static readonly HashSet<string> PropertyNamespaces = new(StringComparer.Ordinal)
+    {
+        "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+        "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties",
+        "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties",
+        "http://purl.oclc.org/ooxml/officeDocument/extendedProperties",
+        "http://purl.oclc.org/ooxml/officeDocument/customProperties",
+    };
+
+    private static DocFailure Signed() =>
+        new(ErrorCode.UnsupportedContent, "The document is digitally signed; a copy without properties would break its signature. Nothing was changed.");
+
+    /// <summary>
+    /// The property parts: those the package's relationships name, and those at the usual names. A property relationship
+    /// whose part cannot be found is refused, never skipped: the copy would keep it and be called clean (evaluator, PR 6.2).
+    /// A signature origin found through its relationship refuses the package too.
+    /// </summary>
+    private static List<string> PropertyParts(ZipArchive zip)
+    {
+        var names = new List<string>();
+        void Add(ZipArchiveEntry e) { if (!names.Contains(e.FullName, StringComparer.Ordinal)) names.Add(e.FullName); }
+        if (Find(zip, "_rels/.rels") is { } relsEntry)
+        {
+            using var r = Xml(ReadPart(zip, relsEntry.FullName)!);
+            while (r.Read())
+            {
+                if (r.NodeType != XmlNodeType.Element || r.LocalName != "Relationship") continue;
+                var type = r.GetAttribute("Type") ?? "";
+                if (type.EndsWith("/digital-signature/origin", StringComparison.Ordinal)) throw Signed();
+                if (string.Equals(r.GetAttribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!PropertyRelationships.Any(t => type.EndsWith(t, StringComparison.Ordinal))) continue;
+                Add((r.GetAttribute("Target") is { Length: > 0 } target ? Resolve(zip, target) : null)
+                    ?? throw new DocFailure(ErrorCode.UnsupportedContent, "The document names a properties part that is not in it; nothing was changed."));
+            }
+        }
+        foreach (var usual in new[] { "docProps/core.xml", "docProps/app.xml", "docProps/custom.xml" })
+            if (Find(zip, usual) is { } e) Add(e);
+        return names;
+    }
+
+    private static ZipArchiveEntry? Find(ZipArchive zip, string name) =>
+        zip.Entries.FirstOrDefault(e => string.Equals(e.FullName, name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// A relationship target as the package rules resolve it: against the package root (RFC 3986, dot segments removed),
+    /// the part name in its escaped form first, then unescaped; null when it names no part of this package.
+    /// </summary>
+    private static ZipArchiveEntry? Resolve(ZipArchive zip, string target)
+    {
+        if (!Uri.TryCreate(PackageRoot, target, out var uri) || !string.Equals(uri.Authority, PackageRoot.Authority, StringComparison.OrdinalIgnoreCase)) return null;
+        var escaped = uri.AbsolutePath.TrimStart('/');
+        return escaped.Length == 0 ? null : Find(zip, escaped) ?? Find(zip, Uri.UnescapeDataString(escaped));
+    }
+
+    /// <summary>Whether a part's root is a core, extended or custom properties element, in its own namespace.</summary>
+    private static bool IsPropertiesRoot(string xml)
+    {
+        using var r = Xml(xml);
+        r.MoveToContent();
+        return r.LocalName is "coreProperties" or "Properties" && PropertyNamespaces.Contains(r.NamespaceURI);
+    }
+
+    /// <summary>Whether a part's root element holds anything: a child element or text.</summary>
+    private static bool HasContent(string xml)
+    {
+        using var r = Xml(xml);
+        r.MoveToContent();
+        if (r.IsEmptyElement) return false;
+        var depth = r.Depth;
+        while (r.Read() && r.Depth > depth)
+            if (r.NodeType == XmlNodeType.Element || r.NodeType is XmlNodeType.Text or XmlNodeType.CDATA && r.Value.Trim().Length > 0) return true;
+        return false;
+    }
+
+    /// <summary>The part's root element, empty, in its own namespace and prefix (transitional or strict).</summary>
+    private static string EmptyRoot(string xml)
+    {
+        using var r = Xml(xml);
+        r.MoveToContent();
+        var ns = System.Security.SecurityElement.Escape(r.NamespaceURI);
+        var root = r.Prefix.Length > 0 ? $"{r.Prefix}:{r.LocalName} xmlns:{r.Prefix}=\"{ns}\"" : $"{r.LocalName} xmlns=\"{ns}\"";
+        return $"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n<{root}/>";
+    }
+
+    /// <summary>
+    /// Copies a part, refusing one whose data does not match its declared size (what the bomb rules checked) and CRC-32:
+    /// ZipArchive stops at the declared size without a word, so a part that inflates past it would be silently cut.
+    /// </summary>
+    private static void CopyDeclared(Stream from, Stream to, long declared, uint crc)
+    {
+        var buffer = new byte[1 << 16];
+        var check = new Crc32();
+        long total = 0;
+        int n;
+        while ((n = from.Read(buffer)) > 0)
+        {
+            // Defensive: ZipArchive itself stops at the declared size, so in practice the CRC-32 below is what catches it.
+            if ((total += n) > declared) throw new DocFailure(ErrorCode.DecodeFailed, "A part of the document is larger than it says; nothing was saved.");
+            check.Append(buffer.AsSpan(0, n));
+            to.Write(buffer, 0, n);
+        }
+        if (total != declared || check.Value != crc) throw new DocFailure(ErrorCode.DecodeFailed, "A part of the document is damaged (its size or check value does not match); nothing was saved.");
+    }
+
+    private static byte[] PartHash(ZipArchiveEntry entry)
+    {
+        using var s = entry.Open();
+        return SHA256.HashData(s);
+    }
+
+    /// <summary>
+    /// What Remove properties leaves in place, said as a notice: names and paths that live in the content, not the
+    /// properties (evaluator, PR 6.2): comment and revision authors in any part, custom XML data, Excel's saved folder and
+    /// file-sharing user name, Word's attached template path, and the thumbnail.
+    /// </summary>
+    private static List<JobFact> Kept(ZipArchive zip, Kind kind)
+    {
+        var kept = new List<string>();
+        var names = zip.Entries.Select(e => e.FullName).ToList();
+        var revisions = kind switch
+        {
+            Kind.Word => names.Where(n => n.StartsWith("word/", StringComparison.OrdinalIgnoreCase) && n.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                .Any(n => HasAttribute(ReadPart(zip, n)!, null, "author")),
+            Kind.Excel => names.Any(n => n.StartsWith("xl/revisions/", StringComparison.OrdinalIgnoreCase)),
+            _ => false,
+        };
+        if (revisions || names.Any(n => n.Contains("comment", StringComparison.OrdinalIgnoreCase) || n.EndsWith("people.xml", StringComparison.OrdinalIgnoreCase)
+            || n.Contains("/persons/", StringComparison.OrdinalIgnoreCase) || n.EndsWith("/authors.xml", StringComparison.OrdinalIgnoreCase)))
+            kept.Add("comment and revision authors");
+        if (names.Any(n => n.StartsWith("customXml/", StringComparison.OrdinalIgnoreCase))) kept.Add("custom XML data");
+        if (kind == Kind.Excel && Find(zip, "xl/workbook.xml") is { } workbook && ReadPart(zip, workbook.FullName) is { } wb)
+        {
+            if (HasElement(wb, "absPath")) kept.Add("the saved folder path");
+            if (HasAttribute(wb, "fileSharing", "userName")) kept.Add("the sharing user name");
+        }
+        // Any link to a local file (the template, a mail-merge source, a linked workbook) carries a path, often a user name.
+        if (names.Where(n => n.EndsWith(".rels", StringComparison.OrdinalIgnoreCase)).Any(n => HasLocalFileLink(ReadPart(zip, n)!)))
+            kept.Add("linked file paths (such as the template)");
+        if (names.Any(n => n.StartsWith("docProps/thumbnail", StringComparison.OrdinalIgnoreCase)) || HasRelationship(zip, "/metadata/thumbnail"))
+            kept.Add("a thumbnail");
+        return kept.Count == 0 ? [] : [new("Kept", $"Not removed: {string.Join(", ", kept)}.", Notice: true)]; // at most 160 characters with every item: never clipped
+    }
+
+    /// <summary>Whether any element (of a local name, or any) carries an attribute of a local name.</summary>
+    private static bool HasAttribute(string xml, string? element, string attribute)
+    {
+        using var r = Xml(xml);
+        while (r.Read())
+            if (r.NodeType == XmlNodeType.Element && (element is null || r.LocalName == element) && r.HasAttributes)
+                for (var i = 0; i < r.AttributeCount; i++)
+                {
+                    r.MoveToAttribute(i);
+                    if (r.LocalName == attribute) return true;
+                }
+        return false;
+    }
+
+    private static bool HasLocalFileLink(string rels)
+    {
+        using var r = Xml(rels);
+        while (r.Read())
+            if (r.NodeType == XmlNodeType.Element && r.LocalName == "Relationship"
+                && string.Equals(r.GetAttribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase)
+                && r.GetAttribute("Target") is { } t && (t.StartsWith("file:", StringComparison.OrdinalIgnoreCase) || t.StartsWith(@"\\", StringComparison.Ordinal) || t.Length > 2 && t[1] == ':'))
+                return true;
+        return false;
+    }
+
+    /// <summary>Whether the package root has a relationship of this type (to a part that is there).</summary>
+    private static bool HasRelationship(ZipArchive zip, string typeSuffix)
+    {
+        if (Find(zip, "_rels/.rels") is not { } entry) return false;
+        using var r = Xml(ReadPart(zip, entry.FullName)!);
+        while (r.Read())
+            if (r.NodeType == XmlNodeType.Element && r.LocalName == "Relationship" && (r.GetAttribute("Type") ?? "").EndsWith(typeSuffix, StringComparison.Ordinal)
+                && r.GetAttribute("Target") is { Length: > 0 } target && Resolve(zip, target) is not null)
+                return true;
+        return false;
+    }
+
+    private static bool HasElement(string xml, string element)
+    {
+        using var r = Xml(xml);
+        while (r.Read())
+            if (r.NodeType == XmlNodeType.Element && r.LocalName == element) return true;
+        return false;
     }
 
     private static JobResult Info(string id, ZipArchive zip, Kind kind)

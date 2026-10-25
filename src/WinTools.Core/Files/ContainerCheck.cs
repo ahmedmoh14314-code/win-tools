@@ -193,24 +193,5 @@ public static class ContainerCheck
         return false;
     }
 
-    private static readonly uint[] CrcTable = BuildCrcTable();
-
-    private static uint[] BuildCrcTable()
-    {
-        var t = new uint[256];
-        for (uint n = 0; n < 256; n++)
-        {
-            var c = n;
-            for (var k = 0; k < 8; k++) c = (c & 1) != 0 ? 0xEDB88320u ^ (c >> 1) : c >> 1;
-            t[n] = c;
-        }
-        return t;
-    }
-
-    internal static uint Crc32(ReadOnlySpan<byte> data)
-    {
-        var c = 0xFFFFFFFFu;
-        foreach (var b in data) c = CrcTable[(c ^ b) & 0xFF] ^ (c >> 8);
-        return c ^ 0xFFFFFFFFu;
-    }
+    internal static uint Crc32(ReadOnlySpan<byte> data) => Files.Crc32.Of(data);
 }
