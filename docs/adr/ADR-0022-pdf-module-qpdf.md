@@ -1,6 +1,6 @@
 # ADR-0022: The PDF module's structural commands run the official qpdf build in the PDF worker
 
-- **Status:** Proposed (V2 PR 2.1; PR 2.3 adds decision 8)
+- **Status:** Proposed (V2 PR 2.1; PR 2.3 adds decision 9)
 - **Date:** 2026-10-25
 - **Deciders:** product owner (V2 plan §7, §9; unattended-session authorisation to fetch official engine releases)
 - **Related requirements:** V2 plan §9 (PDF), §10 PR 2.1, §14 (PDF threats); ADR-0005 (output safety), ADR-0018 (job contract)
@@ -18,9 +18,12 @@
      - That list is PGP-signed by the maintainer's key `C2C9 6B10 011F E009 E6D1 DF82 8A75 D109 9801 2C7E`. The key was taken from the maintainer's GitHub account, and the signature verified "Good".
      - `scripts/Get-Engines.ps1` pins the archive hash and each extracted file's hash. Any mismatch stops the build.
    - The binaries are not committed. The build fails with an instruction when they are missing, and CI fetches them.
-2. **Launch:**
-   - `ProcessStartInfo.ArgumentList` only, with fully qualified paths (no argument can start with `-` or `@`).
-   - A private environment (`SystemRoot`, `windir`, `TEMP`, `TMP` only); the qpdf folder as working directory; standard input closed (no prompt can wait).
+2. **Launch: qpdf never sees a user's path** (evaluator, PR 2.1).
+   - The worker copies each source, read-only and bounded, into a private work folder `%TEMP%\wintools-pdf-<request id>` under a fixed ASCII name (`in-001.pdf`).
+   - qpdf runs there: that folder is its working directory, and every argument is a fixed option or a relative fixed name (`out.pdf`, `pages\page-%d.pdf`).
+   - The review found that qpdf cannot open a path longer than 260 characters, even in the `\\?\` form (its executable is not long-path aware), and that it expands the first `%d` anywhere in an output path, folder names included. Neither can reach it now. Neither can a source that changes during the job, because the copy is what is checked and processed.
+   - `ProcessStartInfo.ArgumentList` only; no argument may be empty, start with `@` or hold a NUL.
+   - A private environment (`SystemRoot`, `windir`, `TEMP`, `TMP` only); standard input closed (no prompt can wait).
    - Output read up to 64 KB; a 4-minute limit per run; the process tree killed when the limit passes.
    - The PDF worker itself is a disposable process in the host's kill-on-close job, so qpdf is inside it too.
 3. **Before qpdf sees a file:**
@@ -28,11 +31,15 @@
    - It must be a PDF by its header (`%PDF-` in the first 1024 bytes), whatever its name says.
    - A file that needs a password to open is refused with `PasswordRequired`. The worker never guesses or prompts; protection comes in PR 2.2 with the password dialog.
 4. **Outputs follow ADR-0005:**
-   - qpdf writes a temporary file that the worker created exclusively in the destination.
-   - The worker checks it: qpdf can open it, and it has the expected page count (the sum for Merge, the same for Rotate).
-   - It marks it with the source's zone (for Merge, the strictest zone of the sources), then moves it to the first free name without overwriting.
-   - **Split** writes into a hidden staging folder with qpdf's fixed `page-%d.pdf` pattern, so a user's file name never reaches qpdf's `%d` expansion. Then each page is checked (header, end marker, count equal to the source's pages), marked, and renamed `<name> - page NN.pdf`, and the folder is renamed to the first free `<name> (pages)`.
-   - A failure deletes whatever was written. A killed worker leaves only the deterministic temp name, which the host removes, file or folder.
+   - qpdf writes `out.pdf` in the work folder. The worker checks it there: qpdf can open it, and it has the expected page count (the sum for Merge, the same for Rotate).
+   - Only then is it copied to an exclusive temporary file in the destination (`CreateNew`). It is marked with the source's zone (for Merge, the strictest zone of the sources) and moved to the first free name without overwriting.
+   - **Split:**
+     1. qpdf writes `pages\page-%d.pdf` in the work folder.
+     2. Each page is checked there: header, end marker, and a count equal to the source's pages.
+     3. A staging folder is created in the destination with `CreateDirectoryW`, which fails if the name exists, so a planted folder or junction cannot receive the pages. It must also be a plain, empty folder.
+     4. The pages are copied in as `<name> - page NN.pdf` and marked.
+     5. The folder is renamed to the first free `<name> (pages)`, with a short retry while an indexer or antivirus holds a page.
+   - A failure deletes whatever was written, and the work folder is always removed. A killed worker leaves only deterministic names, which the host removes: the destination temp (file or folder) and the work folder.
 5. **The host believes a success only from the disk:**
    - the allowed name;
    - a `%PDF-` header;
@@ -42,12 +49,13 @@
    The manifest keeps a 2,000-page split within one 64 KB protocol line.
 6. **Menu:**
    - "Organize" (Merge, Split into pages) is the module's own category. Rotate (Left, Right, 180°) and Tools (PDF info) are shared with the image module.
-   - Merge needs two PDFs or more (at most 200) and joins them in Explorer's order.
+   - Merge needs two PDFs or more (at most 200). It joins them **in name order as Explorer sorts names** (digits as numbers, case ignored), not in the drop's order, which depends on which file was grabbed (evaluator, PR 2.1). The output is named after the first file in that order, and the host checks it the same way.
    - A selection with any non-PDF gets no PDF command.
    - At most two PDF workers run at once.
-7. **Failure wording follows the module's noun:** "The PDF is damaged or incomplete", not the image module's sentences (`FeedbackText.Reason(error, words)`).
+7. **Rotate adds to a page's rotation:** `+90`, `-90` and `+180`. An unsigned `180` would set the rotation, so a scanned page already at 90° ended a quarter turn off (evaluator, PR 2.1: blocker).
+8. **Failure wording follows the module's noun:** "The PDF is damaged or incomplete", not the image module's sentences (`FeedbackText.Reason(error, words)`).
 
-8. **Optimize, Fast web view, Repair (V2 PR 2.3)** sit in their own "Optimize" category.
+9. **Optimize, Fast web view, Repair (V2 PR 2.3)** sit in their own "Optimize" category.
    - **Smaller (lossless):** `--object-streams=generate --compress-streams=y --recompress-flate --compression-level=9`. No image is re-encoded, so nothing visible changes. qpdf's `--optimize-images` is not used: it re-encodes images as JPEG, which is lossy.
      - The copy is kept only when it saves at least 1 % and 1 KB. Otherwise the result is "Already optimized" and nothing is written.
      - It is never promised to shrink a file. A generated 300-page PDF went from 68.9 KB to 39.5 KB; the same file again saved nothing.
@@ -76,6 +84,21 @@
   1. change the version and hashes in `Get-Engines.ps1`;
   2. re-check the signature;
   3. re-run the PDF tests.
+
+## Evaluator review
+One round (2026-10-25): one blocker and three majors, fixed.
+- **Blocker:** an unsigned 180° rotation set the angle (decision 7).
+- **Majors:**
+  - `%d` in a destination folder broke Split, and paths over 260 characters failed as "damaged" (decision 2: qpdf works only in the private folder);
+  - Merge relied on the drop's order (decision 6).
+- **Minors fixed:**
+  - the exclusive staging folder;
+  - retries on cleanup and on the folder rename;
+  - qpdf's own crashes reported as an engine failure, not as a damaged PDF, and all five engine files checked;
+  - the host checks the Split folder for a link before listing it, lists at most one entry past the count, and checks each page's header;
+  - the .NET runtime's notices and the basis for the VC++ DLLs are recorded;
+  - the engine download goes to a partial file first.
+- **Open:** a merge failure names the drop as "N items", not the file at fault.
 
 ## Evidence / experiments
 - `PdfWorkerTests` (16, real qpdf):

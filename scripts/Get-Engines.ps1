@@ -12,6 +12,7 @@ param(
     [string] $Archive = ''
 )
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue' # Windows PowerShell 5.1 crawls through a download that draws a progress bar
 $root = Split-Path -Parent $PSScriptRoot
 
 $version = '12.4.2'
@@ -43,11 +44,15 @@ if (-not $Archive) {
     $Archive = Join-Path $downloads "qpdf-$version-msvc64.zip"
     if (-not (Test-Path -LiteralPath $Archive)) {
         Write-Host "Downloading $url"
-        Invoke-WebRequest -Uri $url -OutFile $Archive -UseBasicParsing
+        # Into a partial file first, so an interrupted download never looks like a cached archive.
+        $partial = "$Archive.partial"
+        if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
+        Invoke-WebRequest -Uri $url -OutFile $partial -UseBasicParsing
+        Move-Item -LiteralPath $partial -Destination $Archive
     }
 }
 $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $Archive).Hash.ToLowerInvariant()
-if ($actual -ne $archiveSha256) { throw "The qpdf archive's SHA-256 is $actual, not the pinned $archiveSha256. Not used." }
+if ($actual -ne $archiveSha256) { throw "The qpdf archive's SHA-256 is $actual, not the pinned $archiveSha256. Not used; delete $Archive and run this again." }
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $staging = Join-Path $downloads "qpdf-$version-staging"
