@@ -19,6 +19,8 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
+      - name: Fetch the PDF engine (pinned, hash-checked; ADR-0022)
+        run: pwsh -NoProfile -File scripts/Get-Engines.ps1
       - name: Restore
         run: dotnet restore WinTools.slnx
       - name: Build (Debug, includes the fault-injection hooks the crash tests need)

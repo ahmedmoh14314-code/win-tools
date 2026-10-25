@@ -22,14 +22,16 @@ $props = @('-c', 'Release', '-r', 'win-x64', '--self-contained', 'true',
     "-p:Version=$Version", "-p:FileVersion=$Version.0", "-p:AssemblyVersion=$Version.0", "-p:InformationalVersion=$Label",
     '-p:IncludeSourceRevisionInInformationalVersion=false', '-p:Product=WinTools',
     '-p:DebugType=none', '-p:DebugSymbols=false', '-p:GenerateDocumentationFile=false')
-# Host first; then the workers (images, General Files), the settings window and the dialogs, each with its own runtimeconfig for the bundled runtime.
-foreach ($project in 'WinTools.Host', 'WinTools.Worker', 'WinTools.Worker.Text', 'WinTools.Settings', 'WinTools.Dialogs') {
+# The PDF engine the PDF worker bundles: fetched and hash-checked (ADR-0022) before anything is published.
+& (Join-Path $root 'scripts\Get-Engines.ps1')
+# Host first; then the workers (images, General Files, PDF), the settings window and the dialogs, each with its own runtimeconfig for the bundled runtime.
+foreach ($project in 'WinTools.Host', 'WinTools.Worker', 'WinTools.Worker.Text', 'WinTools.Worker.Pdf', 'WinTools.Settings', 'WinTools.Dialogs') {
     & dotnet publish (Join-Path $root "src\$project") @props -o $payload
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish $project failed" }
 }
 
 # The payload must run without an installed .NET and must not carry debug or developer files.
-foreach ($exe in 'WinTools.Host', 'WinTools.Worker', 'WinTools.Worker.Text', 'WinTools.Settings', 'WinTools.Dialogs') {
+foreach ($exe in 'WinTools.Host', 'WinTools.Worker', 'WinTools.Worker.Text', 'WinTools.Worker.Pdf', 'WinTools.Settings', 'WinTools.Dialogs') {
     $config = Get-Content -Raw (Join-Path $payload "$exe.runtimeconfig.json") | ConvertFrom-Json
     if (-not $config.runtimeOptions.includedFrameworks) { throw "$exe is not self-contained" }
 }
@@ -37,6 +39,19 @@ $worker = Get-Content -Raw (Join-Path $payload 'WinTools.Worker.runtimeconfig.js
 if ($worker.runtimeOptions.configProperties.'System.GC.HeapHardLimit' -ne 1610612736) { throw 'The worker memory limit is missing (ADR-0015)' }
 $unwanted = Get-ChildItem -LiteralPath $payload -Recurse -File | Where-Object { $_.Extension -in '.pdb', '.log', '.cs', '.json' -and $_.Name -notlike '*.runtimeconfig.json' -and $_.Name -notlike '*.deps.json' }
 if ($unwanted) { throw "Unexpected files in the payload: $($unwanted.Name -join ', ')" }
+foreach ($engine in 'qpdf.exe', 'qpdf30.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+    if (-not (Test-Path -LiteralPath (Join-Path $payload "qpdf\$engine"))) { throw "The PDF engine file qpdf\$engine is missing from the payload" }
+}
+
+# One notices file for everything bundled (V2 plan §8): each component's licence and notices, as its project ships them.
+$notices = [System.Text.StringBuilder]::new()
+[void]$notices.AppendLine('WinTools includes the following third-party software. Each is used under the licence that follows its name.')
+[void]$notices.AppendLine()
+foreach ($file in Get-ChildItem -LiteralPath (Join-Path $root 'third-party') -Recurse -File | Where-Object Name -ne 'README.md' | Sort-Object FullName) {
+    $relative = $file.FullName.Substring((Join-Path $root 'third-party').Length + 1)
+    [void]$notices.AppendLine(('=' * 78)).AppendLine($relative).AppendLine(('=' * 78)).AppendLine((Get-Content -Raw -LiteralPath $file.FullName)).AppendLine()
+}
+[System.IO.File]::WriteAllText((Join-Path $payload 'THIRD-PARTY-NOTICES.txt'), $notices.ToString(), [System.Text.UTF8Encoding]::new($false))
 
 & $Iscc "/DPayloadDir=$payload" "/DOutputDir=$(Join-Path $root 'artifacts\installer')" (Join-Path $PSScriptRoot 'WinTools.iss')
 if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
