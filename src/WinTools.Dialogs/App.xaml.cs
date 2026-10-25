@@ -15,6 +15,19 @@ public partial class App : Application
     {
         base.OnStartup(e);
         var line = ReadRequestLine();
+        if (WorkerProtocol.Deserialize<DialogEnvelope>(line)?.Kind == DialogKinds.Rename)
+        {
+            var rename = WorkerProtocol.Deserialize<RenameRequest>(line);
+            if (rename is not { Title.Length: > 0, Names.Count: > 0 and <= RenameRequest.MaxNames })
+            {
+                Answer(new RenameResult(null));
+                return;
+            }
+            var window = new RenameWindow(rename);
+            window.Closed += (_, _) => Answer(new RenameResult(window.Rule));
+            window.Show();
+            return;
+        }
         if (WorkerProtocol.Deserialize<DialogEnvelope>(line)?.Kind == DialogKinds.Secret)
         {
             var secret = WorkerProtocol.Deserialize<SecretRequest>(line);

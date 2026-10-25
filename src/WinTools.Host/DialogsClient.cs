@@ -13,6 +13,9 @@ internal readonly record struct PickOutcome(PickEnd End, string? Id = null);
 /// <summary>A secret dialog's outcome (V2 PR 2.2); <see cref="Secret"/> is set only for <see cref="PickEnd.Picked"/>. Never logged.</summary>
 internal readonly record struct SecretOutcome(PickEnd End, string? Secret = null);
 
+/// <summary>The rename dialog's outcome (V2 PR 7.2); <see cref="Rule"/> is set only for <see cref="PickEnd.Picked"/>.</summary>
+internal readonly record struct RenameOutcome(PickEnd End, string? Rule = null);
+
 /// <summary>
 /// Starts the dialogs process (WinTools.Dialogs.exe) for one dialog and waits for its answer (V2 PR 1.3). The request
 /// goes on its stdin and the answer comes on its stdout, one JSON line each; it never receives file paths, which stay
@@ -45,6 +48,15 @@ internal sealed class DialogsClient(string dialogsExe)
         var (end, line) = await AskAsync(WorkerProtocol.Serialize(request), cancellationToken).ConfigureAwait(false);
         if (end != PickEnd.Picked) return new(end);
         return WorkerProtocol.Deserialize<SecretResult>(line)?.Secret is { Length: > 0 } secret ? new(PickEnd.Picked, secret) : new(PickEnd.Cancelled);
+    }
+
+    /// <summary>Asks for a Batch rename rule (V2 PR 7.2): only one the host can parse counts as an answer.</summary>
+    public async Task<RenameOutcome> AskRenameAsync(RenameRequest request, CancellationToken cancellationToken = default)
+    {
+        var (end, line) = await AskAsync(WorkerProtocol.Serialize(request), cancellationToken).ConfigureAwait(false);
+        if (end != PickEnd.Picked) return new(end);
+        return WorkerProtocol.Deserialize<RenameResult>(line)?.Rule is { } rule && WinTools.Core.Files.RenameRule.Parse(rule) is not null
+            ? new(PickEnd.Picked, rule) : new(PickEnd.Cancelled);
     }
 
     /// <summary>One dialog: the request line in, the answer line out (Picked means "it answered").</summary>

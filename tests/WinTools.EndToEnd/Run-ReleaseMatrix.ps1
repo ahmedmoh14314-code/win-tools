@@ -89,6 +89,7 @@ $rows = @(
     @('long-png',             'png --path-style long --cycles 2',                                 'source path longer than 260 characters'),
     @('long-batch-10',        'batch --batch 10 --path-style long --cycles 1',                    'long paths, 10 files'),
     @('general-file-info',    'file --cycles 2',                                                  'a file no module reads: File info under Tools, nothing written (V2 PR 1.4)'),
+    @('general-rename',       'rename --cycles 2',                                                'Batch rename: "2026 " typed into the dialog; the file renamed, its content kept (V2 PR 7.2)'),
     @('general-sha256',       'file --op files.sha256 --cycles 1',                                'SHA-256 of a file: the info panel, nothing written'),
     @('folder-info',          'folder --cycles 2',                                                'a dropped folder: File info, its contents unchanged (UX-009)'),
     @('pdf-rotate',           'pdf --cycles 2',                                                   'PDF rotate right: a new PDF, the original unchanged (V2 PR 2.1)'),
