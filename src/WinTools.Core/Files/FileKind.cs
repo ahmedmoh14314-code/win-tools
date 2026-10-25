@@ -1,7 +1,7 @@
 namespace WinTools.Core.Files;
 
 /// <summary>The broad family a kind of file belongs to; a module usually serves one family.</summary>
-public enum FileFamily { Image, Pdf, Archive, Subtitle, Folder, Other }
+public enum FileFamily { Image, Pdf, Archive, Subtitle, Document, Folder, Other }
 
 /// <summary>
 /// One kind of file the product recognises: a stable id (used in capability rules, settings and logs), its family, a
@@ -36,6 +36,11 @@ public static class FileKinds
     public static FileKind Srt { get; } = new("srt", FileFamily.Subtitle, "SRT", [".srt"]);
     public static FileKind Vtt { get; } = new("vtt", FileFamily.Subtitle, "WebVTT", [".vtt"]);
 
+    /// <summary>Word, Excel and PowerPoint (OOXML) documents (V2 PR 6.1). The worker checks the package's content types.</summary>
+    public static FileKind Docx { get; } = new("docx", FileFamily.Document, "Word document", [".docx"]);
+    public static FileKind Xlsx { get; } = new("xlsx", FileFamily.Document, "Excel workbook", [".xlsx"]);
+    public static FileKind Pptx { get; } = new("pptx", FileFamily.Document, "PowerPoint presentation", [".pptx"]);
+
     /// <summary>A folder. The drop target marks dropped folders with a trailing separator (UX-009, ADR-0019).</summary>
     public static FileKind Folder { get; } = new("folder", FileFamily.Folder, "Folder", []);
 
@@ -43,10 +48,10 @@ public static class FileKinds
     public static FileKind AnyFile { get; } = new("file", FileFamily.Other, "File", []);
 
     /// <summary>Every kind a capability's input rule may name.</summary>
-    public static IReadOnlyList<FileKind> Declared { get; } = [.. All, Pdf, Zip, Srt, Vtt, Folder, AnyFile];
+    public static IReadOnlyList<FileKind> Declared { get; } = [.. All, Pdf, Zip, Srt, Vtt, Docx, Xlsx, Pptx, Folder, AnyFile];
 
     private static readonly Dictionary<string, FileKind> ByExtension =
-        ((IEnumerable<FileKind>)[.. All, Pdf, Zip, Srt, Vtt]).SelectMany(k => k.Extensions.Select(e => (e, k))).ToDictionary(p => p.e, p => p.k, StringComparer.OrdinalIgnoreCase);
+        ((IEnumerable<FileKind>)[.. All, Pdf, Zip, Srt, Vtt, Docx, Xlsx, Pptx]).SelectMany(k => k.Extensions.Select(e => (e, k))).ToDictionary(p => p.e, p => p.k, StringComparer.OrdinalIgnoreCase);
 
     private static readonly Dictionary<string, FileKind>.AlternateLookup<ReadOnlySpan<char>> BySpan = ByExtension.GetAlternateLookup<ReadOnlySpan<char>>();
 
