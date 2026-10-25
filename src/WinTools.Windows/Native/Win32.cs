@@ -147,6 +147,16 @@ internal static partial class Kernel32
     [LibraryImport("kernel32.dll")] public static unsafe partial int MultiByteToWideChar(uint codePage, uint flags, byte* multiByte, int multiByteLength, char* wide, int wideLength);
 }
 
+/// <summary>Unicode normalization from Windows itself (Normaliz.dll, Windows Vista and later), which needs no ICU.</summary>
+internal static partial class Normaliz
+{
+    public const int NormalizationC = 1, NormalizationKC = 5;
+    public const int ERROR_INSUFFICIENT_BUFFER = 122;
+
+    [LibraryImport("normaliz.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    public static partial int NormalizeString(int normForm, string source, int sourceLength, [Out] char[]? destination, int destinationLength);
+}
+
 internal static partial class Shcore
 {
     [LibraryImport("shcore.dll")] public static partial int GetDpiForMonitor(nint monitor, int dpiType, out uint dpiX, out uint dpiY);

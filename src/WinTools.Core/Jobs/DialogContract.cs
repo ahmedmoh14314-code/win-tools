@@ -7,7 +7,25 @@ public sealed record PickItem(string Id, string Label);
 /// What the host asks the dialogs process to show (V2 PR 1.3): a list to pick one entry from, near a point on screen
 /// (physical pixels). One JSON line on the dialog's stdin; it never receives file paths.
 /// </summary>
-public sealed record PickRequest(string Title, IReadOnlyList<PickItem> Items, int X, int Y);
+public sealed record PickRequest(string Title, IReadOnlyList<PickItem> Items, int X, int Y, string Kind = DialogKinds.Pick);
+
+/// <summary>Which dialog a request asks for, so the dialogs process reads the right request (V2 PR 2.2).</summary>
+public static class DialogKinds
+{
+    public const string Pick = "pick", Secret = "secret";
+}
+
+/// <summary>Only the kind of a request, read first: the rest is read as that kind's request.</summary>
+public sealed record DialogEnvelope(string? Kind);
+
+/// <summary>
+/// A secret to type (V2 PR 2.2, ADR-0026): a password, entered twice when <paramref name="Confirm"/> (a new one). Like
+/// every dialog request it carries no file path: only what the window shows and where (physical pixels).
+/// </summary>
+public sealed record SecretRequest(string Title, bool Confirm, int X, int Y, string Kind = DialogKinds.Secret);
+
+/// <summary>The secret dialog's answer, one JSON line on its stdout: the secret, or null when the user cancelled.</summary>
+public sealed record SecretResult(string? Secret);
 
 /// <summary>The dialog's answer, one JSON line on its stdout: the chosen id, or null when the user cancelled.</summary>
 public sealed record PickResult(string? Chosen)

@@ -148,6 +148,27 @@ internal static partial class Desktop
     /// <summary>SPIKE: the keyprobe/keycontrol key (0 when none), released with the rest.</summary>
     public static int ProbeVk { get; set; }
 
+    /// <summary>Types text as Unicode input (KEYEVENTF_UNICODE), one UTF-16 unit at a time, whatever the keyboard layout.</summary>
+    public static void TypeText(string text)
+    {
+        foreach (var unit in text)
+        {
+            Send(new INPUT { type = 1, u = new INPUTUNION { ki = new KEYBDINPUT { wScan = unit, dwFlags = 0x0004 } } });
+            Send(new INPUT { type = 1, u = new INPUTUNION { ki = new KEYBDINPUT { wScan = unit, dwFlags = 0x0004 | 0x0002 } } });
+            Thread.Sleep(15);
+        }
+    }
+
+    /// <summary>The name of the process that owns the foreground window, or null.</summary>
+    public static string? ForegroundProcessName()
+    {
+        var w = GetForegroundWindow();
+        if (w == 0) return null;
+        _ = GetWindowThreadProcessId(w, out var pid);
+        try { using var p = System.Diagnostics.Process.GetProcessById((int)pid); return p.ProcessName; }
+        catch (ArgumentException) { return null; }
+    }
+
     public static void KeyDown(int vk) => Key(vk, 0);
     public static void KeyUp(int vk) => Key(vk, 0x0002);
     public static void Tap(int vk, int holdMs = 40) { KeyDown(vk); Thread.Sleep(holdMs); KeyUp(vk); }

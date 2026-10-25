@@ -28,6 +28,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     private readonly HostLog _log;
     private readonly JobScheduler _jobs;
     private readonly FeedbackPresenter _feedback;
+    private int _secretOpen; // 1 while a password window is open (Interlocked)
     private readonly SoundPlayer _sounds;
     private readonly NavigationSounds _navigationSounds;
     private CapabilityResolver _resolver;
@@ -341,13 +342,69 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         }
         _log.Event("drop", new { accepted = true, op = chosen.Id, openMs, files = paths.Count, sounds = SoundCounts(), frames });
         if (RadialMenu.IsMore(chosen)) _ = PickAndRunAsync(RadialMenu.Overflow(chosen), paths, _centre.X + dx, _centre.Y + dy);
-        else Run(chosen, paths);
+        else Run(chosen, paths, _centre.X + dx, _centre.Y + dy);
         return true;
     }
 
-    private void Run(CapabilityDescriptor capability, IReadOnlyList<string> paths)
+    private void Run(CapabilityDescriptor capability, IReadOnlyList<string> paths, int x, int y)
     {
+        if (capability.Prompt is not null)
+        {
+            // One password window at a time: a second, with the same title and no file name, could take the password
+            // meant for the first (evaluator, PR 2.2).
+            if (Interlocked.CompareExchange(ref _secretOpen, 1, 0) != 0)
+            {
+                _log.Event("secret.busy", new { op = capability.Id });
+                _feedback.SecretBusy();
+                return;
+            }
+            _ = AskAndRunAsync(capability, capability.Prompt, paths, x, y);
+            return;
+        }
         if (_jobs.Enqueue(capability, paths) is null) _log.Event("job.refused", new { op = capability.Id, module = capability.Module }); // no runner for that module
+    }
+
+    /// <summary>
+    /// A command that needs a secret (V2 PR 2.2, ADR-0026): the dialogs process asks for it, the host checks it with the
+    /// policy and Windows' NFKC, and only this job gets it. A cancel runs nothing and says nothing. The secret is never
+    /// logged: the log says only how the dialog ended.
+    /// </summary>
+    private async Task AskAndRunAsync(CapabilityDescriptor capability, SecretPrompt prompt, IReadOnlyList<string> paths, int x, int y)
+    {
+        // Fire and forget from Drop, like PickAndRunAsync: nothing here may throw unobserved.
+        try
+        {
+            SecretOutcome outcome;
+            try { outcome = await DialogsClient.Default.AskSecretAsync(new SecretRequest(prompt.Title, prompt.Confirm, x, y)).ConfigureAwait(false); }
+            finally { Volatile.Write(ref _secretOpen, 0); }
+            _log.Event("secret.ask", new { op = capability.Id, end = outcome.End.ToString() });
+            if (outcome.End == PickEnd.Unavailable) { _feedback.DialogUnavailable("the password window"); return; }
+            if (outcome.End != PickEnd.Picked) return;
+            // A new password is used as typed and must already be normalized; an existing one goes as typed, with its
+            // NFKC form beside it when that differs, tried second (evaluator, PR 2.2).
+            var parameters = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (prompt.Confirm)
+            {
+                var check = PasswordPolicy.CheckNew(outcome.Secret, WinTools.Windows.UnicodeText.ToFormKC, WinTools.Windows.UnicodeText.ToFormC);
+                if (!check.Ok) { _feedback.SecretRefused(check.Problem!); return; }
+                parameters[PasswordPolicy.ParameterName] = check.Password!;
+            }
+            else
+            {
+                var check = PasswordPolicy.CheckExisting(outcome.Secret, WinTools.Windows.UnicodeText.ToFormKC);
+                if (!check.Ok) { _feedback.SecretRefused(check.Problem!); return; }
+                parameters[PasswordPolicy.ParameterName] = check.Password!;
+                if (check.Normalized is { } normalized) parameters[PasswordPolicy.NormalizedParameterName] = normalized;
+            }
+            if (_jobs.Enqueue(capability, paths, parameters) is null)
+                _log.Event("job.refused", new { op = capability.Id, module = capability.Module });
+        }
+        catch (Exception ex)
+        {
+            Volatile.Write(ref _secretOpen, 0);
+            _log.Event("secret.error", new { type = ex.GetType().Name });
+            _feedback.DialogUnavailable("the password window");
+        }
     }
 
     /// <summary>"More…": the commands that did not fit the ring, in a list (the dialogs process); the pick runs on the dropped files.</summary>
@@ -361,7 +418,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             var outcome = await DialogsClient.Default.PickAsync(request).ConfigureAwait(false);
             _log.Event("more.pick", new { offered = commands.Count, end = outcome.End.ToString(), chosen = outcome.Id });
             if (outcome.End == PickEnd.Unavailable) _feedback.DialogUnavailable(); // an accepted drop that runs nothing must say so
-            else if (commands.FirstOrDefault(c => c.Id == outcome.Id) is { } capability) Run(capability, paths);
+            else if (commands.FirstOrDefault(c => c.Id == outcome.Id) is { } capability) Run(capability, paths, x, y);
         }
         catch (Exception ex)
         {

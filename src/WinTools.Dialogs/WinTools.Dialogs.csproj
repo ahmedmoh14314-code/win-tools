@@ -4,6 +4,9 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
+    <!-- WPF text input asks for the input language's culture (the caret, for an Arabic layout LCID 1025), which
+         InvariantGlobalization refuses with a crash: a WPF process keeps .NET's globalization (V2 PR 2.2). -->
+    <InvariantGlobalization>false</InvariantGlobalization>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>..\WinTools.Host\Assets\WinTools.ico</ApplicationIcon>
     <!-- LibraryImport (Native.cs, monitor placement) generates unsafe marshalling code. -->
@@ -12,5 +15,7 @@
   <ItemGroup>
     <Using Include="System.IO" />
     <ProjectReference Include="..\WinTools.Core\WinTools.Core.csproj" />
+    <!-- Windows' NFKC for the password policy (V2 PR 2.2): the product runs with invariant globalization. -->
+    <ProjectReference Include="..\WinTools.Windows\WinTools.Windows.csproj" />
   </ItemGroup>
 </Project>

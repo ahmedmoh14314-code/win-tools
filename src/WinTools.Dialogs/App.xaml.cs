@@ -5,23 +5,38 @@ using WinTools.Core.Jobs;
 namespace WinTools.Dialogs;
 
 /// <summary>
-/// Reads one request line from stdin, shows the dialog, writes one answer line to stdout and exits. A malformed request
-/// shows nothing and answers "cancelled": the host decides what that means.
+/// Reads one request line from stdin, shows the dialog it asks for (a pick list, or a secret since V2 PR 2.2), writes one
+/// answer line to stdout and exits. A malformed request shows nothing and answers "cancelled": the host decides what
+/// that means.
 /// </summary>
 public partial class App : Application
 {
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        var request = WorkerProtocol.Deserialize<PickRequest>(ReadRequestLine());
+        var line = ReadRequestLine();
+        if (WorkerProtocol.Deserialize<DialogEnvelope>(line)?.Kind == DialogKinds.Secret)
+        {
+            var secret = WorkerProtocol.Deserialize<SecretRequest>(line);
+            if (secret is not { Title.Length: > 0 })
+            {
+                Answer(new SecretResult(null));
+                return;
+            }
+            var window = new SecretWindow(secret);
+            window.Closed += (_, _) => Answer(new SecretResult(window.Secret));
+            window.Show();
+            return;
+        }
+        var request = WorkerProtocol.Deserialize<PickRequest>(line);
         if (request is not { Title: not null, Items.Count: > 0 })
         {
             Answer(new PickResult(null));
             return;
         }
-        var window = new PickWindow(request);
-        window.Closed += (_, _) => Answer(new PickResult(window.Chosen));
-        window.Show();
+        var pick = new PickWindow(request);
+        pick.Closed += (_, _) => Answer(new PickResult(pick.Chosen));
+        pick.Show();
     }
 
     private static string? ReadRequestLine()
@@ -30,7 +45,7 @@ public partial class App : Application
         return input.ReadLine();
     }
 
-    private void Answer(PickResult result)
+    private void Answer<T>(T result)
     {
         try
         {

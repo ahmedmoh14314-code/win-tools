@@ -28,8 +28,19 @@ internal interface IJobExecutor
 internal sealed record JobModuleRunner(IJobModule Module, IJobExecutor Client, Func<AppSettings, IReadOnlyDictionary<string, string>?> Parameters);
 
 /// <summary>A job the scheduler accepted: it can be cancelled, queued or running, and awaited.</summary>
-internal sealed class ScheduledJob(string id, CapabilityDescriptor capability, IReadOnlyList<string> paths) : IDisposable
+internal sealed class ScheduledJob(string id, CapabilityDescriptor capability, IReadOnlyList<string> paths,
+    IReadOnlyDictionary<string, string>? parameters = null) : IDisposable
 {
+    private volatile IReadOnlyDictionary<string, string>? _parameters = parameters;
+
+    /// <summary>
+    /// This job's own parameters: the secret typed for it (V2 PR 2.2, ADR-0026), on top of the module's from settings.
+    /// Dropped when the job ends, so the host keeps a password no longer than the job that needed it. Never logged.
+    /// </summary>
+    internal IReadOnlyDictionary<string, string>? Parameters => _parameters;
+
+    internal void DropParameters() => _parameters = null;
+
     private readonly CancellationTokenSource _cancel = new();
     private readonly TaskCompletionSource _done = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -89,11 +100,23 @@ internal sealed class JobScheduler
     /// <summary>Whether a module of this name is registered: a drop for any other is refused before it is accepted.</summary>
     public bool Runs(string module) => _queues.ContainsKey(module);
 
-    /// <summary>Queues a job for the capability's module; null when no module of that name is registered.</summary>
-    public ScheduledJob? Enqueue(CapabilityDescriptor capability, IReadOnlyList<string> paths)
+    /// <summary>
+    /// Queues a job for the capability's module; null when no module of that name is registered. A command that declares
+    /// a secret prompt runs only with a non-empty password in <paramref name="parameters"/>, and only such a command takes
+    /// parameters of its own (ADR-0026).
+    /// </summary>
+    public ScheduledJob? Enqueue(CapabilityDescriptor capability, IReadOnlyList<string> paths, IReadOnlyDictionary<string, string>? parameters = null)
     {
         if (!_queues.TryGetValue(capability.Module, out var queue)) return null;
-        var job = new ScheduledJob(Guid.NewGuid().ToString("N"), capability, paths);
+        // A prompt command: the password, and for an existing one at most its normalized form beside it (ADR-0026).
+        var secret = parameters is not null && parameters.TryGetValue(PasswordPolicy.ParameterName, out var p) && p.Length > 0
+            && parameters.Keys.All(k => k is PasswordPolicy.ParameterName || k is PasswordPolicy.NormalizedParameterName && capability.Prompt is { Confirm: false });
+        if (capability.Prompt is not null ? !secret : parameters is { Count: > 0 })
+        {
+            _log.Event("job.refused", new { op = capability.Id, reason = capability.Prompt is not null ? "noSecret" : "unexpectedParameters" });
+            return null;
+        }
+        var job = new ScheduledJob(Guid.NewGuid().ToString("N"), capability, paths, parameters);
         _live[job.Id] = job;
         _log.Event("job.queued", new { job = job.Id, op = capability.Id, module = capability.Module, files = paths.Count });
         // A command that fills the clipboard runs at once, beside the queue: behind a long hash it would overwrite whatever
@@ -126,6 +149,7 @@ internal sealed class JobScheduler
         catch (Exception) { }
         finally
         {
+            job.DropParameters();
             _live.TryRemove(job.Id, out _);
             job.Complete();
             job.Dispose();
@@ -140,7 +164,7 @@ internal sealed class JobScheduler
         {
             var s = _settings();
             var outputDir = s.OutputPolicy == OutputPolicy.Folder ? s.OutputFolder : null;
-            var parameters = runner.Parameters(s);
+            var parameters = Merged(runner.Parameters(s), job.Parameters);
             JobRequest Request(IReadOnlyList<string> inputs) => new(Guid.NewGuid().ToString("N"), capability.Id, inputs, outputDir, parameters);
             var requests = capability.Shape == CapabilityShape.PerFile ? paths.Select(p => Request([p])).ToArray() : [Request(paths)];
             var started = Stopwatch.GetTimestamp();
@@ -163,6 +187,15 @@ internal sealed class JobScheduler
             _log.Event("job.error", new { job = job.Id, type = ex.GetType().Name });
             _feedback.Crashed(capability, paths.Count);
         }
+    }
+
+    /// <summary>The module's parameters from settings with the job's own on top; null when there are none.</summary>
+    private static IReadOnlyDictionary<string, string>? Merged(IReadOnlyDictionary<string, string>? module, IReadOnlyDictionary<string, string>? job)
+    {
+        if (job is not { Count: > 0 }) return module;
+        var all = module is null ? new Dictionary<string, string>(StringComparer.Ordinal) : new Dictionary<string, string>(module, StringComparer.Ordinal);
+        foreach (var (k, v) in job) all[k] = v;
+        return all;
     }
 
     /// <summary>The name shown for a path: a marked folder's own name, not the empty name after its separator (evaluator, PR #18).</summary>

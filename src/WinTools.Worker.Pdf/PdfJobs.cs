@@ -75,7 +75,34 @@ internal static class PdfJobs
         var id = request.Id;
         if (id is not { Length: > 0 and <= 64 } || id.Any(c => !char.IsAsciiLetterOrDigit(c)))
             return JobResult.Fail("invalid", ErrorCode.InvalidRequest, "Request id must be 1-64 ASCII letters or digits.");
-        if (request.Parameters is { Count: > 0 }) return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters.");
+        // Only Protect and Remove protection take a parameter: the password, checked again here (ADR-0026). Its text never
+        // appears in a message.
+        string? password = null;
+        string[] candidates = [];
+        if (request.CapabilityId == PdfCapabilities.ProtectId)
+        {
+            if (request.Parameters is not { Count: 1 } p || !p.TryGetValue(PasswordPolicy.ParameterName, out var given))
+                return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command needs a password and nothing else.");
+            var check = PasswordPolicy.CheckNew(given);
+            if (!check.Ok) return JobResult.Fail(id, ErrorCode.InvalidRequest, $"The password was refused: {check.Problem}");
+            password = check.Password!;
+        }
+        else if (request.CapabilityId == PdfCapabilities.UnprotectId)
+        {
+            // As typed, then its NFKC form when the host sent one: a file may have been protected either way.
+            if (request.Parameters is not { Count: 1 or 2 } p || !p.TryGetValue(PasswordPolicy.ParameterName, out var given)
+                || p.Keys.Any(k => k is not (PasswordPolicy.ParameterName or PasswordPolicy.NormalizedParameterName)))
+                return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command needs a password and nothing else.");
+            List<string> tries = [];
+            foreach (var value in p.TryGetValue(PasswordPolicy.NormalizedParameterName, out var n) ? new[] { given, n } : [given])
+            {
+                var check = PasswordPolicy.CheckExisting(value);
+                if (!check.Ok) return JobResult.Fail(id, ErrorCode.InvalidRequest, $"The password was refused: {check.Problem}");
+                if (!tries.Contains(check.Password!, StringComparer.Ordinal)) tries.Add(check.Password!);
+            }
+            candidates = [.. tries];
+        }
+        else if (request.Parameters is { Count: > 0 }) return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters.");
         if (request.Inputs.Count == 0 || !request.Inputs.All(PathPolicy.IsSupported) || request.Inputs.Any(Path.EndsInDirectorySeparator))
             return JobResult.Fail(id, ErrorCode.InvalidRequest, "Every input must be a supported file path.");
         if (request.OutputDirectory is { } od && !PathPolicy.IsSupported(Path.Combine(od, "x.pdf")))
@@ -103,6 +130,8 @@ internal static class PdfJobs
                 PdfCapabilities.OptimizeId => Optimize(request, work),
                 PdfCapabilities.LinearizeId => Linearize(request, work),
                 PdfCapabilities.RepairId => Repair(request, work),
+                PdfCapabilities.ProtectId => Protect(request, password!, work),
+                PdfCapabilities.UnprotectId => Unprotect(request, candidates, work),
                 _ when PdfCapabilities.RotationOf(request.CapabilityId) is { } angle => Rotate(request, angle, work),
                 _ => JobResult.Fail(id, ErrorCode.UnsupportedOperation, "This worker does not run that command."),
             };
@@ -223,6 +252,165 @@ internal static class PdfJobs
     }
 
     private static bool RequiresPassword(Source source, string work) => Q(work, "--requires-password", source.Copy) is { TimedOut: false, ExitCode: QpdfRun.Success };
+
+    /// <summary>One qpdf run with its arguments on stdin (a password among them), retried like <see cref="Q"/>.</summary>
+    private static QpdfRun QS(string work, params string[] arguments)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var run = Qpdf.RunWithArgumentsOnStdin(arguments, QpdfTimeout, work);
+            if (!run.CouldNotOpen || attempt == 5) return run;
+            Thread.Sleep(200 * attempt);
+        }
+    }
+
+    /// <summary>qpdf's <c>--requires-password</c> (silent): 0 another password is needed, 2 not encrypted, 3 the one given (or none) opens it.</summary>
+    private const int PasswordNeeded = 0, NotEncrypted = 2, PasswordOpens = 3;
+
+    private static int PasswordStatus(string work, string file, string? password)
+    {
+        var run = password is null ? Q(work, "--requires-password", file) : QS(work, $"--password={password}", "--requires-password", file);
+        if (run.TimedOut) throw new PdfFailure(ErrorCode.WorkerTimeout, "The PDF took too long to read.");
+        return run.ExitCode is PasswordNeeded or NotEncrypted or PasswordOpens ? run.ExitCode
+            : throw new PdfFailure(run.EngineFailed ? ErrorCode.Internal : ErrorCode.DecodeFailed, "The PDF is damaged and could not be read.");
+    }
+
+    /// <summary>
+    /// The page count read without a single warning, or -1. qpdf exits 2 for "not encrypted" and for "an error" alike,
+    /// and repairs a damaged file silently (a protected PDF cut short loses its /Encrypt and reads as plain garbage), so
+    /// these commands accept only a file it reads cleanly (evaluator, PR 2.2).
+    /// </summary>
+    private static int CleanPages(string work, string file, string? password)
+    {
+        var run = password is null ? Q(work, "--show-npages", file) : QS(work, $"--password={password}", "--show-npages", file);
+        return !run.TimedOut && run.ExitCode == QpdfRun.Success && int.TryParse(run.Output.AsSpan().Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var pages) && pages > 0 ? pages : -1;
+    }
+
+    /// <summary>
+    /// The page count of a file qpdf calls "not encrypted". A clean read decides. One qpdf had to repair is accepted only
+    /// when the bytes hold no "/Encrypt" and <c>--check</c> finds warnings but no error: stale offsets are common in real
+    /// files and readers open them silently (second review, PR 2.2), while a protected PDF cut short loses its /Encrypt
+    /// with its trailer, and its encrypted streams then fail to decode (<c>--check</c> exits 2; measured).
+    /// </summary>
+    private static int PlainPages(Source source, string work)
+    {
+        var clean = CleanPages(work, source.Copy, null);
+        if (clean > 0) return clean;
+        if (HoldsEncrypt(Path.Combine(work, source.Copy))) throw Damaged();
+        var check = Q(work, "--check", source.Copy);
+        if (check.TimedOut) throw new PdfFailure(ErrorCode.WorkerTimeout, "The PDF took too long to check.");
+        if (check.ExitCode != QpdfRun.Warnings) throw Damaged();
+        try { return Open(source, work).Pages; }
+        catch (PdfFailure) { throw Damaged(); }
+    }
+
+    /// <summary>Whether the bytes contain "/Encrypt" anywhere (read in blocks, overlapping by the word's length).</summary>
+    private static bool HoldsEncrypt(string file)
+    {
+        ReadOnlySpan<byte> word = "/Encrypt"u8;
+        using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, FileOptions.SequentialScan);
+        var buffer = new byte[(1 << 16) + 8];
+        var carried = 0;
+        int n;
+        while ((n = fs.Read(buffer, carried, buffer.Length - carried)) > 0)
+        {
+            var filled = carried + n;
+            if (buffer.AsSpan(0, filled).IndexOf(word) >= 0) return true;
+            carried = Math.Min(word.Length - 1, filled);
+            buffer.AsSpan(filled - carried, carried).CopyTo(buffer);
+        }
+        return false;
+    }
+
+    private static PdfFailure Damaged() => new(ErrorCode.DecodeFailed, "The PDF is damaged (qpdf had to repair it to read it); repair it first. Nothing was changed.");
+
+    /// <summary>
+    /// Protect (V2 PR 2.2, ADR-0026): AES-256 with the user's password to open it, a random owner password that is kept
+    /// nowhere, and no restrictions (the owner's decision). A PDF that is already encrypted is left alone. The copy must
+    /// need a password, open with this one, and have every page.
+    /// </summary>
+    private static JobResult Protect(JobRequest request, string password, string work)
+    {
+        var source = Stage(request.Inputs[0], work, "in-001.pdf");
+        switch (PasswordStatus(work, source.Copy, null))
+        {
+            case PasswordNeeded: return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "The PDF is already protected with a password.");
+            case PasswordOpens: return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "The PDF is already encrypted by its author (it opens without a password but has restrictions).");
+        }
+        var pages = PlainPages(source, work);
+        Destination(request, request.Inputs[0]);
+        const string produced = "out.pdf";
+        var owner = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(24));
+        var run = QS(work, source.Copy, "--encrypt", $"--user-password={password}", $"--owner-password={owner}", "--bits=256", "--", produced);
+        if (run.TimedOut) throw new PdfFailure(ErrorCode.WorkerTimeout, "The PDF took too long to process.");
+        if (!run.Usable) throw new PdfFailure(run.EngineFailed ? ErrorCode.Internal : ErrorCode.EncodeFailed, "The PDF engine could not write the result.");
+        if (PasswordStatus(work, produced, null) != PasswordNeeded || PasswordStatus(work, produced, password) != PasswordOpens
+            || CleanPages(work, produced, password) != pages)
+            throw new PdfFailure(ErrorCode.OutputValidationFailed, "The result did not check out; nothing was saved.");
+        return CommitFile(request, Path.Combine(work, produced), source.Zone, request.Inputs[0]);
+    }
+
+    /// <summary>
+    /// Remove protection (V2 PR 2.2, ADR-0026): only for a PDF that needs a password to open, and only with a password
+    /// that opens it, tried as typed and then in its NFKC form. An author's restrictions are never removed, whatever
+    /// password is given (the owner's decision): a PDF that opens without a password is refused, and so is one with any
+    /// restriction (qpdf would drop them on decrypting). A wrong password is <see cref="ErrorCode.PasswordIncorrect"/>,
+    /// and a damaged file is damage, never "not protected".
+    /// </summary>
+    private static JobResult Unprotect(JobRequest request, IReadOnlyList<string> candidates, string work)
+    {
+        var source = Stage(request.Inputs[0], work, "in-001.pdf");
+        switch (PasswordStatus(work, source.Copy, null))
+        {
+            case NotEncrypted:
+                // qpdf's 2 is also "an error": only a file read as plain, as PlainPages decides, is "not protected".
+                _ = PlainPages(source, work);
+                return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "The PDF is not protected.");
+            case PasswordOpens:
+                return JobResult.Fail(request.Id, ErrorCode.UnsupportedContent, "The PDF opens without a password; its restrictions were set by its author, and WinTools does not remove them.");
+        }
+        string? password = null;
+        foreach (var candidate in candidates)
+        {
+            var status = PasswordStatus(work, source.Copy, candidate);
+            if (status == PasswordOpens) { password = candidate; break; }
+            if (status == NotEncrypted) throw Damaged(); // encrypted without a password, plain with one: an error, not a verdict
+        }
+        if (password is null) return JobResult.Fail(request.Id, ErrorCode.PasswordIncorrect, "The password does not open the PDF.");
+        // Never an author's restrictions, whatever password opened it, the owner's included (the owner's decision, PR 2.2).
+        if (HasRestrictions(work, source.Copy, password))
+            return JobResult.Fail(request.Id, ErrorCode.UnsupportedContent, "The PDF also has restrictions set by its author, and WinTools does not remove them.");
+        var pages = CleanPages(work, source.Copy, password);
+        if (pages < 1) throw Damaged();
+        Destination(request, request.Inputs[0]);
+        const string produced = "out.pdf";
+        var run = QS(work, $"--password={password}", "--decrypt", source.Copy, produced);
+        if (run.TimedOut) throw new PdfFailure(ErrorCode.WorkerTimeout, "The PDF took too long to process.");
+        if (!run.Usable) throw new PdfFailure(run.EngineFailed ? ErrorCode.Internal : ErrorCode.EncodeFailed, "The PDF engine could not write the result.");
+        if (PasswordStatus(work, produced, null) != NotEncrypted || CleanPages(work, produced, null) != pages)
+            throw new PdfFailure(ErrorCode.OutputValidationFailed, "The result did not check out; nothing was saved.");
+        return CommitFile(request, Path.Combine(work, produced), source.Zone, request.Inputs[0]);
+    }
+
+    /// <summary>
+    /// Whether the author restricted anything (any capability off), from qpdf's JSON of the encryption. That JSON carries
+    /// no password: the key only with --show-encryption-key, which is never passed, and no recovered user password for
+    /// AES-256 (checked, PR 2.2). It is read and dropped, never logged.
+    /// </summary>
+    private static bool HasRestrictions(string work, string file, string password)
+    {
+        var run = QS(work, $"--password={password}", "--json=2", "--json-key=encrypt", file);
+        if (!run.Usable) throw Damaged();
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(run.Output);
+            return doc.RootElement.GetProperty("encrypt").GetProperty("capabilities").EnumerateObject().Any(c => c.Value.ValueKind != System.Text.Json.JsonValueKind.True);
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            return true; // not knowing means not removing
+        }
+    }
 
     private static JobResult Info(string id, string path, string work)
     {
