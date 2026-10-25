@@ -80,6 +80,43 @@ public sealed class ArchiveCapabilitiesTests
     }
 
     [Fact]
+    public void Overlapping_entries_cannot_cheat_the_ratio_rule()
+    {
+        // Evaluator, PR 5.1 (reproduced: 10 entries sharing one stream inflated 2.4 MB to 2.9 GB).
+        Assert.True(ArchiveLimits.IsArchiveBomb(2_930_000_000, 2_400_000));
+        Assert.False(ArchiveLimits.IsArchiveBomb(300_000_000, 2_400_000)); // 125:1
+    }
+
+    [Fact]
+    public void Folders_count_against_the_budget_and_a_file_blocks_a_folder_of_its_name()
+    {
+        var budget = new ArchiveLimits.Budget(max: 5);
+        Assert.True(budget.AddFile(@"a\b\c\x.txt")); // three folders and a file
+        Assert.Equal(4, budget.Created);
+        Assert.True(budget.AddFolder("d"));
+        Assert.False(budget.AddFolder(@"e\f")); // two more would pass 5
+        Assert.False(budget.AddFolder(@"a\b\c\x.txt")); // a file has that name
+        Assert.False(budget.AddFile(@"a\b")); // a folder has that name
+        Assert.True(budget.IsFile(@"a\b\c\x.txt"));
+    }
+
+    [Theory]
+    [InlineData("COM0.log", "_COM0.log")]
+    [InlineData("lpt0", "_lpt0")]
+    public void Every_device_name_windows_reserves_is_renamed(string name, string expected) =>
+        Assert.Equal(expected, ArchiveEntryPolicy.Judge(name).RelativePath);
+
+    [Fact]
+    public void A_success_with_a_notice_says_it_in_the_toast()
+    {
+        var words = ArchiveCapabilities.Catalog.Single(c => c.Id == ArchiveCapabilities.ExtractId).Words;
+        var ok = new Jobs.JobResult("x", true, Jobs.ErrorCode.None, null, [new Jobs.JobOutput(@"C:\p\photos", new string('a', 64))],
+            [new Jobs.JobFact("Files", "3"), new Jobs.JobFact("Skipped", "2 entries not extracted (links, devices or unsafe names)", Notice: true)]);
+        var message = Feedback.FeedbackText.For(words, [new Feedback.JobItem("photos.zip", ok)]);
+        Assert.Contains("2 entries not extracted", message.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_zip_gets_its_own_category_and_any_selection_can_be_zipped_from_tools()
     {
         var menu = RadialMenu.Build(Resolver, [@"C:\p\photos.zip"]);

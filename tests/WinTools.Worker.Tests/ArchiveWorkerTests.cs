@@ -221,6 +221,66 @@ public sealed class ArchiveWorkerTests : IDisposable
     }
 
     [Fact]
+    public void Add_to_zip_packs_highly_compressible_files()
+    {
+        // Evaluator, PR 5.1 (reproduced): the read-back check ran the bomb rules on the user's own zeros.
+        var folder = Path.Combine(_dir.Path, "disk image");
+        Directory.CreateDirectory(folder);
+        File.WriteAllBytes(Path.Combine(folder, "zeros.img"), new byte[3 << 20]);
+        var request = new JobRequest(Guid.NewGuid().ToString("N"), ArchiveCapabilities.ZipId, [folder + Path.DirectorySeparatorChar]);
+        var r = ArchiveJobs.Run(request);
+        Assert.True(r.Success, r.Message);
+        Assert.True(ArchiveJobModule.Instance.IsBelievable(request, r));
+    }
+
+    [Fact]
+    public void Add_to_zip_never_leaves_out_a_file_silently()
+    {
+        // Evaluator, PR 5.1 (blocker): skipped files gave a "ZIP created" with files missing. A file that cannot be read
+        // now fails the whole job, with nothing written.
+        var folder = Path.Combine(_dir.Path, "work");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "a.txt"), "a");
+        var online = Path.Combine(folder, "cloud.txt");
+        File.WriteAllText(online, "b");
+        File.SetAttributes(online, FileAttributes.Offline);
+        var r = ArchiveJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), ArchiveCapabilities.ZipId, [folder + Path.DirectorySeparatorChar]));
+        Assert.Equal(ErrorCode.OnlineOnly, r.Error);
+        File.SetAttributes(online, FileAttributes.Normal);
+        using (new FileStream(Path.Combine(folder, "a.txt"), FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite)) // being written
+        {
+            var busy = ArchiveJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), ArchiveCapabilities.ZipId, [folder + Path.DirectorySeparatorChar]));
+            Assert.Equal(ErrorCode.SourceNotReadable, busy.Error);
+        }
+        Assert.DoesNotContain(Directory.EnumerateFileSystemEntries(_dir.Path), e => e.EndsWith(".zip", StringComparison.Ordinal) || Path.GetFileName(e).StartsWith("~wintools-", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Add_to_zip_refuses_a_tree_deeper_than_an_archive_may_hold_before_writing()
+    {
+        var path = Path.Combine(_dir.Path, "deep");
+        var leaf = path;
+        for (var i = 0; i < 33; i++) leaf = Path.Combine(leaf, "d");
+        Directory.CreateDirectory(leaf);
+        File.WriteAllText(Path.Combine(leaf, "x.txt"), "x");
+        var r = ArchiveJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), ArchiveCapabilities.ZipId, [path + Path.DirectorySeparatorChar]));
+        Assert.Equal(ErrorCode.LimitExceeded, r.Error);
+        Assert.DoesNotContain(Directory.EnumerateFiles(_dir.Path), e => e.EndsWith(".zip", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(new[] { "a", "a/b" }, new[] { "a" })]
+    [InlineData(new[] { "a/b", "a" }, new[] { "a", @"a\b" })]
+    public void A_file_and_a_folder_of_one_name_keep_the_first_and_say_so(string[] entries, string[] expected)
+    {
+        var zip = Zip("clash.zip", [.. entries.Select(e => (e, (string?)"x"))]);
+        var r = ArchiveJobs.Run(Request(ArchiveCapabilities.ExtractId, zip));
+        Assert.True(r.Success, r.Message);
+        Assert.Equal(expected, Tree(r.Outputs.Single().Path));
+        Assert.Contains(r.Facts, f => f is { Label: "Skipped", Notice: true });
+    }
+
+    [Fact]
     public async Task The_real_worker_process_runs_a_job_the_host_believes()
     {
         var zip = Zip("a.zip", ("x.txt", "1"));

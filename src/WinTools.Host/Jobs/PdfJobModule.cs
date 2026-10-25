@@ -72,7 +72,7 @@ internal sealed class PdfJobModule : IJobModule
         // A link is refused before anything is listed, and the listing stops past the expected count, so a forged claim
         // cannot point the host at a large folder elsewhere (evaluator, PR 2.1).
         var folder = new DirectoryInfo(output.Path);
-        if (!folder.Exists || folder.LinkTarget is not null || folder.Attributes.HasFlag(FileAttributes.ReparsePoint)) return false;
+        if (!folder.Exists || folder.LinkTarget is not null) return false; // OneDrive's reparse points are data, not links
         var expected = Enumerable.Range(1, pages).Select(p => PdfCapabilities.PageFileName(source, p, pages)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var entries = folder.EnumerateFileSystemInfos().Take(pages + 1).ToArray();
         if (entries.Length != pages || !entries.All(e => e is FileInfo f && f.LinkTarget is null && expected.Contains(f.Name) && StartsAsPdf(f.FullName))) return false;

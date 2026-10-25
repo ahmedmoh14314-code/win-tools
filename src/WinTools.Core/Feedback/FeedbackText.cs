@@ -37,7 +37,8 @@ public static class FeedbackText
         {
             var item = items[0];
             if (item.Result.Success)
-                return new(FeedbackKind.Success, $"{OutputName(item)} created", Join(words.Done, Sizes(words, item)));
+                // A believed success may carry a notice the user must see (entries skipped or renamed in an archive).
+                return new(FeedbackKind.Success, $"{OutputName(item)} created", Join(Join(words.Done, Sizes(words, item)), item.Result.Facts.FirstOrDefault(f => f.Notice)?.Value));
             if (item.Result.Error == ErrorCode.NothingToDo)
                 return new(FeedbackKind.Nothing, "Nothing to change", words.NothingReason);
             return new(FeedbackKind.Failure, $"Could not {words.Verb} {item.SourceName}", Reason(item.Result.Error, words));

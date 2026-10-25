@@ -144,7 +144,9 @@ internal static class ArchiveJobs
         };
         if (encrypted > 0) facts.Add(new("Protection", $"{encrypted:N0} entries need a password", Notice: true));
         if (links > 0) facts.Add(new("Links", $"{links:N0} links (never extracted)", Notice: true));
-        if (packed > 0 && size / Math.Max(packed, 1) > ArchiveLimits.MaxRatio) facts.Add(new("Ratio", "Unusually high compression; it may be an archive bomb", Notice: true));
+        // Judged against the archive's own size too: declared sizes can lie and entries can share data (evaluator, PR 5.1).
+        if ((packed > 0 && size / Math.Max(packed, 1) > ArchiveLimits.MaxRatio) || ArchiveLimits.IsArchiveBomb(size, new FileInfo(path).Length))
+            facts.Add(new("Ratio", "Unusually high compression; it may be an archive bomb", Notice: true));
         return JobResult.WithFacts(id, facts);
     }
 
@@ -155,41 +157,54 @@ internal static class ArchiveJobs
 
     /// <summary>
     /// Reads every entry once, checking names, kinds, limits and CRC-32, and writes each file into
-    /// <paramref name="into"/> when it is given (Extract), or nowhere (Test).
+    /// <paramref name="into"/> when it is given (Extract), or nowhere (Test and Add to ZIP's read-back).
+    /// <paramref name="ratioRules"/>: the bomb rules apply to an archive from elsewhere, not to one just made from the user's
+    /// own files, which may be zeros (evaluator, PR 5.1). Everything created counts against one budget, folders included.
     /// </summary>
-    private static Pass ReadAll(ZipArchive zip, string? into, long? freeBytes)
+    private static Pass ReadAll(ZipArchive zip, string? into, long? freeBytes, long archiveBytes, bool ratioRules)
     {
         int files = 0, folders = 0, skipped = 0, renamed = 0;
         long total = 0;
         var problems = new List<string>();
-        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var budget = new ArchiveLimits.Budget();
         var buffer = new byte[1 << 16];
+        void Skip(string why) { skipped++; if (problems.Count < 5) problems.Add(why); }
         foreach (var entry in zip.Entries)
         {
             if (entry.IsEncrypted) throw new ArchiveFailure(ErrorCode.PasswordRequired, "The archive has entries protected with a password.");
-            if (IsLink(entry) || IsSpecial(entry)) { skipped++; continue; } // never followed, never created
+            if (IsLink(entry) || IsSpecial(entry)) { Skip("a link or device entry"); continue; } // never followed, never created
             var verdict = ArchiveEntryPolicy.Judge(entry.FullName);
-            if (verdict.Refusal is not null) { skipped++; if (problems.Count < 5) problems.Add(verdict.Refusal); continue; }
+            if (verdict.Refusal is not null) { Skip(verdict.Refusal); continue; }
             if (verdict.Renamed) renamed++;
             var relative = verdict.RelativePath!;
             if (verdict.IsFolder)
             {
+                if (!budget.AddFolder(relative))
+                {
+                    if (budget.Created >= ArchiveLimits.MaxEntries) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"The archive would create more than {ArchiveLimits.MaxEntries:N0} files and folders.");
+                    Skip("a folder with the name of a file"); continue;
+                }
                 if (into is not null)
                 {
                     var dir = Path.Combine(into, relative);
-                    if (!ArchiveEntryPolicy.IsInside(into, dir)) { skipped++; continue; }
+                    if (!ArchiveEntryPolicy.IsInside(into, dir)) { Skip("outside the folder"); continue; }
                     Directory.CreateDirectory(dir);
                 }
                 folders++;
                 continue;
             }
             // Two entries that are one name on Windows ("A.txt", "a.txt"): the second gets "a (1).txt".
-            relative = Unique(relative, used);
+            relative = Unique(relative, budget);
+            if (!budget.AddFile(relative))
+            {
+                if (budget.Created >= ArchiveLimits.MaxEntries) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"The archive would create more than {ArchiveLimits.MaxEntries:N0} files and folders.");
+                Skip("a file with the name of a folder"); continue;
+            }
             string? target = null;
             if (into is not null)
             {
                 target = Path.Combine(into, relative);
-                if (!ArchiveEntryPolicy.IsInside(into, target)) { skipped++; continue; }
+                if (!ArchiveEntryPolicy.IsInside(into, target)) { Skip("outside the folder"); continue; }
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             }
             var crc = new Crc32();
@@ -202,7 +217,8 @@ internal static class ArchiveJobs
                 {
                     written += n;
                     total += n;
-                    if (ArchiveLimits.IsBomb(written, entry.CompressedLength)) throw new ArchiveFailure(ErrorCode.LimitExceeded, "An entry expands far beyond its packed size; it looks like an archive bomb.");
+                    if (ratioRules && ArchiveLimits.IsBomb(written, entry.CompressedLength)) throw new ArchiveFailure(ErrorCode.LimitExceeded, "An entry expands far beyond its packed size; it looks like an archive bomb.");
+                    if (ratioRules && ArchiveLimits.IsArchiveBomb(total, archiveBytes)) throw new ArchiveFailure(ErrorCode.LimitExceeded, "The archive expands far beyond its own size; it looks like an archive bomb.");
                     if (total > ArchiveLimits.MaxTotalBytes) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"The archive expands to more than {ArchiveLimits.MaxTotalBytes >> 30} GB.");
                     if (freeBytes is { } free && total > free - ArchiveLimits.FreeSpaceReserve) throw new ArchiveFailure(ErrorCode.DiskFull, "Extracting would leave less than 2 GB free on the drive.");
                     crc.Append(buffer.AsSpan(0, n));
@@ -210,7 +226,7 @@ internal static class ArchiveJobs
                 }
             }
             if (written != entry.Length || crc.Value != entry.Crc32)
-                throw new ArchiveFailure(ErrorCode.DecodeFailed, $"An entry is damaged (its check value does not match).");
+                throw new ArchiveFailure(ErrorCode.DecodeFailed, "An entry is damaged (its check value does not match).");
             if (target is not null) File.SetLastWriteTime(target, ClampDate(entry.LastWriteTime.LocalDateTime));
             files++;
         }
@@ -219,23 +235,23 @@ internal static class ArchiveJobs
 
     private static DateTime ClampDate(DateTime d) => d.Year is < 1980 or > 2107 ? DateTime.Now : d;
 
-    private static string Unique(string relative, HashSet<string> used)
+    private static string Unique(string relative, ArchiveLimits.Budget budget)
     {
-        if (used.Add(relative)) return relative;
+        if (!budget.IsFile(relative)) return relative;
         var dir = Path.GetDirectoryName(relative) ?? "";
         var stem = Path.GetFileNameWithoutExtension(relative);
         var ext = Path.GetExtension(relative);
         for (var i = 1; ; i++)
         {
             var candidate = Path.Combine(dir, $"{stem} ({i}){ext}");
-            if (used.Add(candidate)) return candidate;
+            if (!budget.IsFile(candidate)) return candidate;
         }
     }
 
     private static JobResult Test(string id, string path)
     {
         using var zip = OpenZip(path, out _);
-        var pass = ReadAll(zip, into: null, freeBytes: null);
+        var pass = ReadAll(zip, into: null, freeBytes: null, new FileInfo(path).Length, ratioRules: true);
         var facts = new List<JobFact>
         {
             new("Result", "No errors: every file's check value matches"),
@@ -266,7 +282,7 @@ internal static class ArchiveJobs
             long? free = null;
             try { free = new DriveInfo(Path.GetPathRoot(dest.FullName)!).AvailableFreeSpace; }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { }
-            var pass = ReadAll(zip, staging, free);
+            var pass = ReadAll(zip, staging, free, new FileInfo(path).Length, ratioRules: true);
             if (pass.Files == 0 && pass.Folders == 0)
                 return JobResult.Fail(request.Id, ErrorCode.NothingToDo, pass.Skipped > 0 ? "Every entry was unsafe to extract." : "The archive is empty.");
             if (zone is { } z)
@@ -280,7 +296,7 @@ internal static class ArchiveJobs
                 {
                     committed = true;
                     var facts = new List<JobFact> { new("Files", pass.Files.ToString("N0", CultureInfo.InvariantCulture)) };
-                    if (pass.Skipped > 0) facts.Add(new("Skipped", $"{pass.Skipped:N0} entries (links, devices or unsafe names)", Notice: true));
+                    if (pass.Skipped > 0) facts.Add(new("Skipped", $"{pass.Skipped:N0} entries not extracted (links, devices or unsafe names)", Notice: true));
                     if (pass.Renamed > 0) facts.Add(new("Renamed", $"{pass.Renamed:N0} names changed to be valid on Windows", Notice: true));
                     return new JobResult(request.Id, true, ErrorCode.None, null, [new JobOutput(candidate, shape)], facts);
                 }
@@ -293,13 +309,48 @@ internal static class ArchiveJobs
         }
     }
 
+    /// <summary>One file Add to ZIP will pack, under the name it gets inside the archive.</summary>
+    private sealed record ZipItem(FileInfo File, string Name);
+
+    /// <summary>
+    /// Add to ZIP (evaluator, PR 5.1). Everything requested is listed first, before anything is written: a file that is
+    /// online only, a folder that cannot be read, a tree deeper than <see cref="ArchiveEntryPolicy.MaxDepth"/>, more than
+    /// <see cref="ArchiveLimits.MaxEntries"/> files or more than <see cref="ArchiveLimits.MaxTotalBytes"/> fail the job with
+    /// the reason; no archive silently lacks a file the user asked for. Only real links (symbolic links, junctions) are
+    /// left out, and the user is told how many; OneDrive's files carry a reparse point too and are packed like any other.
+    /// Files are read shared for reading only, so one being written fails the job instead of being packed torn.
+    /// </summary>
     private static JobResult Zip(JobRequest request)
     {
         Destination(request, Path.TrimEndingDirectorySeparator(request.Inputs[0]));
         var temp = ArchiveCapabilities.TempPath(request.Id, request.Inputs, request.OutputDirectory);
+        var items = new List<ZipItem>();
+        var folderNames = new List<string>();
+        var links = 0;
+        long total = 0;
+        foreach (var input in request.Inputs)
+        {
+            var item = Path.TrimEndingDirectorySeparator(input);
+            if (Directory.Exists(item))
+            {
+                var root = new DirectoryInfo(item);
+                if (root.LinkTarget is not null) { links++; continue; }
+                List(root, root.Name, 1, items, folderNames, ref links, ref total, temp);
+            }
+            else
+            {
+                var file = new FileInfo(item);
+                if (!file.Exists) throw new FileNotFoundException();
+                if (file.LinkTarget is not null) { links++; continue; }
+                Add(file, file.Name, items, ref total, temp);
+            }
+        }
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var i in items)
+            if (!names.Add(i.Name)) throw new ArchiveFailure(ErrorCode.InvalidRequest, $"Two selected items would have the same name in the archive ({i.Name}).");
+        if (items.Count == 0 && folderNames.Count == 0) return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "There was nothing that could be added (links are not followed).");
+
         int? zone = null;
-        var added = 0;
-        var skipped = 0;
         var committed = false;
         try
         {
@@ -308,43 +359,45 @@ internal static class ArchiveJobs
                 File.SetAttributes(temp, FileAttributes.Hidden);
                 using (var zip = new ZipArchive(fs, ZipArchiveMode.Create, leaveOpen: true))
                 {
-                    var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var input in request.Inputs)
+                    foreach (var folder in folderNames) zip.CreateEntry(folder + "/");
+                    foreach (var item in items)
                     {
-                        var item = Path.TrimEndingDirectorySeparator(input);
-                        if (Directory.Exists(item))
+                        Stream source;
+                        try { source = new FileStream(item.File.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, FileOptions.SequentialScan); }
+                        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
                         {
-                            var root = new DirectoryInfo(item);
-                            if (root.LinkTarget is not null) { skipped++; continue; }
-                            AddFolder(zip, root, root.Name, names, ref added, ref skipped, ref zone, temp);
+                            throw new ArchiveFailure(ErrorCode.SourceNotReadable, $"{item.Name} could not be read (it may be open in another program); nothing was saved.");
                         }
-                        else
+                        using (source)
                         {
-                            var file = new FileInfo(item);
-                            if (!file.Exists) throw new FileNotFoundException();
-                            AddFile(zip, file, file.Name, names, ref added, ref skipped, ref zone, temp);
+                            var entry = zip.CreateEntry(item.Name, CompressionLevel.Optimal);
+                            entry.LastWriteTime = item.File.LastWriteTime.Year is < 1980 or > 2107 ? DateTimeOffset.Now : item.File.LastWriteTime;
+                            using var target = entry.Open();
+                            source.CopyTo(target);
                         }
+                        zone = Strictest(zone, MarkOfTheWeb.ZoneToCarry(item.File.FullName));
                     }
                 }
                 fs.Flush(flushToDisk: true);
-                if (added == 0) return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "There was nothing that could be added (links and online-only files are skipped).");
-                // Read back: the archive must open and every file must decompress to its recorded check value.
+                // Read back: the archive must open and every file decompress to its recorded check value. The bomb rules do
+                // not apply: these are the user's own files, which may be highly compressible.
                 fs.Position = 0;
                 using var check = new ZipArchive(fs, ZipArchiveMode.Read, leaveOpen: true);
-                var pass = ReadAll(check, into: null, freeBytes: null);
-                if (pass.Files != added) throw new ArchiveFailure(ErrorCode.OutputValidationFailed, "The new archive did not check out; nothing was saved.");
+                var pass = ReadAll(check, into: null, freeBytes: null, fs.Length, ratioRules: false);
+                if (pass.Files != items.Count || pass.Skipped > 0) throw new ArchiveFailure(ErrorCode.OutputValidationFailed, "The new archive did not check out; nothing was saved.");
             }
             if (zone is { } z) MarkOfTheWeb.Apply(temp, z);
             File.SetAttributes(temp, FileAttributes.Normal);
             string hash;
             using (var read = new FileStream(temp, FileMode.Open, FileAccess.Read, FileShare.Read)) hash = Convert.ToHexStringLower(SHA256.HashData(read));
+            IReadOnlyList<JobFact> facts = links > 0 ? [new JobFact("Skipped", $"{links:N0} links not followed", Notice: true)] : [];
             foreach (var candidate in ArchiveCapabilities.Candidates(ArchiveCapabilities.ZipId, request.Inputs, request.OutputDirectory))
             {
                 try
                 {
                     File.Move(temp, candidate, overwrite: false);
                     committed = true;
-                    return JobResult.Ok(request.Id, new JobOutput(candidate, hash));
+                    return new JobResult(request.Id, true, ErrorCode.None, null, [new JobOutput(candidate, hash)], facts);
                 }
                 catch (IOException ex) when (ex.HResult is ErrorFileExists or ErrorAlreadyExists) { }
             }
@@ -358,36 +411,35 @@ internal static class ArchiveJobs
 
     private static int? Strictest(int? a, int? b) => a is null ? b : b is null ? a : Math.Max(a.Value, b.Value);
 
-    private static void AddFolder(ZipArchive zip, DirectoryInfo dir, string prefix, HashSet<string> names, ref int added, ref int skipped, ref int? zone, string temp)
+    private static void List(DirectoryInfo dir, string prefix, int depth, List<ZipItem> items, List<string> folders, ref int links, ref long total, string temp)
     {
-        if (names.Add(prefix + "/")) zip.CreateEntry(prefix + "/");
-        foreach (var child in dir.EnumerateFileSystemInfos())
+        if (depth > ArchiveEntryPolicy.MaxDepth) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"The folder is more than {ArchiveEntryPolicy.MaxDepth} levels deep.");
+        folders.Add(prefix);
+        FileSystemInfo[] children;
+        try { children = dir.GetFileSystemInfos(); }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {
-            if (child.LinkTarget is not null || child.Attributes.HasFlag(FileAttributes.ReparsePoint)) { skipped++; continue; } // never followed
+            throw new ArchiveFailure(ErrorCode.SourceNotReadable, $"The folder {prefix} could not be read; nothing was saved.");
+        }
+        foreach (var child in children)
+        {
+            if (child.LinkTarget is not null) { links++; continue; } // a symbolic link or junction: never followed
             var name = prefix + "/" + child.Name;
-            if (child is DirectoryInfo d) AddFolder(zip, d, name, names, ref added, ref skipped, ref zone, temp);
-            else if (child is FileInfo f) AddFile(zip, f, name, names, ref added, ref skipped, ref zone, temp);
+            if (child is DirectoryInfo d) List(d, name, depth + 1, items, folders, ref links, ref total, temp);
+            else if (child is FileInfo f) Add(f, name, items, ref total, temp);
         }
     }
 
-    private static void AddFile(ZipArchive zip, FileInfo file, string name, HashSet<string> names, ref int added, ref int skipped, ref int? zone, string temp)
+    private static void Add(FileInfo file, string name, List<ZipItem> items, ref long total, string temp)
     {
         if (string.Equals(file.FullName, temp, StringComparison.OrdinalIgnoreCase)) return; // the archive being written
-        if (file.LinkTarget is not null || (file.Attributes & (FileAttributes.Offline | RecallOnOpen | RecallOnDataAccess)) != 0) { skipped++; return; }
-        if (!names.Add(name)) { skipped++; return; }
-        if (added + 1 > ArchiveLimits.MaxEntries) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"More than {ArchiveLimits.MaxEntries:N0} files.");
-        Stream source;
-        try { source = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1 << 16, FileOptions.SequentialScan); }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException) { skipped++; return; } // in use or protected: said in the result
-        using (source)
-        {
-            var entry = zip.CreateEntry(name, CompressionLevel.Optimal);
-            entry.LastWriteTime = file.LastWriteTime.Year is < 1980 or > 2107 ? DateTimeOffset.Now : file.LastWriteTime;
-            using var target = entry.Open();
-            source.CopyTo(target);
-        }
-        zone = Strictest(zone, MarkOfTheWeb.ZoneToCarry(file.FullName));
-        added++;
+        if (file.Name.StartsWith("~wintools-", StringComparison.Ordinal) && file.Name.EndsWith(".tmp", StringComparison.Ordinal)) return; // another job's temporary
+        if ((file.Attributes & (FileAttributes.Offline | RecallOnOpen | RecallOnDataAccess)) != 0)
+            throw new ArchiveFailure(ErrorCode.OnlineOnly, $"{name} is online only; open it once so Windows downloads it, then try again.");
+        if (items.Count + 1 > ArchiveLimits.MaxEntries) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"More than {ArchiveLimits.MaxEntries:N0} files.");
+        total += file.Length;
+        if (total > ArchiveLimits.MaxTotalBytes) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"More than {ArchiveLimits.MaxTotalBytes >> 30} GB in all.");
+        items.Add(new ZipItem(file, name));
     }
 
     /// <summary>The destination folder, which must exist and must not be, or be inside, a link or junction.</summary>
@@ -409,7 +461,8 @@ internal static class ArchiveJobs
         {
             try { Directory.Move(from, to); return true; }
             catch (IOException ex) when (ex.HResult is ErrorFileExists or ErrorAlreadyExists) { return false; }
-            catch (Exception ex) when (attempt < 5 && ex is UnauthorizedAccessException or IOException) { Thread.Sleep(200); }
+            // An antivirus or indexer looking at the new files holds them for a moment: back off for up to about 11 s.
+            catch (Exception ex) when (attempt < 10 && ex is UnauthorizedAccessException or IOException) { Thread.Sleep(200 * attempt); }
         }
     }
 
