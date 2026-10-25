@@ -46,6 +46,12 @@ public static class UiText
     /// <summary>The text for a key when there is one, otherwise <paramref name="fallback"/> (for labels a table may not cover yet).</summary>
     public static string TOr(string key, string fallback) => Get(_language, key) ?? Get(English, key) ?? fallback;
 
+    /// <summary>
+    /// A sentence other code states in English (the password policy, Batch rename's reasons) in the language in use: its
+    /// "say." entry, or the sentence itself when there is none.
+    /// </summary>
+    public static string Say(string english) => TOr("say." + english, english);
+
     public static string? Get(string language, string key) => Tables.TryGetValue(language, out var t) && t.TryGetValue(key, out var v) ? v : null;
 
     /// <summary>Every key of a table (for the completeness test).</summary>

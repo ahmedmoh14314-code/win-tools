@@ -39,15 +39,13 @@ public static class FilesCapabilities
     private static readonly IReadOnlySet<string> AnyFile = FileKinds.Declared.Where(k => k != FileKinds.Folder).Select(k => k.Id).ToHashSet(StringComparer.Ordinal);
     private static readonly IReadOnlySet<string> AnyFileOrFolder = FileKinds.Declared.Select(k => k.Id).ToHashSet(StringComparer.Ordinal);
 
-    /// <summary>File info's inputs: files no module reads, and folders. A file with its own info (Image info, PDF info,
-    /// Video info...) does not need a second one, and its Tools ring stays narrow enough for its labels.</summary>
-    private static readonly IReadOnlySet<string> NoOwnInfo = new HashSet<string>([FileKinds.AnyFile.Id, FileKinds.Folder.Id], StringComparer.Ordinal);
-
     public static IReadOnlyList<CapabilityDescriptor> Catalog { get; } =
     [
         // In the order a normal user needs them: on an image the ring shows the first ones, the rest go under "More…" (V2 PR 7.2).
-        new(InfoId, "File info", "tools", Module, new InputRule(NoOwnInfo), CapabilityShape.PerFile, CapabilityOutput.Facts, LongRunning: false,
-            Feedback: new("Reading", "read", "Read", "Nothing needed doing", "item", "items")),
+        // A fallback: a file with its own info (Image info, PDF info, Video info...) needs no second one, and its Tools ring
+        // stays narrow enough for its labels; any other file, folder or mixed selection gets it (PR #37 review).
+        new(InfoId, "File info", "tools", Module, new InputRule(AnyFileOrFolder), CapabilityShape.PerFile, CapabilityOutput.Facts, LongRunning: false,
+            Feedback: new("Reading", "read", "Read", "Nothing needed doing", "item", "items"), Fallback: true),
         new(Sha256Id, "SHA-256", "tools", Module, new InputRule(AnyFile), CapabilityShape.PerFile, CapabilityOutput.Facts, LongRunning: true,
             Feedback: new("Hashing", "hash", "Hashed", "Nothing needed doing", "file", "files")),
         new(CopyPathId, "Copy path", "actions", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Clipboard, LongRunning: false,

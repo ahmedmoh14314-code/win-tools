@@ -22,8 +22,9 @@ public static class LocalWords
             Verb = UiText.F("words.verb", label),
             Done = UiText.F("words.done", label),
             NothingReason = UiText.T("words.nothing"),
-            Noun = UiText.TOr("noun." + capability.Module, words.Noun),
-            Nouns = UiText.TOr("nouns." + capability.Module, words.Nouns),
+            // The command's own noun where the module's does not fit it ("Add to ZIP" counts files, not archives).
+            Noun = UiText.Get(UiText.Language, "noun." + capability.Id) ?? UiText.TOr("noun." + capability.Module, words.Noun),
+            Nouns = UiText.Get(UiText.Language, "nouns." + capability.Id) ?? UiText.TOr("nouns." + capability.Module, words.Nouns),
             PasswordRequired = words.PasswordRequired is null ? null : UiText.T("toast.dropAlone"),
             SuccessTitle = words.SuccessTitle is null ? null : UiText.T("words.renamed"),
             Reasons = words.Reasons?.ToDictionary(r => r.Key, r => UiText.TOr($"reason.rename.{r.Key}", r.Value)),

@@ -12,28 +12,40 @@ internal sealed record TextFit(int SizePx, string[] Lines, bool Ellipsis);
 /// </summary>
 internal static class Fonts
 {
-    public const uint DT_END_ELLIPSIS = 0x8000, DT_RIGHT = 0x2;
+    public const uint DT_END_ELLIPSIS = 0x8000, DT_RIGHT = 0x2, DT_RTLREADING = 0x20000;
     private const string Face = "Segoe UI";
 
     private static readonly Dictionary<(int, int), nint> Cache = [];
     private static readonly Dictionary<(string, int, int, int, int, bool), TextFit> Fits = [];
     private static nint _measureDc;
 
+    /// <summary>
+    /// One thread at a time: the overlay and the toasts draw on different threads, and one measuring DC with a font
+    /// selected into it (and the caches) shared between them gives wrong widths (seen as a flaky fit test, PR #37).
+    /// </summary>
+    private static readonly Lock Gate = new();
+
     public static nint Get(int sizePx, int weight)
     {
-        if (Cache.TryGetValue((sizePx, weight), out var f)) return f;
-        f = Gdi32.CreateFontW(-sizePx, 0, 0, 0, weight, 0, 0, 0, 1 /* DEFAULT_CHARSET */, 0, 0, 5 /* CLEARTYPE_QUALITY */, 0, Face);
-        Cache[(sizePx, weight)] = f;
-        return f;
+        lock (Gate)
+        {
+            if (Cache.TryGetValue((sizePx, weight), out var f)) return f;
+            f = Gdi32.CreateFontW(-sizePx, 0, 0, 0, weight, 0, 0, 0, 1 /* DEFAULT_CHARSET */, 0, 0, 5 /* CLEARTYPE_QUALITY */, 0, Face);
+            Cache[(sizePx, weight)] = f;
+            return f;
+        }
     }
 
     public static int Width(string text, int sizePx, int weight)
     {
-        if (_measureDc == 0) _measureDc = Gdi32.CreateCompatibleDC(0);
-        var old = Gdi32.SelectObject(_measureDc, Get(sizePx, weight));
-        Ui.GetTextExtentPoint32W(_measureDc, text, text.Length, out var size);
-        Gdi32.SelectObject(_measureDc, old);
-        return size.Cx;
+        lock (Gate)
+        {
+            if (_measureDc == 0) _measureDc = Gdi32.CreateCompatibleDC(0);
+            var old = Gdi32.SelectObject(_measureDc, Get(sizePx, weight));
+            Ui.GetTextExtentPoint32W(_measureDc, text, text.Length, out var size);
+            Gdi32.SelectObject(_measureDc, old);
+            return size.Cx;
+        }
     }
 
     /// <summary>
@@ -44,10 +56,13 @@ internal static class Fonts
     public static TextFit Fit(string text, int maxWidth, int baseSizePx, int weight, bool twoLines)
     {
         var key = (text, maxWidth, baseSizePx, weight, 0, twoLines);
-        if (Fits.TryGetValue(key, out var fit)) return fit;
-        fit = Compute(text, maxWidth, baseSizePx, weight, twoLines);
-        Fits[key] = fit;
-        return fit;
+        lock (Gate)
+        {
+            if (Fits.TryGetValue(key, out var fit)) return fit;
+            fit = Compute(text, maxWidth, baseSizePx, weight, twoLines);
+            Fits[key] = fit;
+            return fit;
+        }
     }
 
     private static TextFit Compute(string text, int maxWidth, int baseSizePx, int weight, bool twoLines)

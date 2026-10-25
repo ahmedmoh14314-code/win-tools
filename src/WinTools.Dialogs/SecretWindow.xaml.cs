@@ -47,7 +47,7 @@ public partial class SecretWindow : Window
             problem = UiText.T("dialog.password.differ");
         if (problem is not null)
         {
-            Problem.Text = problem;
+            Problem.Text = UiText.Say(problem);
             Problem.Visibility = Visibility.Visible;
             First.Focus();
             First.SelectAll();

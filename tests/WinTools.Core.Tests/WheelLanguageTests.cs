@@ -76,4 +76,27 @@ public sealed class WheelLanguageTests
         Assert.Equal("Could not convert photo.jpg", failed.Title);
         Assert.Equal("The image is damaged or incomplete.", failed.Detail);
     }
+    [Fact]
+    public void Arabic_counts_what_the_command_handles_and_explains_problems_in_Arabic()
+    {
+        try
+        {
+            UiText.Use("ar");
+            Assert.Equal("ملفات", LocalWords.For(Resolver.Catalog.Single(c => c.Id == "archive.zip")).Nouns); // photos added to a ZIP are files, not archives
+            Assert.Equal("مسارات", LocalWords.For(Resolver.Catalog.Single(c => c.Id == "files.copy-path")).Nouns);
+            Assert.Equal("صور", LocalWords.For(Resolver.Catalog.Single(c => c.Id == "convert.to-png")).Nouns);
+            // Sentences the password policy and Batch rename state in English, and the image info labels.
+            var problems = new[]
+            {
+                PasswordPolicy.CheckNew("", s => s, s => s).Problem!, PasswordPolicy.CheckExisting("", s => s).Problem!,
+                Files.BatchRename.Problem("")!, Files.BatchRename.Problem("a.")!, Files.BatchRename.Problem("con.txt")!, Files.BatchRename.Problem("a?.txt")!,
+            };
+            foreach (var p in problems) Assert.NotEqual(p, UiText.Say(p));
+            foreach (var label in new[] { "Format", "Dimensions", "File size", "Resolution", "Transparency", "Orientation", "Colour profile", "GPS location" })
+                Assert.NotEqual(label, UiText.T("fact." + label));
+            UiText.Use("en");
+            foreach (var p in problems) Assert.Equal(p, UiText.Say(p));
+        }
+        finally { UiText.Use("en"); }
+    }
 }

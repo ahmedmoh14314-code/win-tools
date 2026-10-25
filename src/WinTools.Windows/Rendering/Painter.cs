@@ -185,8 +185,11 @@ internal sealed class Painter : IDisposable
             if (old == 0) old = prev;
             _ = Gdi32.SetTextColor(dc, t.Colour.ColorRef);
             var rect = new RECT { Left = (int)Math.Floor(t.Left), Top = (int)Math.Floor(t.Top), Right = (int)Math.Ceiling(t.Right), Bottom = (int)Math.Ceiling(t.Bottom) };
-            var format = User32.DT_SINGLELINE | User32.DT_VCENTER | User32.DT_NOPREFIX | (t.Ellipsis ? Fonts.DT_END_ELLIPSIS : 0)
-                | t.Align switch { TextAlign.Left => 0u, TextAlign.Right => Fonts.DT_RIGHT, _ => User32.DT_CENTER };
+            // Arabic reads right to left: the reading order, and the side a label starts from, follow the language
+            // (DrawText's default is left to right, so "إلى PNG" would read backwards).
+            var rtl = WinTools.Core.Localization.UiText.IsRightToLeft;
+            var format = User32.DT_SINGLELINE | User32.DT_VCENTER | User32.DT_NOPREFIX | (t.Ellipsis ? Fonts.DT_END_ELLIPSIS : 0) | (rtl ? Fonts.DT_RTLREADING : 0)
+                | (t.Align, rtl) switch { (TextAlign.Left, false) or (TextAlign.Right, true) => 0u, (TextAlign.Right, false) or (TextAlign.Left, true) => Fonts.DT_RIGHT, _ => User32.DT_CENTER };
             User32.DrawTextW(dc, t.Text, -1, ref rect, format);
             _surface.MakeOpaque(rect.Left, rect.Top, rect.Right, rect.Bottom);
         }

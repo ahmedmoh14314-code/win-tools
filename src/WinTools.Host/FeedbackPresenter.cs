@@ -172,7 +172,7 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
     /// <summary>A password the host's own check refused (V2 PR 2.2); the reason never contains the password. Any thread.</summary>
     public void SecretRefused(string reason) => ui.Post(() =>
     {
-        ShowToast(new ToastContent(FeedbackKind.Failure, UiText.T("toast.secretRefused"), UiText.F("toast.secretRefused.text", reason)));
+        ShowToast(new ToastContent(FeedbackKind.Failure, UiText.T("toast.secretRefused"), UiText.F("toast.secretRefused.text", UiText.Say(reason))));
         sounds.Play(UiSound.Failure);
         log.Event("toast", new { kind = "secretRefused" });
     });

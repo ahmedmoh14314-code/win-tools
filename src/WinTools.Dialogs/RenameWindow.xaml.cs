@@ -66,10 +66,10 @@ public partial class RenameWindow : Window
         {
             RenameStatus.Unchanged => UiText.T("rename.unchanged"),
             RenameStatus.Renamed => i.To,
-            _ => $"{i.To}: {i.Problem}",
+            _ => $"{i.To}: {UiText.Say(i.Problem ?? "")}",
         })).ToArray();
         var blocked = plan.FirstOrDefault(i => i.Problem is not null);
-        Problem.Text = blocked is not null ? $"{blocked.From}: {blocked.Problem}." : BatchRename.CanApply(plan) ? "" : UiText.T("rename.noChange");
+        Problem.Text = blocked is not null ? $"{blocked.From}: {UiText.Say(blocked.Problem!)}." : BatchRename.CanApply(plan) ? "" : UiText.T("rename.noChange");
         Ok.IsEnabled = BatchRename.CanApply(plan);
     }
 

@@ -53,8 +53,19 @@ public sealed class GeneralFilesTests
     [Fact]
     public void A_mixed_selection_gets_only_what_every_item_allows()
     {
-        Assert.Equal(["files.copy-path", "files.copy-name", "files.copy-folder", "archive.zip"], Ids(@"C:\p\a.png", @"C:\p\holiday\")); // File info is not for an image
-        Assert.Equal(General.Where(id => id != "files.info"), Ids(@"C:\p\a.png", @"C:\p\notes.txt")); // the image has its own info
+        // No module's info covers a mixed selection, so File info does (a fallback, PR #37 review).
+        Assert.Equal(["files.info", "files.copy-path", "files.copy-name", "files.copy-folder", "archive.zip"], Ids(@"C:\p\a.png", @"C:\p\holiday\"));
+        Assert.Equal(General, Ids(@"C:\p\a.png", @"C:\p\notes.txt"));
+    }
+
+    [Fact]
+    public void File_info_is_offered_wherever_no_module_has_its_own_info()
+    {
+        Assert.Contains("files.info", Ids(@"C:\p\a.gz"));            // no Archive info for a .gz
+        Assert.Contains("files.info", Ids(@"C:\p\a.pdf", @"C:\p\b.docx"));
+        Assert.DoesNotContain("files.info", Ids(@"C:\p\a.png"));     // Image info
+        Assert.DoesNotContain("files.info", Ids(@"C:\p\a.pdf"));     // PDF info
+        Assert.DoesNotContain("files.info", Ids(@"C:\p\clip.mp4"));  // Video info
     }
 
     [Fact]
@@ -62,7 +73,10 @@ public sealed class GeneralFilesTests
     {
         var menu = RadialMenu.Build(Resolver, [@"C:\p\notes.xyz"]);
         Assert.Equal(["Tools", "Actions"], menu.Select(g => g.Label));
-        Assert.True(MenuNavigator.BackSweep(menu.Count, menu[0].Commands.Count) <= Math.PI); // Back takes at most half: commands are reachable
+        // With two groups Back takes exactly half the ring, and each command keeps a sector it can be aimed at.
+        var back = MenuNavigator.BackSweep(menu.Count, menu[0].Commands.Count);
+        Assert.Equal(Math.PI, back, 9);
+        Assert.True((2 * Math.PI - back) / menu[0].Commands.Count >= MenuNavigator.MinCommandSweep);
     }
 
     [Fact]

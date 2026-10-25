@@ -17,8 +17,6 @@ public partial class App : Application
         base.OnStartup(e);
         // The host's language ("--lang en|ar"): every window speaks it, Arabic right to left.
         for (var i = 0; i + 1 < e.Args.Length; i++) if (e.Args[i] == "--lang") UiText.Use(e.Args[i + 1]);
-        FrameworkElement.FlowDirectionProperty.OverrideMetadata(typeof(Window),
-            new FrameworkPropertyMetadata(UiText.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight, FrameworkPropertyMetadataOptions.Inherits));
         var line = ReadRequestLine();
         if (WorkerProtocol.Deserialize<DialogEnvelope>(line)?.Kind == DialogKinds.Rename)
         {
@@ -30,7 +28,7 @@ public partial class App : Application
             }
             var window = new RenameWindow(rename);
             window.Closed += (_, _) => Answer(new RenameResult(window.Rule));
-            window.Show();
+            Present(window);
             return;
         }
         if (WorkerProtocol.Deserialize<DialogEnvelope>(line)?.Kind == DialogKinds.Secret)
@@ -43,7 +41,7 @@ public partial class App : Application
             }
             var window = new SecretWindow(secret);
             window.Closed += (_, _) => Answer(new SecretResult(window.Secret));
-            window.Show();
+            Present(window);
             return;
         }
         var request = WorkerProtocol.Deserialize<PickRequest>(line);
@@ -54,7 +52,17 @@ public partial class App : Application
         }
         var pick = new PickWindow(request);
         pick.Closed += (_, _) => Answer(new PickResult(pick.Chosen));
-        pick.Show();
+        Present(pick);
+    }
+
+    /// <summary>
+    /// Shows a window in the host's language: Arabic right to left. Set on each window, never by overriding Window's
+    /// FlowDirection metadata, which WPF's own Window already overrides (doing it again throws when the first window is made).
+    /// </summary>
+    private static void Present(Window window)
+    {
+        window.FlowDirection = UiText.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+        window.Show();
     }
 
     private static string? ReadRequestLine()
