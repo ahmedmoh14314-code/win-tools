@@ -158,6 +158,12 @@ var settingsFile = Path.Combine(folder, "..", $"settings-{scenario}-{stamp}.json
 // Default settings except the animations (on unless asked otherwise), so the menu's commands are the defaults' ones.
 if (!AppSettings.TriggerKeys.TryGetValue(triggerKey, out var triggerVk)) { Console.Error.WriteLine($"--trigger {triggerKey} is not an allowed trigger key."); return 64; }
 Desktop.TriggerVk = triggerVk;
+// Alt with another trigger is another shortcut (Alt+F4 closes the window): the "alt" scenario is Alt+Space only.
+if (scenario == "alt" && triggerKey != "Space") { Console.Error.WriteLine("The alt scenario runs with the Space trigger only."); return 64; }
+// SPIKE: the probe key's virtual-key code (F2..F24, A..Z, 0..9); released with the rest and checked at the end.
+static int? ProbeVk(string key) => key is { Length: 1 } k && char.IsAsciiLetterOrDigit(k[0]) ? char.ToUpperInvariant(k[0])
+    : key is ['F', ..] && int.TryParse(key[1..], out var f) && f is >= 1 and <= 24 ? 0x6F + f : null;
+if (scenario is "keyprobe" or "keycontrol" && ProbeVk(probeKey) is { } pvk) Desktop.ProbeVk = pvk;
 File.WriteAllText(settingsFile, new AppSettings { Animations = animations, TriggerKey = triggerKey }.ToJson());
 resultsPath ??= Path.Combine(folder, "..", $"e2e-{scenario}-{stamp}.jsonl");
 using var results = new StreamWriter(resultsPath, append: false) { AutoFlush = true };
@@ -505,7 +511,7 @@ using (var explorer = opened)
                 Desktop.LeftUp(); Thread.Sleep(700);
                 var after = explorer.ProbeState();
                 var inert = during == before && after == before;
-                if (!inert) { Desktop.Tap(Desktop.VkEscape); Thread.Sleep(300); }
+                if (!inert) { if (probeKey == "F11") { Desktop.Tap(vk); Thread.Sleep(500); } Desktop.Tap(Desktop.VkEscape); Thread.Sleep(300); }
                 Record(new { scenario, cycle, key = probeKey, inert, before, during, after, restored = explorer.ProbeState() == before });
                 if (inert) passed++; else exitCode = 1;
                 Thread.Sleep(400);
@@ -748,7 +754,7 @@ if (hostAlive) { host.Refresh(); hostPrivateMb = Math.Round(host.PrivateMemorySi
 if (hostAlive) { Desktop.CloseWindowsOf(host.Id, "WinTools.InfoPanel"); host.Kill(); host.WaitForExit(5000); }
 // The harness must leave no injected input behind; say so in the summary and fail if it did.
 var leftDownAtEnd = Desktop.IsDown(0x01);
-var spaceDownAtEnd = Desktop.IsDown(Desktop.VkSpace) || Desktop.IsDown(triggerVk); // the trigger key, whichever it is
+var spaceDownAtEnd = Desktop.IsDown(Desktop.VkSpace) || Desktop.IsDown(triggerVk) || (Desktop.ProbeVk != 0 && Desktop.IsDown(Desktop.ProbeVk)); // the trigger or probe key
 var modifiersDownAtEnd = Desktop.IsDown(Desktop.VkControl) || Desktop.IsDown(Desktop.VkShift) || Desktop.IsDown(Desktop.VkAlt);
 if (leftDownAtEnd || spaceDownAtEnd || modifiersDownAtEnd)
 {

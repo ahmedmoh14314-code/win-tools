@@ -136,7 +136,7 @@ internal static partial class Desktop
     /// <summary>Releases every key and button the harness may hold, each on its own: one failing never skips the rest.</summary>
     public static void ReleaseAll()
     {
-        foreach (var release in new Action[] { () => KeyUp(VkControl), () => KeyUp(VkShift), () => KeyUp(VkAlt), () => Tap(VkEscape), () => KeyUp(VkSpace), () => KeyUp(TriggerVk), LeftUp })
+        foreach (var release in new Action[] { () => KeyUp(VkControl), () => KeyUp(VkShift), () => KeyUp(VkAlt), () => Tap(VkEscape), () => KeyUp(VkSpace), () => KeyUp(TriggerVk), () => { if (ProbeVk != 0) KeyUp(ProbeVk); }, LeftUp })
         {
             try { release(); }
             catch (InvalidOperationException) { } // SendInput refused (secure desktop, lock screen): nothing more can be done from here
@@ -144,6 +144,9 @@ internal static partial class Desktop
     }
     /// <summary>The run's trigger key when it is not Space (--trigger), released with the rest.</summary>
     public static int TriggerVk { get; set; } = VkSpace;
+
+    /// <summary>SPIKE: the keyprobe/keycontrol key (0 when none), released with the rest.</summary>
+    public static int ProbeVk { get; set; }
 
     public static void KeyDown(int vk) => Key(vk, 0);
     public static void KeyUp(int vk) => Key(vk, 0x0002);
