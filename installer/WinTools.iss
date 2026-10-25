@@ -10,7 +10,7 @@
 ; - AppId is the product's upgrade identity: never change it, or upgrades become second installations.
 
 #define AppName "WinTools"
-; The version comes from Build-Installer.ps1 (-Version, -Label, -FileLabel); these are the defaults for a bare ISCC run.
+; The version comes from Build-Installer.ps1 (-Version, -DisplayLabel, -FileLabel); these are the defaults for a bare ISCC run.
 #ifndef AppVersion
   #define AppVersion "0.1.0"
 #endif
