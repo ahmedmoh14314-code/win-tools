@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Formats.Tar;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using WinTools.Core.Capabilities;
@@ -58,6 +59,7 @@ internal static class ArchiveJobs
                 ArchiveCapabilities.TestId => Test(id, request.Inputs[0]),
                 ArchiveCapabilities.ExtractId => Extract(request),
                 ArchiveCapabilities.ZipId => Zip(request),
+                ArchiveCapabilities.DecompressId => Decompress(request),
                 _ => JobResult.Fail(id, ErrorCode.UnsupportedOperation, "This worker does not run that command."),
             };
         }
@@ -76,39 +78,6 @@ internal static class ArchiveJobs
             throw new ArchiveFailure(ErrorCode.OnlineOnly, "The file is online only; reading it would download it.");
     }
 
-    /// <summary>Opens a ZIP for reading: a local file, at most <see cref="MaxArchiveBytes"/>, with the "PK" signature.</summary>
-    private static ZipArchive OpenZip(string path, out FileStream stream)
-    {
-        if (Directory.Exists(path)) throw new ArchiveFailure(ErrorCode.IsAFolder, "The source is a folder, not a file.");
-        var info = new FileInfo(path);
-        if (!info.Exists) throw new FileNotFoundException();
-        RefuseOnlineOnly(info);
-        if (info.Length > MaxArchiveBytes) throw new ArchiveFailure(ErrorCode.InputTooLarge, $"The archive is larger than {MaxArchiveBytes >> 30} GB.");
-        try { stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 1 << 16); }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException and not FileNotFoundException and not DirectoryNotFoundException)
-        {
-            throw new ArchiveFailure(ErrorCode.SourceNotReadable, "The archive could not be read.");
-        }
-        var head = new byte[4];
-        if (stream.ReadAtLeast(head, 4, throwOnEndOfStream: false) < 4 || head[0] != 'P' || head[1] != 'K')
-        {
-            stream.Dispose();
-            throw new ArchiveFailure(ErrorCode.ContentMismatch, "The file is not a ZIP archive.");
-        }
-        stream.Position = 0;
-        try
-        {
-            var zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
-            if (zip.Entries.Count > ArchiveLimits.MaxEntries)
-            {
-                zip.Dispose();
-                throw new ArchiveFailure(ErrorCode.LimitExceeded, $"The archive has more than {ArchiveLimits.MaxEntries:N0} entries.");
-            }
-            return zip;
-        }
-        catch (InvalidDataException) { stream.Dispose(); throw; }
-    }
-
     private static bool IsLink(ZipArchiveEntry e) => (e.ExternalAttributes & UnixFileTypeMask) == UnixSymlink;
 
     /// <summary>A Unix file type other than a regular file or a folder (a device, a pipe, a socket).</summary>
@@ -118,25 +87,134 @@ internal static class ArchiveJobs
         return type != 0 && type != UnixRegular && type != UnixDirectory && type != UnixSymlink;
     }
 
+    /// <summary>
+    /// One entry of any archive format, as the checks see it (V2 PR 5.2): its name and kind, how to read it, and the
+    /// check values the format carries (ZIP: CRC-32 and sizes; TAR: none, its GZIP wrapper checks itself at the end).
+    /// </summary>
+    private sealed record Entry(string Name, bool IsFolder, bool IsLink, bool IsSpecial, bool IsEncrypted, Func<Stream> Open,
+        long? Length, uint? Crc, long CompressedLength, DateTime Modified);
+
+    private static IEnumerable<Entry> EntriesOf(ZipArchive zip) => zip.Entries.Select(e => new Entry(e.FullName,
+        e.FullName.EndsWith('/') || e.FullName.EndsWith('\\'), IsLink(e), IsSpecial(e), e.IsEncrypted, e.Open, e.Length, e.Crc32, e.CompressedLength,
+        e.LastWriteTime.LocalDateTime));
+
+    /// <summary>The archive formats this worker reads, told by their content.</summary>
+    private enum Kind { Zip, Tar, TarGz }
+
+    /// <summary>
+    /// An open archive of any supported kind. TAR is read as a stream, entry by entry (TarReader), so an entry's data
+    /// must be read before the next is asked for; the checks do exactly that. The kind comes from the content (the "PK"
+    /// signature, GZIP's 1F 8B, or a valid TAR header), never from the name alone.
+    /// </summary>
+    private sealed class Source : IDisposable
+    {
+        private readonly FileStream _file;
+        private readonly ZipArchive? _zip;
+        private readonly Stream? _tarStream;
+
+        public Kind Kind { get; }
+        public long Length => _file.Length;
+        public string TypeName => Kind switch { Kind.Zip => "ZIP archive", Kind.Tar => "TAR archive", _ => "TAR.GZ archive" };
+
+        public Source(string path)
+        {
+            if (Directory.Exists(path)) throw new ArchiveFailure(ErrorCode.IsAFolder, "The source is a folder, not a file.");
+            var info = new FileInfo(path);
+            if (!info.Exists) throw new FileNotFoundException();
+            RefuseOnlineOnly(info);
+            if (info.Length > MaxArchiveBytes) throw new ArchiveFailure(ErrorCode.InputTooLarge, $"The archive is larger than {MaxArchiveBytes >> 30} GB.");
+            try { _file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 1 << 16); }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException and not FileNotFoundException and not DirectoryNotFoundException)
+            {
+                throw new ArchiveFailure(ErrorCode.SourceNotReadable, "The archive could not be read.");
+            }
+            var head = new byte[512];
+            var read = _file.ReadAtLeast(head, head.Length, throwOnEndOfStream: false);
+            _file.Position = 0;
+            try
+            {
+                if (read >= 4 && head[0] == 'P' && head[1] == 'K')
+                {
+                    Kind = Kind.Zip;
+                    _zip = new ZipArchive(_file, ZipArchiveMode.Read, leaveOpen: true);
+                    if (_zip.Entries.Count > ArchiveLimits.MaxEntries) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"The archive has more than {ArchiveLimits.MaxEntries:N0} entries.");
+                }
+                else if (read >= 2 && head[0] == 0x1F && head[1] == 0x8B)
+                {
+                    Kind = Kind.TarGz;
+                    _tarStream = new GZipStream(_file, CompressionMode.Decompress, leaveOpen: true);
+                }
+                else if (read == 512 && head.AsSpan(257, 5).SequenceEqual("ustar"u8))
+                {
+                    Kind = Kind.Tar;
+                    _tarStream = _file;
+                }
+                else throw new ArchiveFailure(ErrorCode.ContentMismatch, "The file is not a ZIP, TAR or TAR.GZ archive.");
+            }
+            catch
+            {
+                Dispose();
+                throw;
+            }
+        }
+
+        public IEnumerable<Entry> Entries() => _zip is not null ? EntriesOf(_zip) : TarEntries();
+
+        private IEnumerable<Entry> TarEntries()
+        {
+            using var reader = new TarReader(_tarStream!, leaveOpen: true);
+            var count = 0;
+            while (reader.GetNextEntry(copyData: false) is { } e)
+            {
+                if (++count > ArchiveLimits.MaxEntries) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"The archive has more than {ArchiveLimits.MaxEntries:N0} entries.");
+                var type = e.EntryType;
+                var isFile = type is TarEntryType.RegularFile or TarEntryType.V7RegularFile or TarEntryType.ContiguousFile;
+                var isFolder = type == TarEntryType.Directory;
+                var isLink = type is TarEntryType.SymbolicLink or TarEntryType.HardLink;
+                var name = isFolder && !e.Name.EndsWith('/') ? e.Name + "/" : e.Name;
+                var data = e.DataStream;
+                yield return new Entry(name, isFolder, isLink, !isFile && !isFolder && !isLink, false,
+                    () => data ?? Stream.Null, isFile ? e.Length : 0, null, -1, e.ModificationTime.LocalDateTime);
+            }
+            // The GZIP wrapper checks its CRC-32 and length only at its end: read what follows the TAR's last entry, bounded.
+            if (Kind == Kind.TarGz)
+            {
+                var rest = new byte[1 << 16];
+                long tail = 0;
+                int n;
+                while ((n = _tarStream!.Read(rest)) > 0)
+                    if ((tail += n) > 16L << 20) throw new ArchiveFailure(ErrorCode.LimitExceeded, "The archive holds unexpected data after its last entry.");
+            }
+        }
+
+        public void Dispose()
+        {
+            _zip?.Dispose();
+            if (_tarStream is not null && !ReferenceEquals(_tarStream, _file)) _tarStream.Dispose();
+            _file.Dispose();
+        }
+    }
+
     private static JobResult Info(string id, string path)
     {
-        using var zip = OpenZip(path, out _);
+        using var source = new Source(path);
         long files = 0, folders = 0, size = 0, packed = 0, encrypted = 0, links = 0;
         var top = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var e in zip.Entries)
+        foreach (var e in source.Entries())
         {
-            var isFolder = e.FullName.EndsWith('/') || e.FullName.EndsWith('\\');
-            if (isFolder) folders++; else files++;
-            if (IsLink(e)) links++;
+            if (e.IsFolder) folders++; else files++;
+            if (e.IsLink) links++;
             if (e.IsEncrypted) encrypted++;
-            size += e.Length;
-            packed += e.CompressedLength;
-            var first = e.FullName.Replace('\\', '/').TrimStart('/').Split('/')[0];
+            size += e.Length ?? 0;
+            if (e.CompressedLength >= 0) packed += e.CompressedLength;
+            // A TAR is read to the end to list it: declared sizes past the limit stop the listing.
+            if (size > ArchiveLimits.MaxTotalBytes) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"The archive declares more than {ArchiveLimits.MaxTotalBytes >> 30} GB.");
+            var first = e.Name.Replace('\\', '/').TrimStart('/').Split('/')[0];
             if (first.Length > 0) top.Add(first);
         }
         var facts = new List<JobFact>
         {
-            new("Type", "ZIP archive"),
+            new("Type", source.TypeName),
             new("Files", files.ToString("N0", CultureInfo.InvariantCulture)),
             new("Folders", folders.ToString("N0", CultureInfo.InvariantCulture)),
             new("Size", $"{FeedbackText.Size(size)} unpacked, {FeedbackText.Size(new FileInfo(path).Length)} packed"),
@@ -161,7 +239,7 @@ internal static class ArchiveJobs
     /// <paramref name="ratioRules"/>: the bomb rules apply to an archive from elsewhere, not to one just made from the user's
     /// own files, which may be zeros (evaluator, PR 5.1). Everything created counts against one budget, folders included.
     /// </summary>
-    private static Pass ReadAll(ZipArchive zip, string? into, long? freeBytes, long archiveBytes, bool ratioRules)
+    private static Pass ReadAll(IEnumerable<Entry> entries, string? into, long? freeBytes, long archiveBytes, bool ratioRules)
     {
         int files = 0, folders = 0, skipped = 0, renamed = 0;
         long total = 0;
@@ -169,11 +247,11 @@ internal static class ArchiveJobs
         var budget = new ArchiveLimits.Budget();
         var buffer = new byte[1 << 16];
         void Skip(string why) { skipped++; if (problems.Count < 5) problems.Add(why); }
-        foreach (var entry in zip.Entries)
+        foreach (var entry in entries)
         {
             if (entry.IsEncrypted) throw new ArchiveFailure(ErrorCode.PasswordRequired, "The archive has entries protected with a password.");
-            if (IsLink(entry) || IsSpecial(entry)) { Skip("a link or device entry"); continue; } // never followed, never created
-            var verdict = ArchiveEntryPolicy.Judge(entry.FullName);
+            if (entry.IsLink || entry.IsSpecial) { Skip("a link or device entry"); continue; } // never followed, never created
+            var verdict = ArchiveEntryPolicy.Judge(entry.Name);
             if (verdict.Refusal is not null) { Skip(verdict.Refusal); continue; }
             if (verdict.Renamed) renamed++;
             var relative = verdict.RelativePath!;
@@ -217,7 +295,7 @@ internal static class ArchiveJobs
                 {
                     written += n;
                     total += n;
-                    if (ratioRules && ArchiveLimits.IsBomb(written, entry.CompressedLength)) throw new ArchiveFailure(ErrorCode.LimitExceeded, "An entry expands far beyond its packed size; it looks like an archive bomb.");
+                    if (ratioRules && entry.CompressedLength >= 0 && ArchiveLimits.IsBomb(written, entry.CompressedLength)) throw new ArchiveFailure(ErrorCode.LimitExceeded, "An entry expands far beyond its packed size; it looks like an archive bomb.");
                     if (ratioRules && ArchiveLimits.IsArchiveBomb(total, archiveBytes)) throw new ArchiveFailure(ErrorCode.LimitExceeded, "The archive expands far beyond its own size; it looks like an archive bomb.");
                     if (total > ArchiveLimits.MaxTotalBytes) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"The archive expands to more than {ArchiveLimits.MaxTotalBytes >> 30} GB.");
                     if (freeBytes is { } free && total > free - ArchiveLimits.FreeSpaceReserve) throw new ArchiveFailure(ErrorCode.DiskFull, "Extracting would leave less than 2 GB free on the drive.");
@@ -225,9 +303,9 @@ internal static class ArchiveJobs
                     output?.Write(buffer, 0, n);
                 }
             }
-            if (written != entry.Length || crc.Value != entry.Crc32)
+            if ((entry.Length is { } length && written != length) || (entry.Crc is { } expected && crc.Value != expected))
                 throw new ArchiveFailure(ErrorCode.DecodeFailed, "An entry is damaged (its check value does not match).");
-            if (target is not null) File.SetLastWriteTime(target, ClampDate(entry.LastWriteTime.LocalDateTime));
+            if (target is not null) File.SetLastWriteTime(target, ClampDate(entry.Modified));
             files++;
         }
         return new Pass(files, folders, total, skipped, renamed, problems);
@@ -250,23 +328,91 @@ internal static class ArchiveJobs
 
     private static JobResult Test(string id, string path)
     {
-        using var zip = OpenZip(path, out _);
-        var pass = ReadAll(zip, into: null, freeBytes: null, new FileInfo(path).Length, ratioRules: true);
+        using var source = new Source(path);
+        var pass = ReadAll(source.Entries(), into: null, freeBytes: null, source.Length, ratioRules: true);
         var facts = new List<JobFact>
         {
-            new("Result", "No errors: every file's check value matches"),
+            new("Result", source.Kind == Kind.Tar ? "No errors: every entry read in full (TAR keeps no check values)" : "No errors: every file's check value matches"),
             new("Checked", $"{pass.Files:N0} files, {FeedbackText.Size(pass.Bytes)}"),
         };
         if (pass.Skipped > 0) facts.Add(new("Not checked", $"{pass.Skipped:N0} entries (links, devices or unsafe names)", Notice: true));
         return JobResult.WithFacts(id, facts);
     }
 
+    /// <summary>
+    /// Decompress a single GZIP file (V2 PR 5.2): "notes.txt.gz" becomes "notes.txt" next to it, through an exclusive
+    /// temporary file, with the bytes counted against the size, ratio and free-space limits as they come out. GZIP checks
+    /// its own CRC-32 and length at the end; a mismatch fails the job and nothing is kept.
+    /// </summary>
+    private static JobResult Decompress(JobRequest request)
+    {
+        var path = request.Inputs[0];
+        var dest = Destination(request, path);
+        if (Directory.Exists(path)) throw new ArchiveFailure(ErrorCode.IsAFolder, "The source is a folder, not a file.");
+        var info = new FileInfo(path);
+        if (!info.Exists) throw new FileNotFoundException();
+        RefuseOnlineOnly(info);
+        if (info.Length > MaxArchiveBytes) throw new ArchiveFailure(ErrorCode.InputTooLarge, $"The file is larger than {MaxArchiveBytes >> 30} GB.");
+        var zone = MarkOfTheWeb.ZoneToCarry(path);
+        long? free = null;
+        try { free = new DriveInfo(Path.GetPathRoot(dest.FullName)!).AvailableFreeSpace; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { }
+        var temp = ArchiveCapabilities.TempPath(request.Id, request.Inputs, request.OutputDirectory);
+        var committed = false;
+        try
+        {
+            string hash;
+            using (var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 1 << 16))
+            {
+                var head = new byte[2];
+                if (file.ReadAtLeast(head, 2, throwOnEndOfStream: false) < 2 || head[0] != 0x1F || head[1] != 0x8B)
+                    throw new ArchiveFailure(ErrorCode.ContentMismatch, "The file is not GZIP-compressed.");
+                file.Position = 0;
+                using var gzip = new GZipStream(file, CompressionMode.Decompress);
+                using var output = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1 << 16);
+                File.SetAttributes(temp, FileAttributes.Hidden);
+                var buffer = new byte[1 << 16];
+                long total = 0;
+                int n;
+                using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                while ((n = gzip.Read(buffer)) > 0)
+                {
+                    total += n;
+                    if (ArchiveLimits.IsArchiveBomb(total, info.Length)) throw new ArchiveFailure(ErrorCode.LimitExceeded, "The file expands far beyond its own size; it looks like a compression bomb.");
+                    if (total > ArchiveLimits.MaxTotalBytes) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"The file expands to more than {ArchiveLimits.MaxTotalBytes >> 30} GB.");
+                    if (free is { } f && total > f - ArchiveLimits.FreeSpaceReserve) throw new ArchiveFailure(ErrorCode.DiskFull, "Decompressing would leave less than 2 GB free on the drive.");
+                    output.Write(buffer, 0, n);
+                    sha.AppendData(buffer, 0, n);
+                }
+                output.Flush(flushToDisk: true);
+                hash = Convert.ToHexStringLower(sha.GetHashAndReset());
+            }
+            if (zone is { } z) MarkOfTheWeb.Apply(temp, z);
+            File.SetAttributes(temp, FileAttributes.Normal);
+            foreach (var candidate in ArchiveCapabilities.Candidates(ArchiveCapabilities.DecompressId, request.Inputs, request.OutputDirectory))
+            {
+                try
+                {
+                    File.Move(temp, candidate, overwrite: false);
+                    committed = true;
+                    return JobResult.Ok(request.Id, new JobOutput(candidate, hash));
+                }
+                catch (IOException ex) when (ex.HResult is ErrorFileExists or ErrorAlreadyExists) { }
+            }
+            return JobResult.Fail(request.Id, ErrorCode.NoFreeOutputName, $"No free output name after {OutputNaming.MaxCollisionIndex} attempts.");
+        }
+        finally
+        {
+            if (!committed) DeleteFile(temp);
+        }
+    }
+
     private static JobResult Extract(JobRequest request)
     {
         var path = request.Inputs[0];
         var dest = Destination(request, path);
-        using var zip = OpenZip(path, out _);
-        // The archive is read before anything is written, so a damaged directory fails here with nothing to clean.
+        using var source = new Source(path);
+        // A ZIP's directory is read before anything is written, so a damaged one fails here with nothing to clean.
         var zone = MarkOfTheWeb.ZoneToCarry(path);
         var staging = ArchiveCapabilities.TempPath(request.Id, request.Inputs, request.OutputDirectory);
         switch (ExclusiveDirectory.Create(staging))
@@ -282,7 +428,7 @@ internal static class ArchiveJobs
             long? free = null;
             try { free = new DriveInfo(Path.GetPathRoot(dest.FullName)!).AvailableFreeSpace; }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { }
-            var pass = ReadAll(zip, staging, free, new FileInfo(path).Length, ratioRules: true);
+            var pass = ReadAll(source.Entries(), staging, free, source.Length, ratioRules: true);
             if (pass.Files == 0 && pass.Folders == 0)
                 return JobResult.Fail(request.Id, ErrorCode.NothingToDo, pass.Skipped > 0 ? "Every entry was unsafe to extract." : "The archive is empty.");
             if (zone is { } z)
@@ -383,7 +529,7 @@ internal static class ArchiveJobs
                 // not apply: these are the user's own files, which may be highly compressible.
                 fs.Position = 0;
                 using var check = new ZipArchive(fs, ZipArchiveMode.Read, leaveOpen: true);
-                var pass = ReadAll(check, into: null, freeBytes: null, fs.Length, ratioRules: false);
+                var pass = ReadAll(EntriesOf(check), into: null, freeBytes: null, fs.Length, ratioRules: false);
                 if (pass.Files != items.Count || pass.Skipped > 0) throw new ArchiveFailure(ErrorCode.OutputValidationFailed, "The new archive did not check out; nothing was saved.");
             }
             if (zone is { } z) MarkOfTheWeb.Apply(temp, z);
