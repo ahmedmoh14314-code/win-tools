@@ -29,6 +29,7 @@ Template: `template.md`. Numbering is sequential and never reused. Old ADRs are 
 | [ADR-0022](ADR-0022-pdf-module-qpdf.md) | The PDF module's structural commands run the official qpdf build in the PDF worker | Proposed (V2 PR 2.1) | Evaluator review; Explorer run |
 | [ADR-0023](ADR-0023-archives-zip.md) | Archives start with ZIP on .NET's own code, behind a name policy and decompression-time limits | Proposed (V2 PR 5.1) | Evaluator review; Explorer run |
 | [ADR-0024](ADR-0024-subtitles.md) | Subtitles (SRT, WebVTT) parsed in house in the text worker; malformed timing reported, not guessed | Proposed (V2 PR 7.1) | Evaluator review; Explorer run |
+| [ADR-0026](ADR-0026-secrets-pdf-passwords.md) | A password goes from the dialogs process to one job and reaches qpdf only on its stdin (`@-`); Remove protection never lifts an author's restrictions | Proposed (V2 PR 2.2) | Worker, host and Explorer tests; evaluator pending |
 | [ADR-0025](ADR-0025-documents-ooxml-read.md) | Office documents read in house as archives of XML: no DTD, no resolver, no macro run; Remove properties copies every other part byte for byte | Proposed (V2 PR 6.1, 6.2) | Evaluator review; Explorer run |
 
 Decision order recommended: 0002 → 0003 → 0001/0004 (same spike) → 0005 → 0011 → 0007 → 0006 → 0008. 0009 and 0010 can be confirmed any time.

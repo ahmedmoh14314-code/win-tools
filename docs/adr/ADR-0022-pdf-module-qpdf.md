@@ -23,6 +23,7 @@
    - qpdf runs there: that folder is its working directory, and every argument is a fixed option or a relative fixed name (`out.pdf`, `pages\page-%d.pdf`).
    - The review found that qpdf cannot open a path longer than 260 characters, even in the `\\?\` form (its executable is not long-path aware), and that it expands the first `%d` anywhere in an output path, folder names included. Neither can reach it now. Neither can a source that changes during the job, because the copy is what is checked and processed.
    - `ProcessStartInfo.ArgumentList` only; no argument may be empty, start with `@` or hold a NUL.
+   - **Amended by ADR-0026 (PR 2.2):** Protect and Remove protection give qpdf exactly one argument, `@-`, and write their arguments, the password among them, to its stdin, one per line; each must hold no line break or NUL and not start with `@`. Every other command still closes stdin unused.
    - A private environment (`SystemRoot`, `windir`, `TEMP`, `TMP` only); standard input closed (no prompt can wait).
    - Output read up to 64 KB; a 4-minute limit per run; the process tree killed when the limit passes.
    - The PDF worker itself is a disposable process in the host's kill-on-close job, so qpdf is inside it too.
@@ -73,7 +74,7 @@
 - **Building qpdf from source.** It is reproducible, but it needs a C++ toolchain in CI for no gain over the signed official build. Revisit if the project's builds stop.
 - **Committing the binaries.** Rejected: binary churn in a public repository. A pinned fetch with hashes gives the same reproducibility.
 - **The mingw build.** It is the same code with a different runtime. The msvc build's runtime DLLs ship with it, and our other components already target the MSVC world.
-- **Passing a password on the command line.** Never: PR 2.2 uses `--password-file=-` on standard input.
+- **Passing a password on the command line.** Never. PR 2.2 passes every argument on standard input through `@-` (ADR-0026). `--password-file=-` was the first idea, but it covers opening a file only, not encrypting one.
 
 ## Consequences
 - **Notices** (`third-party/`, collected into `THIRD-PARTY-NOTICES.txt` by the installer build):
