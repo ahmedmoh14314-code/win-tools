@@ -382,12 +382,17 @@ internal static class DocumentJobs
     private static JobResult RemoveProperties(JobRequest request, string path, ZipArchive zip, Kind kind)
     {
         if (zip.Entries.Any(e => e.FullName.StartsWith("_xmlsignatures/", StringComparison.OrdinalIgnoreCase)))
-            throw new DocFailure(ErrorCode.UnsupportedContent, "The document is digitally signed; a copy without properties would break its signature. Nothing was changed.");
+            throw Signed();
+        // A backslash is not a part name Office writes; which part a reader takes for it is anyone's guess (evaluator, PR 6.2).
+        if (zip.Entries.Any(e => e.FullName.Contains('\\', StringComparison.Ordinal)))
+            throw new DocFailure(ErrorCode.UnsupportedContent, "The document's package uses part names Office does not write; nothing was changed.");
         var empty = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         var found = false;
         foreach (var part in PropertyParts(zip))
         {
             var xml = ReadPart(zip, part)!;
+            // Only a part that is a properties part is emptied: a relationship cannot make the body one (evaluator, PR 6.2).
+            if (!IsPropertiesRoot(xml)) throw new DocFailure(ErrorCode.UnsupportedContent, "A part the document calls its properties is not a properties part; nothing was changed.");
             found |= HasContent(xml);
             empty[part] = Encoding.UTF8.GetBytes(EmptyRoot(xml));
         }
@@ -429,29 +434,68 @@ internal static class DocumentJobs
         return Commit(request, path, DocumentCapabilities.CleanCandidates(path, request.OutputDirectory), Write, Valid, Kept(zip, kind));
     }
 
-    /// <summary>The property parts: those the package's relationships name, and those at the usual names.</summary>
+    private static readonly Uri PackageRoot = new("http://package/");
+
+    private static readonly HashSet<string> PropertyNamespaces = new(StringComparer.Ordinal)
+    {
+        "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+        "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties",
+        "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties",
+        "http://purl.oclc.org/ooxml/officeDocument/extendedProperties",
+        "http://purl.oclc.org/ooxml/officeDocument/customProperties",
+    };
+
+    private static DocFailure Signed() =>
+        new(ErrorCode.UnsupportedContent, "The document is digitally signed; a copy without properties would break its signature. Nothing was changed.");
+
+    /// <summary>
+    /// The property parts: those the package's relationships name, and those at the usual names. A property relationship
+    /// whose part cannot be found is refused, never skipped: the copy would keep it and be called clean (evaluator, PR 6.2).
+    /// A signature origin found through its relationship refuses the package too.
+    /// </summary>
     private static List<string> PropertyParts(ZipArchive zip)
     {
         var names = new List<string>();
-        void Add(string name)
+        void Add(ZipArchiveEntry e) { if (!names.Contains(e.FullName, StringComparer.Ordinal)) names.Add(e.FullName); }
+        if (Find(zip, "_rels/.rels") is { } relsEntry)
         {
-            var entry = zip.Entries.FirstOrDefault(e => string.Equals(e.FullName, name, StringComparison.OrdinalIgnoreCase));
-            if (entry is not null && !names.Contains(entry.FullName, StringComparer.Ordinal)) names.Add(entry.FullName);
-        }
-        if (ReadPart(zip, "_rels/.rels") is { } rels)
-        {
-            using var r = Xml(rels);
+            using var r = Xml(ReadPart(zip, relsEntry.FullName)!);
             while (r.Read())
             {
                 if (r.NodeType != XmlNodeType.Element || r.LocalName != "Relationship") continue;
+                var type = r.GetAttribute("Type") ?? "";
+                if (type.EndsWith("/digital-signature/origin", StringComparison.Ordinal)) throw Signed();
                 if (string.Equals(r.GetAttribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase)) continue;
-                if (r.GetAttribute("Type") is not { } type || !PropertyRelationships.Any(t => type.EndsWith(t, StringComparison.Ordinal))) continue;
-                if (r.GetAttribute("Target") is { Length: > 0 } target && !target.Contains("..", StringComparison.Ordinal))
-                    Add(Uri.UnescapeDataString(target).TrimStart('/'));
+                if (!PropertyRelationships.Any(t => type.EndsWith(t, StringComparison.Ordinal))) continue;
+                Add((r.GetAttribute("Target") is { Length: > 0 } target ? Resolve(zip, target) : null)
+                    ?? throw new DocFailure(ErrorCode.UnsupportedContent, "The document names a properties part that is not in it; nothing was changed."));
             }
         }
-        foreach (var usual in new[] { "docProps/core.xml", "docProps/app.xml", "docProps/custom.xml" }) Add(usual);
+        foreach (var usual in new[] { "docProps/core.xml", "docProps/app.xml", "docProps/custom.xml" })
+            if (Find(zip, usual) is { } e) Add(e);
         return names;
+    }
+
+    private static ZipArchiveEntry? Find(ZipArchive zip, string name) =>
+        zip.Entries.FirstOrDefault(e => string.Equals(e.FullName, name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// A relationship target as the package rules resolve it: against the package root (RFC 3986, dot segments removed),
+    /// the part name in its escaped form first, then unescaped; null when it names no part of this package.
+    /// </summary>
+    private static ZipArchiveEntry? Resolve(ZipArchive zip, string target)
+    {
+        if (!Uri.TryCreate(PackageRoot, target, out var uri) || !string.Equals(uri.Authority, PackageRoot.Authority, StringComparison.OrdinalIgnoreCase)) return null;
+        var escaped = uri.AbsolutePath.TrimStart('/');
+        return escaped.Length == 0 ? null : Find(zip, escaped) ?? Find(zip, Uri.UnescapeDataString(escaped));
+    }
+
+    /// <summary>Whether a part's root is a core, extended or custom properties element, in its own namespace.</summary>
+    private static bool IsPropertiesRoot(string xml)
+    {
+        using var r = Xml(xml);
+        r.MoveToContent();
+        return r.LocalName is "coreProperties" or "Properties" && PropertyNamespaces.Contains(r.NamespaceURI);
     }
 
     /// <summary>Whether a part's root element holds anything: a child element or text.</summary>
@@ -488,6 +532,7 @@ internal static class DocumentJobs
         int n;
         while ((n = from.Read(buffer)) > 0)
         {
+            // Defensive: ZipArchive itself stops at the declared size, so in practice the CRC-32 below is what catches it.
             if ((total += n) > declared) throw new DocFailure(ErrorCode.DecodeFailed, "A part of the document is larger than it says; nothing was saved.");
             check.Append(buffer.AsSpan(0, n));
             to.Write(buffer, 0, n);
@@ -501,34 +546,65 @@ internal static class DocumentJobs
         return SHA256.HashData(s);
     }
 
-    /// <summary>What Remove properties leaves in place, said as a notice: names that live in the content, not the properties.</summary>
+    /// <summary>
+    /// What Remove properties leaves in place, said as a notice: names and paths that live in the content, not the
+    /// properties (evaluator, PR 6.2): comment and revision authors in any part, custom XML data, Excel's saved folder and
+    /// file-sharing user name, Word's attached template path, and the thumbnail.
+    /// </summary>
     private static List<JobFact> Kept(ZipArchive zip, Kind kind)
     {
         var kept = new List<string>();
         var names = zip.Entries.Select(e => e.FullName).ToList();
         var revisions = kind switch
         {
-            Kind.Word => ReadPart(zip, "word/document.xml") is { } body && HasAuthor(body),
+            Kind.Word => names.Where(n => n.StartsWith("word/", StringComparison.OrdinalIgnoreCase) && n.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                .Any(n => HasAttribute(ReadPart(zip, n)!, null, "author")),
             Kind.Excel => names.Any(n => n.StartsWith("xl/revisions/", StringComparison.OrdinalIgnoreCase)),
             _ => false,
         };
         if (revisions || names.Any(n => n.Contains("comment", StringComparison.OrdinalIgnoreCase) || n.EndsWith("people.xml", StringComparison.OrdinalIgnoreCase) || n.Contains("/persons/", StringComparison.OrdinalIgnoreCase)))
             kept.Add("comment and revision authors");
-        if (names.Any(n => n.StartsWith("customXml/", StringComparison.OrdinalIgnoreCase))) kept.Add("custom XML data (such as SharePoint columns)");
-        return kept.Count == 0 ? [] : [new("Kept", $"Not removed: {string.Join(", ", kept)}; Office's Document Inspector removes them", Notice: true)];
+        if (names.Any(n => n.StartsWith("customXml/", StringComparison.OrdinalIgnoreCase))) kept.Add("custom XML data");
+        if (kind == Kind.Excel && Find(zip, "xl/workbook.xml") is { } workbook && ReadPart(zip, workbook.FullName) is { } wb)
+        {
+            if (HasElement(wb, "absPath")) kept.Add("the saved folder path");
+            if (HasAttribute(wb, "fileSharing", "userName")) kept.Add("the sharing user name");
+        }
+        if (kind == Kind.Word && Find(zip, "word/_rels/settings.xml.rels") is { } settings && ReadPart(zip, settings.FullName) is { } rels
+            && HasAttributeEnding(rels, "Relationship", "Type", "/attachedTemplate"))
+            kept.Add("the template path");
+        if (names.Any(n => n.StartsWith("docProps/thumbnail", StringComparison.OrdinalIgnoreCase))) kept.Add("a thumbnail");
+        return kept.Count == 0 ? [] : [new("Kept", $"Not removed: {string.Join(", ", kept)}. Office's Document Inspector removes them.", Notice: true)]; // at most 179 characters with every item: never clipped
     }
 
-    /// <summary>Whether any element of a part carries an author attribute (a tracked change, a comment).</summary>
-    private static bool HasAuthor(string xml)
+    /// <summary>Whether any element (of a local name, or any) carries an attribute of a local name.</summary>
+    private static bool HasAttribute(string xml, string? element, string attribute)
     {
         using var r = Xml(xml);
         while (r.Read())
-            if (r.NodeType == XmlNodeType.Element && r.HasAttributes)
+            if (r.NodeType == XmlNodeType.Element && (element is null || r.LocalName == element) && r.HasAttributes)
                 for (var i = 0; i < r.AttributeCount; i++)
                 {
                     r.MoveToAttribute(i);
-                    if (r.LocalName == "author") return true;
+                    if (r.LocalName == attribute) return true;
                 }
+        return false;
+    }
+
+    private static bool HasAttributeEnding(string xml, string element, string attribute, string suffix)
+    {
+        using var r = Xml(xml);
+        while (r.Read())
+            if (r.NodeType == XmlNodeType.Element && r.LocalName == element && r.GetAttribute(attribute) is { } v && v.EndsWith(suffix, StringComparison.Ordinal))
+                return true;
+        return false;
+    }
+
+    private static bool HasElement(string xml, string element)
+    {
+        using var r = Xml(xml);
+        while (r.Read())
+            if (r.NodeType == XmlNodeType.Element && r.LocalName == element) return true;
         return false;
     }
 

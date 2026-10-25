@@ -32,12 +32,24 @@
    - pages and words (Word), slides, sheets;
    - notices for macros (`vbaProject.bin`), embedded objects, and links outside the document (a relationship with `TargetMode="External"`): none is opened.
 6. **Remove properties (V2 PR 6.2)** writes a new `<name> (no properties).<ext>` in the source's own type:
-   - **The property parts are found through the package's relationships** (core, extended and custom properties, transitional or strict) and at their usual `docProps/` names. Each is replaced by its own root element, empty, in its own namespace.
+   - **The property parts are found through the package's relationships** (core, extended and custom properties, transitional or strict) and at their usual `docProps/` names.
+     - A target is resolved as the package rules say: against the root (RFC 3986, dot segments removed), the escaped part name first, then the unescaped one.
+     - A property relationship whose part cannot be found is refused. Skipping it would leave the part in the copy and still call the copy clean.
+     - A part is emptied only if its root is a properties element in a properties namespace. A relationship cannot get the body blanked.
+     - Part names with a backslash are refused.
+   - Each property part is replaced by its own root element, empty, in its own namespace.
    - **Every other part is copied byte for byte, in the same order.** Each copy's size and CRC-32 must match what the package declares: `ZipArchive` stops at the declared size without a word, so a part that inflates past it would otherwise be silently cut.
    - **The copy is checked before it is kept.** It is opened again under every rule above, with the same parts in the same order, each copied part's SHA-256 equal to the source's, and no property left. Then the usual temp, zone and no-overwrite rules apply.
-   - **A signed package (`_xmlsignatures/`) is refused**: the copy would break its signature.
+   - **A signed package is refused**: the copy would break its signature. It is recognised by `_xmlsignatures/` or by a signature-origin relationship.
    - A package with no properties is "nothing to do".
-   - **What it does not remove is said, as a notice:** comment and revision authors (they live in the content), and custom XML data such as SharePoint columns. Office's Document Inspector removes them.
+   - **What it does not remove is said, as a notice.** These live in the content, not the properties, and Office's Document Inspector removes them:
+     - comment and revision authors, in any part;
+     - custom XML data;
+     - Excel's saved folder path (`absPath`) and file-sharing user name;
+     - Word's attached template path;
+     - the thumbnail.
+   - The notice is never clipped: at most 179 characters.
+   - **The host does not re-open the copy.** Parsing a package built from untrusted input belongs in the worker. The host checks the name, the ZIP signature and the SHA-256 the worker validated.
 
 ## Alternatives considered
 - **DocumentFormat.OpenXml 3.5.1** (MIT). It is the right tool for full fidelity. For reading these few parts it adds a dependency and its own spike without changing what is read.
@@ -72,8 +84,20 @@ One round (2026-10-25), reproduced on the built worker with the reviewer's own p
   - clipping never cuts a character in two.
 - The Explorer `docx` scenario passed on the final build (runs of 3/3, 2/2 and 1/1).
 
+**PR 6.2 review**, one round (2026-10-25), reproduced on the built worker against the reading of `System.IO.Packaging`.
+- **Blocker:** relationship targets written as `./`, `x/../` or percent-encoded were not resolved. The core part kept the author, and the job said "Properties removed".
+- **Majors:**
+  - Office's paths and names outside the properties were not said (Excel's `absPath` and sharing user name, the template path, the thumbnail);
+  - revision authors outside `document.xml` were not said;
+  - a relationship naming the body as the core properties blanked the body.
+- **Minors fixed:**
+  - the oversized-part test now asserts its code, and the branch it does not reach is marked defensive;
+  - a signature is found through its relationship.
+- **Declined:** the host re-checking that the property parts are empty (see decision 6).
+- Each finding is a test that failed on the old code: 8 of 18. 18 of 18 pass, and the reviewer's three probes give no unannounced leak.
+
 ## Evidence / experiments
-`DocumentCleanTests` (9, written first and shown failing to build):
+`DocumentCleanTests` (9, written first and shown failing to build; 18 after the review):
 - properties emptied, every other part the same, and the original unchanged;
 - Excel and PowerPoint;
 - properties at a non-standard name found through the relationships;
