@@ -200,9 +200,9 @@ public sealed class SettingsStoreTests : IDisposable
     {
         var store = new SettingsStore(PathOf);
         Assert.Equal(new AppSettings(), store.Load());
-        Assert.True(store.Save(new AppSettings { TriggerKey = "F8", JpegQuality = 70 }));
+        Assert.True(store.Save(new AppSettings { TriggerKey = "F9", JpegQuality = 70 }));
         var loaded = new SettingsStore(PathOf).Load();
-        Assert.Equal(("F8", 70), (loaded.TriggerKey, loaded.JpegQuality));
+        Assert.Equal(("F9", 70), (loaded.TriggerKey, loaded.JpegQuality));
         Assert.Equal(["settings.json"], _dir.Names()); // no temp left behind
     }
 
