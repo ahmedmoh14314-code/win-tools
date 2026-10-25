@@ -253,7 +253,8 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IJobM
     {
         foreach (var temp in module.TempPathsOf(request))
         {
-            try { File.Delete(temp); }
+            // A module's staging folder (Split's pages) has the temp file's deterministic name; it is never a result.
+            try { if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true); else File.Delete(temp); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { }
         }
     }
