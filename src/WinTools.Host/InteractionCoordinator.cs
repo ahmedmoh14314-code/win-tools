@@ -348,6 +348,11 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
 
     private void Run(CapabilityDescriptor capability, IReadOnlyList<string> paths, int x, int y)
     {
+        if (capability.Dialog == DialogKinds.Rename)
+        {
+            _ = AskRenameAndRunAsync(capability, paths, x, y);
+            return;
+        }
         if (capability.Prompt is { WhenRequired: false } first)
         {
             Ask(capability, first, paths, x, y);
@@ -431,6 +436,40 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             Volatile.Write(ref _secretOpen, 0);
             _log.Event("secret.error", new { type = ex.GetType().Name });
             _feedback.DialogUnavailable("the password window");
+        }
+    }
+
+    /// <summary>
+    /// Batch rename (V2 PR 7.2): the dialog gets the names only (never the folder) and answers with a rule, previewed
+    /// there with the same plan the host applies. A cancel runs nothing and says nothing.
+    /// </summary>
+    private async Task AskRenameAndRunAsync(CapabilityDescriptor capability, IReadOnlyList<string> paths, int x, int y)
+    {
+        // Fire and forget from Drop: nothing here may throw unobserved.
+        try
+        {
+            if (paths.Count > RenameRequest.MaxNames)
+            {
+                _feedback.Refused("Too many files to rename", $"Batch rename takes at most {RenameRequest.MaxNames:N0} files at a time. Nothing was renamed.");
+                return;
+            }
+            var folder = Path.GetDirectoryName(paths[0]);
+            if (paths.Any(p => !string.Equals(Path.GetDirectoryName(p), folder, StringComparison.OrdinalIgnoreCase)))
+            {
+                _feedback.Refused("Files from several folders", "Batch rename works on files of one folder. Nothing was renamed.");
+                return;
+            }
+            var outcome = await DialogsClient.Default.AskRenameAsync(new RenameRequest("Batch rename", [.. paths.Select(p => Path.GetFileName(p))], x, y)).ConfigureAwait(false);
+            _log.Event("rename.ask", new { end = outcome.End.ToString(), files = paths.Count });
+            if (outcome.End == PickEnd.Unavailable) { _feedback.DialogUnavailable("the rename window"); return; }
+            if (outcome.End != PickEnd.Picked || RenameRule.Parse(outcome.Rule) is null) return;
+            if (_jobs.Enqueue(capability, paths, new Dictionary<string, string>(StringComparer.Ordinal) { [DialogParameters.Name] = outcome.Rule! }) is null)
+                _log.Event("job.refused", new { op = capability.Id, module = capability.Module });
+        }
+        catch (Exception ex)
+        {
+            _log.Event("rename.error", new { type = ex.GetType().Name });
+            _feedback.DialogUnavailable("the rename window");
         }
     }
 

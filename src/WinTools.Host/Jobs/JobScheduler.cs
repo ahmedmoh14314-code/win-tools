@@ -126,7 +126,9 @@ internal sealed class JobScheduler
         var secret = parameters is not null && parameters.TryGetValue(PasswordPolicy.ParameterName, out var p) && p.Length > 0
             && parameters.Keys.All(k => k is PasswordPolicy.ParameterName || k is PasswordPolicy.NormalizedParameterName && capability.Prompt is { Confirm: false });
         var none = parameters is not { Count: > 0 };
-        if (!(capability.Prompt switch { null => none, { WhenRequired: true } => none || secret, _ => secret }))
+        // A command with a dialog: exactly the dialog's answer (V2 PR 7.2).
+        var answered = parameters is { Count: 1 } && parameters.TryGetValue(DialogParameters.Name, out var d) && d.Length > 0;
+        if (!(capability.Dialog is not null ? answered : capability.Prompt switch { null => none, { WhenRequired: true } => none || secret, _ => secret }))
         {
             _log.Event("job.refused", new { op = capability.Id, reason = capability.Prompt is not null ? "noSecret" : "unexpectedParameters" });
             return null;

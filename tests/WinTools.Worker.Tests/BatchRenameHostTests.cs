@@ -1,4 +1,5 @@
 using WinTools.Core.Capabilities;
+using WinTools.Core.Feedback;
 using WinTools.Core.Files;
 using WinTools.Core.Jobs;
 using WinTools.Core.Settings;
