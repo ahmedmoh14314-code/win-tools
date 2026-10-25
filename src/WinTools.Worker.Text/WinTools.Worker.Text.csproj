@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- On-demand worker of the General Files module (V2 PR 1.4): file info and SHA-256. Reads files, writes nothing,
+       loads no codec. Later the home of subtitles (V2 plan §6). One JSON line per job, like the image worker. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WinTools.Core\WinTools.Core.csproj" />
+    <InternalsVisibleTo Include="WinTools.Worker.Tests" />
+  </ItemGroup>
+</Project>

@@ -61,8 +61,15 @@ public static class RadialMenu
     /// Why a selection gets no commands, when the ring can say something more useful than "No actions": folders, which
     /// no command of today's modules reads (UX-009). Null for the general case.
     /// </summary>
-    public static string? EmptyReason(IReadOnlyList<string> paths) =>
-        paths.Any(p => ReferenceEquals(Files.FileKinds.IdentifyByName(p), Files.FileKinds.Folder)) ? "Not for folders" : null;
+    public static string? EmptyReason(CapabilityResolver resolver, IReadOnlyList<string> paths)
+    {
+        // Only when the folders are the reason: nothing is offered, and without them something would be (or there is
+        // nothing else). An empty ring for a folder and 1001 files, or a refused path, has another cause (evaluator, PR #18).
+        static bool IsFolder(string p) => ReferenceEquals(Files.FileKinds.IdentifyByName(p), Files.FileKinds.Folder);
+        if (!paths.Any(IsFolder) || resolver.Resolve(paths).Count > 0) return null;
+        var others = paths.Where(p => !IsFolder(p)).ToArray();
+        return others.Length == 0 || resolver.Resolve(others).Count > 0 ? "Not for folders" : null;
+    }
 
     /// <summary>The menu for what a resolver allows, with that resolver's categories.</summary>
     public static IReadOnlyList<MenuGroup> Build(CapabilityResolver resolver, IReadOnlyList<string> paths) => Build(resolver.Resolve(paths), resolver.Categories);

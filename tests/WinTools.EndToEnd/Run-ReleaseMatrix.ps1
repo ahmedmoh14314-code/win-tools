@@ -87,7 +87,10 @@ $rows = @(
     @('unicode-png',          'png --path-style unicode --cycles 2',                              'Arabic, emoji and spaces in folder and file names'),
     @('unicode-batch-10',     'batch --batch 10 --path-style unicode --settle-ms 0 --cycles 1',   'Unicode names, 10 files'),
     @('long-png',             'png --path-style long --cycles 2',                                 'source path longer than 260 characters'),
-    @('long-batch-10',        'batch --batch 10 --path-style long --cycles 1',                    'long paths, 10 files')
+    @('long-batch-10',        'batch --batch 10 --path-style long --cycles 1',                    'long paths, 10 files'),
+    @('general-file-info',    'file --cycles 2',                                                  'a file no module reads: File info under Tools, nothing written (V2 PR 1.4)'),
+    @('general-sha256',       'file --op files.sha256 --cycles 1',                                'SHA-256 of a file: the info panel, nothing written'),
+    @('folder-info',          'folder --cycles 2',                                                'a dropped folder: File info, its contents unchanged (UX-009)')
 )
 if ($HostPath) {
     $hostArgs = '--host "' + $HostPath + '"'

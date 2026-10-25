@@ -12,7 +12,7 @@ public sealed record FeedbackMessage(FeedbackKind Kind, string Title, string Det
 
 /// <summary>One request of a finished job: what it was about (a file name), the worker's result and the sizes before
 /// and after (bytes).</summary>
-public sealed record JobItem(string SourceName, JobResult Result, long? SourceBytes = null, long? OutputBytes = null);
+public sealed record JobItem(string SourceName, JobResult Result, long? SourceBytes = null, long? OutputBytes = null, int Inputs = 1);
 
 /// <summary>
 /// The words shown to the user when a batch ends. Short, plain and actionable: the outcome first, the reason in the
@@ -20,8 +20,15 @@ public sealed record JobItem(string SourceName, JobResult Result, long? SourceBy
 /// </summary>
 public static class FeedbackText
 {
-    public static FeedbackMessage For(Operation operation, IReadOnlyList<JobItem> items)
+    public static FeedbackMessage For(Operation operation, IReadOnlyList<JobItem> items) => For(WordsOf(operation), items);
+
+    /// <summary>The image module's words for an operation.</summary>
+    public static FeedbackWords WordsOf(Operation op) =>
+        new(Working(op), Verb(op), Done(op), NothingReason(op), "image", "images", Savings: op.Kind == OperationKind.Compress);
+
+    public static FeedbackMessage For(FeedbackWords words, IReadOnlyList<JobItem> items)
     {
+        string Images(int n) => words.Count(n);
         var ok = items.Where(i => i.Result.Success).ToArray();
         var unchanged = items.Where(i => i.Result.Error == ErrorCode.NothingToDo).ToArray();
         var failed = items.Where(i => !i.Result.Success && i.Result.Error != ErrorCode.NothingToDo).ToArray();
@@ -30,27 +37,45 @@ public static class FeedbackText
         {
             var item = items[0];
             if (item.Result.Success)
-                return new(FeedbackKind.Success, $"{OutputName(item)} created", Join(Done(operation), Sizes(operation, item)));
+                return new(FeedbackKind.Success, $"{OutputName(item)} created", Join(words.Done, Sizes(words, item)));
             if (item.Result.Error == ErrorCode.NothingToDo)
-                return new(FeedbackKind.Nothing, "Nothing to change", NothingReason(operation));
-            return new(FeedbackKind.Failure, $"Could not {Verb(operation)} {item.SourceName}", Reason(item.Result.Error));
+                return new(FeedbackKind.Nothing, "Nothing to change", words.NothingReason);
+            return new(FeedbackKind.Failure, $"Could not {words.Verb} {item.SourceName}", Reason(item.Result.Error));
         }
 
         var n = items.Count;
         if (failed.Length == 0 && unchanged.Length == 0)
-            return new(FeedbackKind.Success, $"{Images(n)} completed", Join(Done(operation), TotalSizes(operation, ok)));
+            return new(FeedbackKind.Success, $"{Images(n)} completed", Join(words.Done, TotalSizes(words, ok)));
         if (ok.Length == 0 && failed.Length == 0)
-            return new(FeedbackKind.Nothing, "Nothing to change", $"{NothingReason(operation)} ({Images(n)})");
+            return new(FeedbackKind.Nothing, "Nothing to change", $"{words.NothingReason} ({Images(n)})");
         if (ok.Length == 0 && unchanged.Length == 0)
-            return new(FeedbackKind.Failure, $"Could not {Verb(operation)} {Images(n)}", MostCommonReason(failed));
+            return new(FeedbackKind.Failure, $"Could not {words.Verb} {Images(n)}", MostCommonReason(failed));
 
         var parts = new List<string>();
-        if (operation.Kind == OperationKind.Compress && TotalSizes(operation, ok) is { } sizes) parts.Add(sizes); // what was saved is the point
+        if (words.Savings && TotalSizes(words, ok) is { } sizes) parts.Add(sizes); // what was saved is the point
         if (failed.Length > 0) parts.Add($"{failed.Length} failed: {MostCommonReason(failed).TrimEnd('.')}");
-        if (unchanged.Length > 0) parts.Add(operation.Kind == OperationKind.Compress ? $"{unchanged.Length} already optimized" : $"{unchanged.Length} unchanged");
+        if (unchanged.Length > 0) parts.Add(words.Savings ? $"{unchanged.Length} already optimized" : $"{unchanged.Length} unchanged");
         var kind = failed.Length > 0 ? FeedbackKind.Partial : FeedbackKind.Success;
         return new(kind, $"{Images(ok.Length)} of {n} completed", string.Join(" · ", parts));
     }
+
+    /// <summary>
+    /// What a command that fills the clipboard says (Copy path): what it copied, for how many items, or why it could not.
+    /// </summary>
+    public static FeedbackMessage Copied(FeedbackWords words, JobItem item) => item.Result.Success
+        ? new(FeedbackKind.Success, item.Inputs == 1 ? words.Done : $"{words.Count(item.Inputs)} copied", item.SourceName)
+        : new(FeedbackKind.Failure, $"Could not {words.Verb} {(item.Inputs == 1 ? $"the {words.Noun}" : words.Count(item.Inputs))}", Reason(item.Result.Error));
+
+    /// <summary>What the operation is doing, for the progress toast ("Converting").</summary>
+    public static string Working(Operation op) => op.Kind switch
+    {
+        OperationKind.Convert => "Converting",
+        OperationKind.Compress => "Compressing",
+        OperationKind.Resize => "Resizing",
+        OperationKind.Rotate => "Rotating",
+        OperationKind.StripMetadata => "Removing metadata from",
+        _ => "Reading",
+    };
 
     /// <summary>What the operation did, as a short past-tense phrase ("Converted to WebP").</summary>
     public static string Done(Operation op) => op.Kind switch
@@ -98,10 +123,12 @@ public static class FeedbackText
         ErrorCode.OutputNameInvalid or ErrorCode.NoFreeOutputName => "No free name for the new file in that folder.",
         ErrorCode.DiskFull => "The disk is full.",
         ErrorCode.WorkerTimeout => "It took too long and was stopped.",
-        ErrorCode.WorkerCrashed or ErrorCode.WorkerProtocolError => "The converter stopped unexpectedly. The original is unchanged.",
+        ErrorCode.WorkerCrashed or ErrorCode.WorkerProtocolError => "The worker stopped unexpectedly. The original is unchanged.",
         ErrorCode.Cancelled => "The job was cancelled.",
         ErrorCode.InvalidRequest => "The file's path is not supported.",
         ErrorCode.IsAFolder => "It is a folder; this command works on files.",
+        ErrorCode.ClipboardUnavailable => "Another program is using the clipboard. Try again.",
+        ErrorCode.OnlineOnly => "The file is stored online only. Open it once so Windows downloads it, then try again.",
         _ => "Something went wrong. The original is unchanged.",
     };
 
@@ -110,25 +137,23 @@ public static class FeedbackText
 
     private static string OutputName(JobItem item) => item.Result.OutputPath is { } p ? Path.GetFileName(p) : item.SourceName;
 
-    private static string Images(int n) => n == 1 ? "1 image" : $"{n} images";
+    private static string? Sizes(FeedbackWords words, JobItem item) =>
+        item is { SourceBytes: { } a, OutputBytes: { } b } ? $"{Size(a)} → {Size(b)}{Change(words, a, b)}" : null;
 
-    private static string? Sizes(Operation op, JobItem item) =>
-        item is { SourceBytes: { } a, OutputBytes: { } b } ? $"{Size(a)} → {Size(b)}{Change(op, a, b)}" : null;
-
-    private static string? TotalSizes(Operation op, JobItem[] ok)
+    private static string? TotalSizes(FeedbackWords words, JobItem[] ok)
     {
         if (ok.Length == 0 || ok.Any(i => i.SourceBytes is null || i.OutputBytes is null)) return null;
         var a = ok.Sum(i => i.SourceBytes!.Value);
         var b = ok.Sum(i => i.OutputBytes!.Value);
-        return $"{Size(a)} → {Size(b)}{Change(op, a, b)}";
+        return $"{Size(a)} → {Size(b)}{Change(words, a, b)}";
     }
 
     /// <summary>The size change: "saved 75%" for Compress (what the user asked for), "(+12%)" or "(−40%)" otherwise.</summary>
-    private static string Change(Operation op, long before, long after)
+    private static string Change(FeedbackWords words, long before, long after)
     {
         if (before <= 0) return "";
         var pct = (int)Math.Round((after - before) * 100.0 / before);
-        if (op.Kind == OperationKind.Compress && pct < 0) return string.Create(CultureInfo.InvariantCulture, $", saved {-pct}%");
+        if (words.Savings && pct < 0) return string.Create(CultureInfo.InvariantCulture, $", saved {-pct}%");
         return pct == 0 ? "" : string.Create(CultureInfo.InvariantCulture, $" ({(pct > 0 ? "+" : "−")}{Math.Abs(pct)}%)");
     }
 

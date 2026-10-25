@@ -61,19 +61,17 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         if (toast.Content is { Progress: null }) toast.Hide();
     }
 
-    // The image module is the only one so far; module-supplied words replace these lookups when a second one arrives.
-    private static Operation Op(CapabilityDescriptor capability) => ImageCapabilities.OperationOf(capability);
-
     public void Started(CapabilityDescriptor capability, IReadOnlyList<string> paths) => ui.Post(() =>
     {
-        var operation = Op(capability);
+        var words = capability.Words; // the module's words: the presenter knows no module (V2 PR 1.4)
+        // An instant command (File info, Copy path) leaves a running batch's progress alone (evaluator, PR #18).
+        if (!capability.LongRunning) return;
         _batch++;
         _total = paths.Count;
         _done = 0;
         _startedAt = Stopwatch.GetTimestamp();
-        if (operation.Kind == OperationKind.Info) return;
         var batch = _batch;
-        var title = paths.Count == 1 ? $"{Working(operation)} {Path.GetFileName(paths[0])}" : $"{Working(operation)} {paths.Count} images";
+        var title = paths.Count == 1 ? $"{words.Working} {Path.GetFileName(paths[0].TrimEnd(Path.DirectorySeparatorChar))}" : $"{words.Working} {words.Count(paths.Count)}";
         _ = Task.Delay(ProgressDelay).ContinueWith(_ => ui.Post(() =>
         {
             if (batch != _batch || _done >= _total) return; // finished in the meantime
@@ -90,12 +88,21 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
 
     public void Finished(CapabilityDescriptor capability, IReadOnlyList<JobItem> items) => ui.Post(() =>
     {
-        _done = _total;
-        var operation = Op(capability);
+        if (capability.LongRunning) _done = _total;
+        var words = capability.Words;
+        var progressShowing = toast.Content is { Progress: not null };
+        if (capability.Produces == CapabilityOutput.Clipboard && items.Count == 1)
+        {
+            var copied = FeedbackText.Copied(words, items[0]);
+            if (!progressShowing) ShowToast(ToastContent.From(copied)); // a batch's progress toast is never replaced; the sound still says it
+            sounds.Play(copied.Kind == FeedbackKind.Success ? UiSound.Success : UiSound.Failure);
+            log.Event("toast", new { kind = copied.Kind.ToString(), copied = items[0].Inputs, shown = !progressShowing });
+            return;
+        }
         var facts = items.Where(i => i.Result.Success && i.Result.Facts.Count > 0).ToArray(); // only a believed success shows facts
         if (capability.Produces == CapabilityOutput.Facts && facts.Length > 0)
         {
-            toast.Hide();
+            if (!progressShowing || capability.LongRunning) toast.Hide();
             var sections = facts.Take(InfoPanelRenderer.MaxSections)
                 .Select(i => new InfoSection(i.SourceName, [.. i.Result.Facts.Select(f => new InfoRow(f.Label, f.Value, f.Notice))])).ToArray();
             if (_overlayVisible()) _deferredInfo = (sections, facts.Length - sections.Length);
@@ -104,12 +111,13 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
             var unread = items.Where(i => i.Result.Facts.Count == 0).ToArray();
             if (unread.Length > 0)
             {
-                ShowToast(ToastContent.From(FeedbackText.For(operation, unread))); // say which files could not be read, and why
+                // Say which files could not be read, and why; never over a batch's progress toast (its updates would stop).
+                if (!progressShowing || capability.LongRunning) ShowToast(ToastContent.From(FeedbackText.For(words, unread)));
                 sounds.Play(UiSound.Failure);
             }
             return;
         }
-        var message = FeedbackText.For(operation, items);
+        var message = FeedbackText.For(words, items);
         ShowToast(ToastContent.From(message));
         sounds.Play(message.Kind switch
         {
@@ -148,8 +156,9 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
 
     public void Crashed(CapabilityDescriptor capability, int files) => ui.Post(() =>
     {
-        _done = _total;
-        ShowToast(new ToastContent(FeedbackKind.Failure, $"Could not {FeedbackText.Verb(Op(capability))} {(files == 1 ? "the image" : $"{files} images")}",
+        if (capability.LongRunning) _done = _total;
+        var words = capability.Words;
+        ShowToast(new ToastContent(FeedbackKind.Failure, $"Could not {words.Verb} {(files == 1 ? $"the {words.Noun}" : words.Count(files))}",
             "Something went wrong. The originals are unchanged."));
         sounds.Play(UiSound.Failure);
         log.Event("toast", new { kind = "Failure", files });
@@ -159,13 +168,4 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
 
     private double Fraction() => _total == 0 ? 0 : (double)_done / _total;
 
-    private static string Working(Operation op) => op.Kind switch
-    {
-        OperationKind.Convert => "Converting",
-        OperationKind.Compress => "Compressing",
-        OperationKind.Resize => "Resizing",
-        OperationKind.Rotate => "Rotating",
-        OperationKind.StripMetadata => "Removing metadata from",
-        _ => "Reading",
-    };
 }

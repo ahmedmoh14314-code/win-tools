@@ -30,6 +30,7 @@ The report names the build under test: the host's version and the start of its S
 | **Modifiers** | `ctrl-a-held-10`, `ctrl-click-held-*` and `shift-range-held-10` keep the key down through the drag, the trigger and the drop. `alt-refused` expects the "Release Alt" toast and nothing to run. |
 | **Interaction** | `escape`, `outside`, `fast`, `category`, `edge` |
 | **Paths** | `unicode-*` uses Arabic, emoji and spaces in folder and file names. `long-*` uses paths longer than 260 characters. Explorer hands those over as 8.3 short names (ADR-0004, 2026-10-24) only when 8.3 names are enabled on the temp volume (`fsutil 8dot3name query`). Where they are off, these rows test long paths without the short-name step. |
+| **General Files (V2 PR 1.4)** | `general-file-info` and `general-sha256` on a text file, `folder-info` on a dropped folder: the info panel appears, nothing is written, the folder keeps its contents |
 | **Installed artifact** | With `-HostPath`: first use, compress, Ctrl held and Alt refused, run against the installed host |
 
 The data-object cases (first read fails, recovered on DragOver, malformed DROPFILES, release on Drop and DragLeave) are
@@ -42,6 +43,7 @@ These are not automated, by design. Record each run in the release's acceptance 
 1. **After an Explorer restart.** Restart Explorer from Task Manager, wait for the taskbar, then drag a file from a new Explorer window, press Space and drop on a command. The harness never restarts Explorer: it is the user's shell.
 2. **After sign-in with Start with Windows.** Turn on Start with Windows, sign out and sign in, then do the first drag without opening the app. The menu must open on the first Space.
 3. **Rubber-band selection.** Select 10 files by dragging a rectangle in an empty part of the view, then drag one of them and press Space. UI Automation cannot drive a rubber band reliably.
+4. **Copy path (V2 PR 1.4).** Drag a file and a folder, press Space, open Tools and drop on Copy path; paste into Notepad: two lines, the file's full path and the folder's without a trailing separator, and the toast says "2 paths copied". Not automated because it overwrites the user's clipboard.
 
 ## Findings
 
