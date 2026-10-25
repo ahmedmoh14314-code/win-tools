@@ -349,6 +349,12 @@ public static class SubtitleEncoding
         if (bytes.StartsWith((ReadOnlySpan<byte>)[0xEF, 0xBB, 0xBF])) return Strict(bytes[3..], StrictUtf8, "UTF-8 with BOM", out why);
         if (bytes.StartsWith((ReadOnlySpan<byte>)[0xFF, 0xFE])) return Strict(bytes[2..], StrictUtf16Le, "UTF-16 LE", out why);
         if (bytes.StartsWith((ReadOnlySpan<byte>)[0xFE, 0xFF])) return Strict(bytes[2..], StrictUtf16Be, "UTF-16 BE", out why);
+        // NUL bytes are not subtitle text: UTF-16 without its BOM is valid UTF-8 byte by byte (third look, PR 7.1).
+        if (bytes.IndexOf((byte)0) >= 0)
+        {
+            why = "The file looks like UTF-16 without its byte-order mark. Save it as UTF-8 and try again.";
+            return null;
+        }
         try { return new(StrictUtf8.GetString(bytes), "UTF-8"); }
         catch (DecoderFallbackException) { }
         if (MostlyUtf8(bytes))
@@ -383,11 +389,16 @@ public static class SubtitleEncoding
     }
 
     /// <summary>
-    /// Every non-ASCII letter is Arabic script, there are enough of them, and none touches an ASCII letter (an Arabic word
-    /// stands apart from a Latin one; a Latin word with one odd letter is another code page).
+    /// Every non-ASCII letter is Arabic script, there are enough of them, none touches an ASCII letter (an Arabic word
+    /// stands apart from a Latin one; a Latin word with one odd letter is another code page), and the definite article
+    /// "ال" is as common as Arabic makes it: at least twice and once every <see cref="ArticleEvery"/> letters. KOI8-R
+    /// Cyrillic, capital Russian and Greek, and Thai can all land on Arabic letter bytes, but they hardly ever form that
+    /// pair (third look, PR 7.1). A strong signal, not a proof: every file read this way says so in the toast.
     /// </summary>
     private static bool UnambiguousArabic(string text)
     {
+        var articles = 0;
+        for (var at = text.IndexOf("ال", StringComparison.Ordinal); at >= 0; at = text.IndexOf("ال", at + 2, StringComparison.Ordinal)) articles++;
         var arabic = 0;
         for (var i = 0; i < text.Length; i++)
         {
@@ -397,8 +408,11 @@ public static class SubtitleEncoding
             if ((i > 0 && char.IsAsciiLetter(text[i - 1])) || (i + 1 < text.Length && char.IsAsciiLetter(text[i + 1]))) return false;
             arabic++;
         }
-        return arabic >= MinArabicLetters;
+        return arabic >= MinArabicLetters && articles >= 2 && articles * ArticleEvery >= arabic;
     }
+
+    /// <summary>The definite article must come at least once per this many Arabic letters (ordinary prose has one every 10–15).</summary>
+    public const int ArticleEvery = 25;
 
     private static bool IsArabic(char c) => c is >= '\u0600' and <= '\u06FF' or >= '\u0750' and <= '\u077F' or >= '\uFB50' and <= '\uFDFF' or >= '\uFE70' and <= '\uFEFF';
 

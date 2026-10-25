@@ -41,7 +41,7 @@
    - The host believes a file only under an allowed name, with the validated SHA-256, and when it parses without a problem.
 
 ## Evaluator review
-One round (2026-10-25), reproduced on the built code: three blockers and five majors, fixed with `SubtitleReviewTests` (written first, failing).
+Three rounds (2026-10-25), all reproduced on the built code. First round: three blockers and five majors, fixed with `SubtitleReviewTests` (written first, failing).
 - **Blockers:**
   - **Encoding was guessed.** Cyrillic, Greek, Portuguese pairs and damaged UTF-8 were decoded wrongly and written out as "Saved as UTF-8". Decoding now succeeds only when it is certain (decision 3 below supersedes the earlier rule) and refuses otherwise, with the reason.
   - **A BOM followed by other bytes** was replaced silently. Decoders are strict now.
@@ -67,7 +67,11 @@ One round (2026-10-25), reproduced on the built code: three blockers and five ma
 3. **Windows-1256 only when unambiguous:**
    - every letter is Arabic script (punctuation such as « » … – is neutral);
    - at least ten letters;
-   - no Arabic letter touching a Latin letter.
+   - no Arabic letter touching a Latin letter;
+   - **(third look)** the definite article "ال" at least twice and once every 25 Arabic letters.
+     - KOI8-R puts lower-case Cyrillic on the very bytes 1256 uses for Arabic letters, and all-caps Russian and Greek and some Thai do too, so no rule on the bytes alone tells them apart. The third look found 175 such files accepted out of 688 probes before this rule.
+     - The article is a strong signal, not a proof. Every file read this way says "Read as Windows-1256 (Arabic)" in the toast, so a wrong reading is visible at once.
+   - A file with NUL bytes (UTF-16 without its BOM) is refused.
 4. **Windows-1252 is not guessed at all.** The second round showed that no content rule tells it from 1250, 1254 or 1257: German, Spanish and Swedish read as Arabic, and short Russian and Greek dialogue read as Western.
 
 Everything else is refused with the reason ("save it as UTF-8"). A user-chosen encoding comes with the dialog (V2 Stage 7).
