@@ -68,11 +68,14 @@
      - every header's checksum and size field are valid (TAR's only integrity check);
      - a PAX or GNU long-name header is at most 1 MB (`TarReader` buffers it whole);
      - the archive ends with its two zero blocks, followed only by zeros, so a TAR cut at a block boundary is caught;
-     - the entry count and the declared size of every entry, kept or not, meet the size and whole-archive rules.
+     - the entry count and the declared size of every entry, kept or not, meet the size and whole-archive rules;
+     - a PAX header's `size` record moves the next entry's data exactly as `TarReader` moves it, so both read the same headers;
+     - a first header that is not a ustar one means the file is not a TAR (an empty archive, only zero blocks, is one).
+   - **Sparse files are refused as unsupported**: `TarReader` cannot read GNU `S` entries and returns PAX `GNU.sparse` ones as their raw map.
    - Every entry goes through the same checks as a ZIP entry: names, the one budget, limits, never a link or a device.
    - TAR keeps no per-entry packed size, so its bomb rule is the whole-archive one (past 256 MB).
    - TAR keeps no data check value. For a TAR.GZ, the first pass also compares GZIP's CRC-32 and length with the trailer. `GZipStream` reports a cut-off file as a clean end, so without that a truncated file passes.
-   - **A GZIP file of several members is refused as damaged**: its trailer covers only the last member. This is rare outside `cat a.gz b.gz`.
+   - **A GZIP file of several members is refused**: its trailer covers only the last member. This is rare outside `cat a.gz b.gz` and bgzip. The message says it may be several parts, not only damage.
    - `TarReader`'s own failures on a hostile header (an overflowing PAX number) are a damaged archive, never a crash.
    - A plain `.gz` gets **Decompress**: `notes.txt.gz` becomes `notes.txt` next to it, without overwriting, under the same limits. The trailer is checked before the output is kept.
 
@@ -106,6 +109,14 @@ One round (2026-10-25): one blocker and four majors, three of them reproduced by
   - a huge PAX or GNU long-name header was buffered whole;
   - declared sizes of skipped entries escaped the bomb rule.
 - All are fixed by the first pass and the trailer check. `TarWorkerTests` holds each one as its failing input: 4 of 12 fail on the old code.
+
+**Second round** (focused, the same day). Five of the six findings were confirmed closed. Real archives from bsdtar 3.8.9 and Python's tarfile, in GNU, PAX and USTAR formats, all pass. Three new majors:
+- a PAX `size` record made the first pass and `TarReader` disagree on where headers are, which reopened the 1 MB header cap (1.5 GB of memory from a 9.9 MB file);
+- a GNU sparse entry crashed the worker (`NotSupportedException`);
+- a PAX sparse entry extracted its raw map and reported success.
+
+Two minors were fixed as well: a GZIP of something else now says it is not a TAR, and the several-parts message. All five are now tests that fail on the old code (3 of 15); 16 of 16 pass. The reviewer's samples now give `LimitExceeded`, `UnsupportedContent` or `ContentMismatch`, and the valid ones still extract.
+- **Open:** reading twice costs about twice the time (Info on a 400 MB TAR.GZ, 1.8 s). Recorded for the budgets.
 
 ## Alternatives considered
 - **`ZipFile.ExtractToDirectory`.** Rejected: no hook for the name policy, the limits or links, and a partial result on failure.

@@ -1,19 +1,26 @@
+using System.Globalization;
 using System.IO.Compression;
+using System.Text;
 using WinTools.Core.Files;
+using WinTools.Core.Jobs;
 
 namespace WinTools.Worker.Archive;
 
-/// <summary>Why a TAR or GZIP stream was refused before its entries were read: damaged, or past a limit.</summary>
-internal sealed class TarRefused(string message, bool limit = false) : Exception(message)
+/// <summary>Why a TAR or GZIP stream was refused before its entries were read: damaged, past a limit, unsupported, or not a TAR.</summary>
+internal sealed class TarRefused(string message, ErrorCode code = ErrorCode.DecodeFailed) : Exception(message)
 {
-    public bool Limit { get; } = limit;
+    public ErrorCode Code { get; } = code;
 }
 
 /// <summary>
 /// Checks a TAR stream block by block before .NET's TarReader reads it (evaluator, PR 5.2), because TarReader trusts it:
 /// <list type="bullet">
+/// <item>the first header is a ustar one (a GZIP of something else is not a TAR);</item>
 /// <item>every header's checksum (TAR's only integrity check) and size field are valid;</item>
 /// <item>a PAX or GNU long-name header is at most <see cref="MaxMetaBytes"/> (TarReader buffers it whole);</item>
+/// <item>a PAX header's size record moves the next entry's data exactly as TarReader moves it, so both see the same
+/// headers (evaluator, PR 5.2, second round);</item>
+/// <item>sparse entries (GNU 'S', PAX GNU.sparse) are refused: TarReader cannot read the first and misreads the second;</item>
 /// <item>the archive ends with its zero blocks (a TAR cut at a block boundary is caught), followed only by zeros;</item>
 /// <item>at most <see cref="ArchiveLimits.MaxEntries"/> entries, and the declared sizes of every entry, kept or not, meet
 /// the size and whole-archive ratio rules.</item>
@@ -30,11 +37,21 @@ internal static class TarGuard
         var block = new byte[512];
         long declared = 0;
         var entries = 0;
+        long? paxSize = null; // a PAX header's size record: TarReader takes it, not the next header's own, as that entry's size
+        var afterPax = false;
+        var first = true;
         while (true)
         {
-            if (!ReadBlock(tar, block)) throw new TarRefused("The TAR archive is cut short (its end blocks are missing).");
+            if (!ReadBlock(tar, block))
+                throw first ? new TarRefused("The file does not hold a TAR archive, whatever its name says.", ErrorCode.ContentMismatch)
+                    : new TarRefused("The TAR archive is cut short (its end blocks are missing).");
+            // An empty archive (only its end blocks) is a TAR; any other first header must be a ustar one.
+            if (first && !IsZero(block) && !block.AsSpan(257, 5).SequenceEqual("ustar"u8))
+                throw new TarRefused("The file does not hold a TAR archive, whatever its name says.", ErrorCode.ContentMismatch);
+            first = false;
             if (IsZero(block))
             {
+                if (afterPax) throw new TarRefused("A TAR extended header has no entry after it.");
                 if (!ReadBlock(tar, block) || !IsZero(block)) throw new TarRefused("The TAR archive is cut short or damaged after its last entry.");
                 // Only zero padding may follow.
                 int n;
@@ -48,15 +65,60 @@ internal static class TarGuard
                 return;
             }
             if (!ChecksumOk(block)) throw new TarRefused("A TAR header is damaged (its checksum does not match).");
-            var size = SizeOf(block) ?? throw new TarRefused("A TAR header holds an invalid size.");
             var type = (char)block[156];
-            if (type is 'x' or 'g' or 'L' or 'K' && size > MaxMetaBytes) throw new TarRefused("A TAR extended header is unusually large; it was not read.", limit: true);
-            if (++entries > ArchiveLimits.MaxEntries * 2) throw new TarRefused($"The archive has more than {ArchiveLimits.MaxEntries:N0} entries.", limit: true);
+            if (type == 'S') throw new TarRefused("The archive holds a sparse file, which WinTools does not read.", ErrorCode.UnsupportedContent);
+            if (type is 'x' && afterPax) throw new TarRefused("A TAR archive holds two extended headers in a row.");
+            var size = SizeOf(block) ?? throw new TarRefused("A TAR header holds an invalid size.");
+            if (type is not ('x' or 'g'))
+            {
+                size = paxSize ?? size;
+                paxSize = null;
+                afterPax = false;
+            }
+            if (type is 'x' or 'g' or 'L' or 'K' && size > MaxMetaBytes) throw new TarRefused("A TAR extended header is unusually large; it was not read.", ErrorCode.LimitExceeded);
+            if (++entries > ArchiveLimits.MaxEntries * 2) throw new TarRefused($"The archive has more than {ArchiveLimits.MaxEntries:N0} entries.", ErrorCode.LimitExceeded);
             declared += size;
-            if (declared > ArchiveLimits.MaxTotalBytes) throw new TarRefused($"The archive declares more than {ArchiveLimits.MaxTotalBytes >> 30} GB.", limit: true);
-            if (ArchiveLimits.IsArchiveBomb(declared, archiveBytes)) throw new TarRefused("The archive expands far beyond its own size; it looks like an archive bomb.", limit: true);
+            if (declared > ArchiveLimits.MaxTotalBytes) throw new TarRefused($"The archive declares more than {ArchiveLimits.MaxTotalBytes >> 30} GB.", ErrorCode.LimitExceeded);
+            if (ArchiveLimits.IsArchiveBomb(declared, archiveBytes)) throw new TarRefused("The archive expands far beyond its own size; it looks like an archive bomb.", ErrorCode.LimitExceeded);
+            if (type is 'x' or 'g')
+            {
+                var body = new byte[size];
+                if (tar.ReadAtLeast(body, body.Length, throwOnEndOfStream: false) != body.Length) throw new TarRefused("The TAR archive is cut short inside an entry.");
+                Skip(tar, (size + 511) / 512 * 512 - size);
+                var records = PaxRecords(body);
+                if (records.Keys.Any(k => k.StartsWith("GNU.sparse.", StringComparison.Ordinal)))
+                    throw new TarRefused("The archive holds a sparse file, which WinTools does not read.", ErrorCode.UnsupportedContent);
+                if (records.TryGetValue("size", out var value))
+                {
+                    if (type == 'g') throw new TarRefused("A TAR global header sets a size; the archive was not read.", ErrorCode.UnsupportedContent);
+                    paxSize = long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var v) ? v : throw new TarRefused("A TAR extended header holds an invalid size.");
+                }
+                afterPax = type == 'x';
+                continue;
+            }
             Skip(tar, (size + 511) / 512 * 512);
         }
+    }
+
+    /// <summary>A PAX header's records ("%d key=value\n", the length counting itself); a malformed or repeated one is damage.</summary>
+    internal static Dictionary<string, string> PaxRecords(ReadOnlySpan<byte> body)
+    {
+        var records = new Dictionary<string, string>(StringComparer.Ordinal);
+        var at = 0;
+        while (at < body.Length && body[at] != 0)
+        {
+            var rest = body[at..];
+            var space = rest.IndexOf((byte)' ');
+            if (space <= 0 || !int.TryParse(rest[..space], NumberStyles.None, CultureInfo.InvariantCulture, out var length)
+                || length <= space + 2 || length > rest.Length || rest[length - 1] != '\n')
+                throw new TarRefused("A TAR extended header is damaged.");
+            var record = rest[(space + 1)..(length - 1)];
+            var equals = record.IndexOf((byte)'=');
+            if (equals <= 0 || !records.TryAdd(Encoding.UTF8.GetString(record[..equals]), Encoding.UTF8.GetString(record[(equals + 1)..])))
+                throw new TarRefused("A TAR extended header is damaged.");
+            at += length;
+        }
+        return records;
     }
 
     private static bool ReadBlock(Stream s, byte[] block) => s.ReadAtLeast(block, 512, throwOnEndOfStream: false) == 512;

@@ -64,7 +64,8 @@ internal static class ArchiveJobs
             };
         }
         catch (ArchiveFailure ex) { return JobResult.Fail(id, ex.Code, ex.Message); }
-        catch (TarRefused ex) { return JobResult.Fail(id, ex.Limit ? ErrorCode.LimitExceeded : ErrorCode.DecodeFailed, ex.Message); }
+        catch (TarRefused ex) { return JobResult.Fail(id, ex.Code, ex.Message); }
+        catch (NotSupportedException) { return JobResult.Fail(id, ErrorCode.UnsupportedContent, "The archive holds an entry of a kind WinTools does not read."); }
         catch (InvalidDataException) { return JobResult.Fail(id, ErrorCode.DecodeFailed, "The archive is damaged."); }
         catch (EndOfStreamException) { return JobResult.Fail(id, ErrorCode.DecodeFailed, "The archive is cut short."); }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return JobResult.Fail(id, ErrorCode.SourceNotFound, "The file is no longer there."); }
@@ -148,7 +149,7 @@ internal static class ArchiveJobs
                     using (var scan = new CheckedGzip(_file, _file.Length))
                     {
                         TarGuard.Check(scan, _file.Length);
-                        if (!scan.TrailerMatches()) throw new TarRefused("The archive is damaged or cut short (its GZIP check value does not match).");
+                        if (!scan.TrailerMatches()) throw new TarRefused("The archive is damaged, cut short, or made of several GZIP parts, which WinTools does not read (its GZIP check value does not match).");
                     }
                     _file.Position = 0;
                     _tarStream = new GZipStream(_file, CompressionMode.Decompress, leaveOpen: true);
@@ -205,6 +206,10 @@ internal static class ArchiveJobs
             catch (Exception ex) when (ex is OverflowException or FormatException or ArgumentException or EndOfStreamException or InvalidDataException or IOException and not FileNotFoundException)
             {
                 throw new ArchiveFailure(ErrorCode.DecodeFailed, "A TAR header is damaged.");
+            }
+            catch (NotSupportedException)
+            {
+                throw new ArchiveFailure(ErrorCode.UnsupportedContent, "The archive holds an entry of a kind WinTools does not read.");
             }
         }
 
@@ -412,7 +417,7 @@ internal static class ArchiveJobs
                 }
                 output.Flush(flushToDisk: true);
                 // GZipStream reports a cut-off file as a clean end: the trailer decides (evaluator, PR 5.2, blocker).
-                if (!gzip.TrailerMatches()) throw new ArchiveFailure(ErrorCode.DecodeFailed, "The file is damaged or cut short (its GZIP check value does not match); nothing was kept.");
+                if (!gzip.TrailerMatches()) throw new ArchiveFailure(ErrorCode.DecodeFailed, "The file is damaged, cut short, or made of several GZIP parts, which WinTools does not read (its GZIP check value does not match); nothing was kept.");
                 hash = Convert.ToHexStringLower(sha.GetHashAndReset());
             }
             if (zone is { } z) MarkOfTheWeb.Apply(temp, z);

@@ -195,6 +195,104 @@ public sealed class TarWorkerTests : IDisposable
         Assert.Empty(Directory.GetDirectories(_dir.Path));
     }
 
+    // Evaluator, PR 5.2 second round: raw headers, since TarWriter cannot write these on purpose.
+
+    /// <summary>A ustar header with a valid checksum.</summary>
+    private static byte[] RawHeader(string name, char type, long size)
+    {
+        var h = new byte[512];
+        Encoding.ASCII.GetBytes(name).CopyTo(h, 0);
+        "0000644\0"u8.CopyTo(h.AsSpan(100));
+        "0000000\0"u8.CopyTo(h.AsSpan(108));
+        "0000000\0"u8.CopyTo(h.AsSpan(116));
+        Encoding.ASCII.GetBytes(Convert.ToString(size, 8).PadLeft(11, '0') + "\0").CopyTo(h, 124);
+        "00000000000\0"u8.CopyTo(h.AsSpan(136));
+        h[156] = (byte)type;
+        "ustar\0"u8.CopyTo(h.AsSpan(257));
+        "00"u8.CopyTo(h.AsSpan(263));
+        h.AsSpan(148, 8).Fill((byte)' ');
+        var sum = 0;
+        foreach (var b in h) sum += b;
+        Encoding.ASCII.GetBytes(Convert.ToString(sum, 8).PadLeft(6, '0') + "\0 ").CopyTo(h, 148);
+        return h;
+    }
+
+    private static byte[] Padded(byte[] data) => [.. data, .. new byte[(512 - data.Length % 512) % 512]];
+
+    /// <summary>PAX records ("%d key=value\n", the length counting itself).</summary>
+    private static byte[] Pax(params (string Key, string Value)[] records)
+    {
+        var all = new List<byte>();
+        foreach (var (k, v) in records)
+        {
+            var body = $" {k}={v}\n";
+            var len = body.Length + 1;
+            while ((len.ToString(System.Globalization.CultureInfo.InvariantCulture) + body).Length != len) len++;
+            all.AddRange(Encoding.UTF8.GetBytes(len.ToString(System.Globalization.CultureInfo.InvariantCulture) + body));
+        }
+        return [.. all];
+    }
+
+    private string RawTar(string name, params byte[][] blocks)
+    {
+        var path = Path.Combine(_dir.Path, name);
+        System.IO.File.WriteAllBytes(path, [.. blocks.SelectMany(b => b), .. new byte[1024]]);
+        return path;
+    }
+
+    [Fact]
+    public void A_pax_size_moves_the_next_header_for_the_guard_as_it_does_for_the_reader()
+    {
+        // The PAX size (1024) is what TarReader uses for "a.txt", whose header says 0: the reader's next header is then
+        // inside what the header sizes call "b.bin"'s data, where a 2 MB GNU long name waits. The guard must see it too.
+        var longName = Padded([.. RawHeader("././@LongLink", 'L', 2 << 20), .. new byte[2 << 20]]);
+        var inner = Padded([.. new byte[512], .. longName, .. RawHeader("c.txt", '0', 0)]);
+        var pax = Pax(("size", "1024"));
+        var tar = RawTar("desync.tar",
+            Padded([.. RawHeader("PaxHeader/a", 'x', pax.Length), .. Padded(pax)]),
+            RawHeader("a.txt", '0', 0),
+            RawHeader("b.bin", '0', inner.Length),
+            inner);
+        var r = ArchiveJobs.Run(Request(ArchiveCapabilities.TestId, tar));
+        Assert.True(r.Error == ErrorCode.LimitExceeded, r.Message);
+    }
+
+    [Fact]
+    public void Sparse_entries_are_refused_as_unsupported_never_a_crash_or_a_wrong_file()
+    {
+        var gnu = RawTar("gnu-sparse.tar", RawHeader("s.bin", 'S', 512), new byte[512]);
+        var paxRecords = Pax(("GNU.sparse.major", "1"), ("GNU.sparse.minor", "0"), ("GNU.sparse.name", "s.bin"), ("GNU.sparse.realsize", "1048576"));
+        var pax = RawTar("pax-sparse.tar",
+            Padded([.. RawHeader("PaxHeader/s", 'x', paxRecords.Length), .. Padded(paxRecords)]),
+            RawHeader("GNUSparseFile.0/s.bin", '0', 512), new byte[512]);
+        foreach (var path in new[] { gnu, pax })
+            foreach (var capability in new[] { ArchiveCapabilities.TestId, ArchiveCapabilities.ExtractId })
+                Assert.Equal(ErrorCode.UnsupportedContent, ArchiveJobs.Run(Request(capability, path)).Error);
+        Assert.Empty(Directory.GetDirectories(_dir.Path));
+    }
+
+    [Fact]
+    public void A_gzip_that_holds_no_tar_is_called_what_it_is()
+    {
+        var path = Path.Combine(_dir.Path, "plain.tar.gz");
+        using (var file = System.IO.File.Create(path))
+        using (var gz = new GZipStream(file, CompressionLevel.Optimal))
+            gz.Write("not a tar at all"u8);
+        Assert.Equal(ErrorCode.ContentMismatch, ArchiveJobs.Run(Request(ArchiveCapabilities.TestId, path)).Error);
+    }
+
+    [Fact]
+    public void An_empty_tar_gz_is_an_empty_archive_not_a_mismatch()
+    {
+        // Python's tarfile writes an empty archive as zero blocks only: no ustar header to recognise, and still a TAR.
+        var path = Path.Combine(_dir.Path, "empty.tgz");
+        using (var file = System.IO.File.Create(path))
+        using (var gz = new GZipStream(file, CompressionLevel.Optimal))
+            gz.Write(new byte[10240]);
+        Assert.True(ArchiveJobs.Run(Request(ArchiveCapabilities.TestId, path)).Success);
+        Assert.Equal(ErrorCode.NothingToDo, ArchiveJobs.Run(Request(ArchiveCapabilities.ExtractId, path)).Error);
+    }
+
     [Fact]
     public void A_file_named_tar_that_is_not_one_is_refused()
     {
