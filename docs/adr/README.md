@@ -27,5 +27,6 @@ Template: `template.md`. Numbering is sequential and never reused. Old ADRs are 
 | [ADR-0020](ADR-0020-general-files-module.md) | General Files: any file is a kind, Tools is shared, Copy path runs in the host | Proposed (V2 PR 1.4) | Evaluator review; Explorer run |
 | [ADR-0021](ADR-0021-settings-schema-2-and-trigger-key-policy.md) | Settings schema 2 in sections; trigger keys Space, F7, F9, F12 (a stray press is harmless), from the typing-interference spike | Accepted (V2 PR 1.5) | Letters wait for a file-drag-only condition; F2–F6, F10, F11 for a held-key and modifier probe |
 | [ADR-0022](ADR-0022-pdf-module-qpdf.md) | The PDF module's structural commands run the official qpdf build in the PDF worker | Proposed (V2 PR 2.1) | Evaluator review; Explorer run |
+| [ADR-0023](ADR-0023-archives-zip.md) | Archives start with ZIP on .NET's own code, behind a name policy and decompression-time limits | Proposed (V2 PR 5.1) | Evaluator review; Explorer run |
 
 Decision order recommended: 0002 → 0003 → 0001/0004 (same spike) → 0005 → 0011 → 0007 → 0006 → 0008. 0009 and 0010 can be confirmed any time.
