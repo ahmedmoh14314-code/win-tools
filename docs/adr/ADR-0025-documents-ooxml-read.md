@@ -42,13 +42,13 @@
    - **The copy is checked before it is kept.** It is opened again under every rule above, with the same parts in the same order, each copied part's SHA-256 equal to the source's, and no property left. Then the usual temp, zone and no-overwrite rules apply.
    - **A signed package is refused**: the copy would break its signature. It is recognised by `_xmlsignatures/` or by a signature-origin relationship.
    - A package with no properties is "nothing to do".
-   - **What it does not remove is said, as a notice.** These live in the content, not the properties, and Office's Document Inspector removes them:
-     - comment and revision authors, in any part;
+   - **What it does not remove is said, as a notice.** These live in the content, not the properties:
+     - comment and revision authors, in any part, and the modern comment-author lists;
      - custom XML data;
      - Excel's saved folder path (`absPath`) and file-sharing user name;
-     - Word's attached template path;
-     - the thumbnail.
-   - The notice is never clipped: at most 179 characters.
+     - linked file paths: any external relationship to a local or UNC file (the template, a mail-merge source, a linked workbook);
+     - the thumbnail, at `docProps/` or reached through its relationship.
+   - The notice makes no claim about what other tools remove. It is never clipped: at most 160 characters.
    - **The host does not re-open the copy.** Parsing a package built from untrusted input belongs in the worker. The host checks the name, the ZIP signature and the SHA-256 the worker validated.
 
 ## Alternatives considered
@@ -95,9 +95,13 @@ One round (2026-10-25), reproduced on the built worker with the reviewer's own p
   - a signature is found through its relationship.
 - **Declined:** the host re-checking that the property parts are empty (see decision 6).
 - Each finding is a test that failed on the old code: 8 of 18. 18 of 18 pass, and the reviewer's three probes give no unannounced leak.
+- **Focused re-review:** no blocker. `Resolve` matches `System.IO.Packaging` on 11 targets, including ones that are refused.
+  - Two minor gaps in the notice were fixed: `ppt/authors.xml`, and links and thumbnails reached through relationships.
+  - The "Document Inspector removes them" wording was dropped as unverified.
+  - 19 of 19 pass.
 
 ## Evidence / experiments
-`DocumentCleanTests` (9, written first and shown failing to build; 18 after the review):
+`DocumentCleanTests` (9, written first and shown failing to build; 19 after the reviews):
 - properties emptied, every other part the same, and the original unchanged;
 - Excel and PowerPoint;
 - properties at a non-standard name found through the relationships;

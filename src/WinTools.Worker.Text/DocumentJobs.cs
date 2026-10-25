@@ -562,7 +562,8 @@ internal static class DocumentJobs
             Kind.Excel => names.Any(n => n.StartsWith("xl/revisions/", StringComparison.OrdinalIgnoreCase)),
             _ => false,
         };
-        if (revisions || names.Any(n => n.Contains("comment", StringComparison.OrdinalIgnoreCase) || n.EndsWith("people.xml", StringComparison.OrdinalIgnoreCase) || n.Contains("/persons/", StringComparison.OrdinalIgnoreCase)))
+        if (revisions || names.Any(n => n.Contains("comment", StringComparison.OrdinalIgnoreCase) || n.EndsWith("people.xml", StringComparison.OrdinalIgnoreCase)
+            || n.Contains("/persons/", StringComparison.OrdinalIgnoreCase) || n.EndsWith("/authors.xml", StringComparison.OrdinalIgnoreCase)))
             kept.Add("comment and revision authors");
         if (names.Any(n => n.StartsWith("customXml/", StringComparison.OrdinalIgnoreCase))) kept.Add("custom XML data");
         if (kind == Kind.Excel && Find(zip, "xl/workbook.xml") is { } workbook && ReadPart(zip, workbook.FullName) is { } wb)
@@ -570,11 +571,12 @@ internal static class DocumentJobs
             if (HasElement(wb, "absPath")) kept.Add("the saved folder path");
             if (HasAttribute(wb, "fileSharing", "userName")) kept.Add("the sharing user name");
         }
-        if (kind == Kind.Word && Find(zip, "word/_rels/settings.xml.rels") is { } settings && ReadPart(zip, settings.FullName) is { } rels
-            && HasAttributeEnding(rels, "Relationship", "Type", "/attachedTemplate"))
-            kept.Add("the template path");
-        if (names.Any(n => n.StartsWith("docProps/thumbnail", StringComparison.OrdinalIgnoreCase))) kept.Add("a thumbnail");
-        return kept.Count == 0 ? [] : [new("Kept", $"Not removed: {string.Join(", ", kept)}. Office's Document Inspector removes them.", Notice: true)]; // at most 179 characters with every item: never clipped
+        // Any link to a local file (the template, a mail-merge source, a linked workbook) carries a path, often a user name.
+        if (names.Where(n => n.EndsWith(".rels", StringComparison.OrdinalIgnoreCase)).Any(n => HasLocalFileLink(ReadPart(zip, n)!)))
+            kept.Add("linked file paths (such as the template)");
+        if (names.Any(n => n.StartsWith("docProps/thumbnail", StringComparison.OrdinalIgnoreCase)) || HasRelationship(zip, "/metadata/thumbnail"))
+            kept.Add("a thumbnail");
+        return kept.Count == 0 ? [] : [new("Kept", $"Not removed: {string.Join(", ", kept)}.", Notice: true)]; // at most 160 characters with every item: never clipped
     }
 
     /// <summary>Whether any element (of a local name, or any) carries an attribute of a local name.</summary>
@@ -591,11 +593,25 @@ internal static class DocumentJobs
         return false;
     }
 
-    private static bool HasAttributeEnding(string xml, string element, string attribute, string suffix)
+    private static bool HasLocalFileLink(string rels)
     {
-        using var r = Xml(xml);
+        using var r = Xml(rels);
         while (r.Read())
-            if (r.NodeType == XmlNodeType.Element && r.LocalName == element && r.GetAttribute(attribute) is { } v && v.EndsWith(suffix, StringComparison.Ordinal))
+            if (r.NodeType == XmlNodeType.Element && r.LocalName == "Relationship"
+                && string.Equals(r.GetAttribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase)
+                && r.GetAttribute("Target") is { } t && (t.StartsWith("file:", StringComparison.OrdinalIgnoreCase) || t.StartsWith(@"\\", StringComparison.Ordinal) || t.Length > 2 && t[1] == ':'))
+                return true;
+        return false;
+    }
+
+    /// <summary>Whether the package root has a relationship of this type (to a part that is there).</summary>
+    private static bool HasRelationship(ZipArchive zip, string typeSuffix)
+    {
+        if (Find(zip, "_rels/.rels") is not { } entry) return false;
+        using var r = Xml(ReadPart(zip, entry.FullName)!);
+        while (r.Read())
+            if (r.NodeType == XmlNodeType.Element && r.LocalName == "Relationship" && (r.GetAttribute("Type") ?? "").EndsWith(typeSuffix, StringComparison.Ordinal)
+                && r.GetAttribute("Target") is { Length: > 0 } target && Resolve(zip, target) is not null)
                 return true;
         return false;
     }

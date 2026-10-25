@@ -213,7 +213,7 @@ public sealed class DocumentCleanTests : IDisposable
         const string settingsRels = """<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate" Target="file:///C:\Users\SECRET\x.dotm" TargetMode="External"/></Relationships>""";
         var docx = Make("template.docx", [.. FullDocx(), ("word/_rels/settings.xml.rels", settingsRels), ("docProps/thumbnail.jpeg", "jpeg")]);
         var word = DocumentJobs.Run(Request(docx)).Facts.Single(f => f.Label == "Kept").Value;
-        Assert.Contains("template", word, StringComparison.Ordinal);
+        Assert.Contains("linked file paths", word, StringComparison.Ordinal);
         Assert.Contains("thumbnail", word, StringComparison.Ordinal);
 
         const string workbook = """<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:x15ac="http://schemas.microsoft.com/office/spreadsheetml/2010/11/ac"><fileSharing userName="SECRETAUTHOR"/><mc:AlternateContent><mc:Choice Requires="x15"><x15ac:absPath url="C:\Users\SECRET\Desktop\"/></mc:Choice></mc:AlternateContent></workbook>""";
@@ -225,6 +225,22 @@ public sealed class DocumentCleanTests : IDisposable
         var excel = DocumentJobs.Run(Request(xlsx)).Facts.Single(f => f.Label == "Kept").Value;
         Assert.Contains("folder", excel, StringComparison.Ordinal);
         Assert.Contains("user name", excel, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Modern_comment_authors_linked_file_paths_and_a_thumbnail_by_relationship_are_said()
+    {
+        const string link = """<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/mailMergeSource" Target="file:///C:/Users/SECRET/list.xlsx" TargetMode="External"/></Relationships>""";
+        var rels = RootRels.Replace("</Relationships>", """<Relationship Id="rId8" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail" Target="thumb.jpeg"/></Relationships>""", StringComparison.Ordinal);
+        var parts = FullDocx().Select(p => p.Item1 == "_rels/.rels" ? (p.Item1, rels) : p)
+            .Concat([("thumb.jpeg", "jpeg"), ("word/_rels/settings.xml.rels", link)]).ToArray();
+        var word = DocumentJobs.Run(Request(Make("links.docx", parts))).Facts.Single(f => f.Label == "Kept").Value;
+        Assert.Contains("linked file paths", word, StringComparison.Ordinal);
+        Assert.Contains("thumbnail", word, StringComparison.Ordinal);
+
+        var pptx = Make("deck.pptx", [.. OoxmlSamples.Pptx("one"), ("ppt/authors.xml", """<p188:authorLst xmlns:p188="http://schemas.microsoft.com/office/powerpoint/2018/8/main"><p188:author id="{1}" name="SECRETAUTHOR"/></p188:authorLst>"""),
+            ("docProps/core.xml", """<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>A</dc:creator></cp:coreProperties>""")]);
+        Assert.Contains("comment", DocumentJobs.Run(Request(pptx)).Facts.Single(f => f.Label == "Kept").Value, StringComparison.Ordinal);
     }
 
     [Fact]
