@@ -82,14 +82,37 @@ public sealed class TarWorkerTests : IDisposable
         Assert.Empty(Directory.GetDirectories(_dir.Path));
     }
 
+    /// <summary>A stream of zeros of a set length that holds no buffer (a 300 MB entry in a test).</summary>
+    private sealed class Zeros(long length) : Stream
+    {
+        private long _at;
+        public override bool CanRead => true;
+        public override bool CanSeek => true;
+        public override bool CanWrite => false;
+        public override long Length => length;
+        public override long Position { get => _at; set => _at = value; }
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var n = (int)Math.Min(count, length - _at);
+            Array.Clear(buffer, offset, n);
+            _at += n;
+            return n;
+        }
+        public override long Seek(long offset, SeekOrigin origin) => _at = origin switch { SeekOrigin.Begin => offset, SeekOrigin.Current => _at + offset, _ => length + offset };
+        public override void Flush() { }
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
     [Fact]
     public void A_tar_bomb_is_stopped_by_the_whole_archive_ratio()
     {
+        // TAR keeps no per-entry packed size, so the whole-archive rule stops it once past its 256 MB floor.
         var path = Path.Combine(_dir.Path, "bomb.tgz");
         using (var file = System.IO.File.Create(path))
         using (var gz = new GZipStream(file, CompressionLevel.SmallestSize))
         using (var writer = new TarWriter(gz, TarEntryFormat.Pax, leaveOpen: false))
-            writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "zeros.bin") { DataStream = new MemoryStream(new byte[64 << 20]) });
+            writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "zeros.bin") { DataStream = new Zeros(300L << 20) });
         var r = ArchiveJobs.Run(Request(ArchiveCapabilities.ExtractId, path));
         Assert.Equal(ErrorCode.LimitExceeded, r.Error);
         Assert.Empty(Directory.GetDirectories(_dir.Path));

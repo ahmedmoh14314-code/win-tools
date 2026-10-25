@@ -62,6 +62,13 @@
 
 8. **Notices reach the user:** a believed success that carries a notice fact (entries skipped or renamed, links not followed) shows it in the toast.
 
+9. **TAR, TAR.GZ and GZIP (V2 PR 5.2)**, with .NET's own `System.Formats.Tar` and `GZipStream`:
+   - Extract, Test and Archive info read `.tar`, `.tar.gz` and `.tgz`, told by content: the GZIP magic, or a `ustar` header.
+   - Every entry goes through the same checks as a ZIP entry: names, the one budget, limits, never a link or a device.
+   - TAR keeps no per-entry packed size, so its bomb rule is the whole-archive one (past 256 MB).
+   - TAR keeps no data check value. GZIP's CRC-32 and length are verified when the stream is read to its end, after the last entry, bounded.
+   - A plain `.gz` gets **Decompress**: `notes.txt.gz` becomes `notes.txt` next to it, without overwriting, under the same limits.
+
 ## Evaluator review
 One round (2026-10-25): one blocker and four majors, three of them reproduced by the reviewer on the built worker. All fixed, with tests that fail on the old code (5 of 19 worker tests).
 - **Blocker:** Add to ZIP dropped files it could not read (links, files in use, and every OneDrive file inside a folder, because they carry a reparse point) and still said "ZIP created".
