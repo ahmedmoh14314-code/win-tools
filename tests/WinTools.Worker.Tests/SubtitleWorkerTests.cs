@@ -75,6 +75,26 @@ public sealed class SubtitleWorkerTests : IDisposable
     }
 
     [Fact]
+    public void A_shift_earlier_than_a_whole_subtitle_is_refused_and_a_partial_one_is_cut_at_zero_with_a_notice()
+    {
+        var source = _dir.Write("film.srt", Encoding.UTF8.GetBytes("1\n00:00:01,000 --> 00:00:03,000\none\n\n2\n00:00:10,000 --> 00:00:12,000\ntwo\n\n"));
+        // 5 s earlier would end the first subtitle before 0:00: once clamped to 0:00 --> 0:00, its timing lost (review, #38).
+        var refused = SubtitleJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), SubtitleCapabilities.ShiftCustomId, [source],
+            Parameters: new Dictionary<string, string> { [DialogParameters.Name] = "seconds=-5" }));
+        Assert.Equal(ErrorCode.LimitExceeded, refused.Error);
+        Assert.Equal(["film.srt"], _dir.Names());
+        var request = new JobRequest(Guid.NewGuid().ToString("N"), SubtitleCapabilities.ShiftCustomId, [source],
+            Parameters: new Dictionary<string, string> { [DialogParameters.Name] = "seconds=-2" });
+        var r = SubtitleJobs.Run(request);
+        Assert.True(r.Success, r.Message);
+        Assert.Contains(r.Facts, f => f is { Label: "Clamped", Notice: true });
+        Assert.True(SubtitleJobModule.Instance.IsBelievable(request, r));
+        var text = File.ReadAllText(r.OutputPath!);
+        Assert.Contains("00:00:00,000 --> 00:00:01,000", text, StringComparison.Ordinal);
+        Assert.Contains("00:00:08,000 --> 00:00:10,000", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Clean_up_rewrites_as_utf8_once_and_then_has_nothing_to_do()
     {
         var source = _dir.Write("old.srt", Encoding.UTF8.GetBytes("1\n00:00:01,000 --> 00:00:02,000\nCafé crème\n")); // UTF-8 without a BOM, LF
