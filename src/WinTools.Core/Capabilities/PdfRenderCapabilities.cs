@@ -9,7 +9,7 @@ namespace WinTools.Core.Capabilities;
 /// PDFium (no JavaScript, no XFA):
 /// <list type="bullet">
 /// <item>On a PDF, Convert: To PNG and To JPG (each page at <see cref="RenderDpi"/> dpi; one page gives a file, more a
-/// folder), To TXT and To Markdown (the text PDFium reads, page by page; a scan has none).</item>
+/// folder), To TXT and To MD, Markdown (the text PDFium reads, page by page; a scan has none).</item>
 /// <item>On images, Convert: To PDF (one page per image, in name order, each the size of its picture).</item>
 /// </list>
 /// Every result is new, next to the source or in the output folder, never over an existing file.
@@ -42,7 +42,7 @@ public static class PdfRenderCapabilities
             Feedback: new("Converting", "convert", "Pages saved as JPG", "Nothing needed doing", "PDF", "PDFs")),
         new(ToTextId, "To TXT", "convert", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Reading the text of", "read the text of", "Text saved", "The PDF has no text (a scan has only pictures)", "PDF", "PDFs")),
-        new(ToMarkdownId, "To Markdown", "convert", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+        new(ToMarkdownId, "To MD", "convert", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Reading the text of", "read the text of", "Saved as Markdown", "The PDF has no text (a scan has only pictures)", "PDF", "PDFs")),
         new(ImagesToPdfId, "To PDF", "convert", Module, new InputRule(Images, MaxCount: MaxImages), CapabilityShape.Selection, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Making a PDF of", "make a PDF of", "PDF made", "Nothing needed doing", "image", "images")),

@@ -202,7 +202,7 @@ public sealed class PdfRenderTests : IDisposable
         var resolver = CapabilityResolver.For(null);
         var menu = RadialMenu.Build(resolver, [@"C:\p\a.pdf"]);
         Assert.Equal(["Convert", "Tools", "Organize", "Optimize", "Protect", "Actions"], menu.Select(g => g.Label));
-        Assert.Equal(["To PNG", "To JPG", "To TXT", "To Markdown"], menu[0].Commands.Select(c => c.Label));
+        Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD"], menu[0].Commands.Select(c => c.Label));
         Assert.Equal(["Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], menu.Single(g => g.Label == "Organize").Commands.Select(c => c.Label));
         Assert.Contains("To PDF", RadialMenu.Build(resolver, [@"C:\p\a.jpg", @"C:\p\b.png"])[0].Commands.Select(c => c.Label));
     }

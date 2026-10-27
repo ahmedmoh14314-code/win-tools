@@ -213,7 +213,7 @@
   "cmd.pdfrender.to-png": "إلى PNG",
   "cmd.pdfrender.to-jpg": "إلى JPG",
   "cmd.pdfrender.to-txt": "إلى TXT",
-  "cmd.pdfrender.to-md": "إلى Markdown",
+  "cmd.pdfrender.to-md": "إلى MD",
   "cmd.pdfrender.images-to-pdf": "إلى PDF",
   "noun.pdfrender": "ملف PDF",
   "nouns.pdfrender": "ملفات PDF",
