@@ -44,6 +44,12 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     private uint _dpi = 96;
     private (int X, int Y) _anchor, _centre;
 
+    /// <summary>
+    /// Draws Edit pages' thumbnails (ADR-0029): the image worker's thumbnails job, believed by its module. Set once at start;
+    /// without it Edit pages says its window cannot open.
+    /// </summary>
+    public Func<JobRequest, CancellationToken, Task<JobResult>>? Thumbnails { get; init; }
+
     public InteractionCoordinator(HostLog log, MessageWindow window, JobScheduler jobs, FeedbackPresenter feedback, SoundPlayer sounds, AppSettings settings)
     {
         _log = log;
@@ -359,6 +365,11 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             _ = AskFormAndRunAsync(capability, paths, x, y);
             return;
         }
+        if (capability.Dialog == DialogKinds.Organize)
+        {
+            _ = AskOrganizeAndRunAsync(capability, paths, x, y);
+            return;
+        }
         if (capability.Prompt is { WhenRequired: false } first)
         {
             Ask(capability, first, paths, x, y);
@@ -483,6 +494,53 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     /// A command's form (Trim, Split, Shift…): one answer for every dropped file, read again by the host and the worker. A
     /// cancel runs nothing and says nothing.
     /// </summary>
+    /// <summary>
+    /// Edit pages (ADR-0029): the image worker draws the PDF's pages into a folder of the host's own, the window shows them
+    /// and answers a plan, and the PDF worker writes the new PDF from it. The folder is deleted once the window has closed.
+    /// A PDF the thumbnails job refuses (a password, too many pages, damage) ends with that job's toast.
+    /// </summary>
+    private async Task AskOrganizeAndRunAsync(CapabilityDescriptor capability, IReadOnlyList<string> paths, int x, int y)
+    {
+        // Fire and forget from Drop: nothing here may throw unobserved.
+        if (paths is not [var pdf] || Thumbnails is not { } draw)
+        {
+            _feedback.DialogUnavailable(UiText.T("toast.organizeWindow"));
+            return;
+        }
+        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WinTools", "Pages", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(folder);
+            _feedback.Started(capability, paths);
+            var request = new JobRequest(Guid.NewGuid().ToString("N"), PdfRenderCapabilities.ThumbnailsId, [pdf], OutputDirectory: folder);
+            var drawn = await draw(request, CancellationToken.None).ConfigureAwait(false);
+            _log.Event("organize.thumbnails", new { ok = drawn.Success, error = drawn.Error.ToString() });
+            if (!drawn.Success || drawn.Facts is not [{ Label: "Pages" } count] || !int.TryParse(count.Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var pages))
+            {
+                _feedback.Finished(capability, [new JobItem(Path.GetFileName(pdf), drawn.Success ? JobResult.Fail(request.Id, ErrorCode.Internal, "The pages could not be shown.") : drawn)]);
+                return;
+            }
+            _feedback.HandedOver();
+            var title = UiText.F("dialog.organize", Path.GetFileName(pdf));
+            var outcome = await DialogsClient.Default.AskOrganizeAsync(new OrganizeRequest(title, folder, pages, x, y)).ConfigureAwait(false);
+            _log.Event("organize.ask", new { end = outcome.End.ToString(), pages });
+            if (outcome.End == PickEnd.Unavailable) { _feedback.DialogUnavailable(UiText.T("toast.organizeWindow")); return; }
+            if (outcome.End != PickEnd.Picked || PagePlan.Read(outcome.Rule, pages) is null) return;
+            if (_jobs.Enqueue(capability, paths, new Dictionary<string, string>(StringComparer.Ordinal) { [DialogParameters.Name] = outcome.Rule! }) is null)
+                _log.Event("job.refused", new { op = capability.Id, module = capability.Module });
+        }
+        catch (Exception ex)
+        {
+            _log.Event("organize.error", new { type = ex.GetType().Name });
+            _feedback.DialogUnavailable(UiText.T("toast.organizeWindow"));
+        }
+        finally
+        {
+            try { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _log.Event("organize.cleanup", new { type = ex.GetType().Name }); }
+        }
+    }
+
     private async Task AskFormAndRunAsync(CapabilityDescriptor capability, IReadOnlyList<string> paths, int x, int y)
     {
         // Fire and forget from Drop: nothing here may throw unobserved.

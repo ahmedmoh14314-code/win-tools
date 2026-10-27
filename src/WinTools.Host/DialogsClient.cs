@@ -68,6 +68,15 @@ internal sealed class DialogsClient(string dialogsExe)
             ? new(PickEnd.Picked, answer) : new(PickEnd.Cancelled);
     }
 
+    /// <summary>Asks Edit pages' window for its plan (ADR-0029): only a plan that fits the PDF's page count counts as an answer.</summary>
+    public async Task<RenameOutcome> AskOrganizeAsync(OrganizeRequest request, CancellationToken cancellationToken = default)
+    {
+        var (end, line) = await AskAsync(WorkerProtocol.Serialize(request), cancellationToken).ConfigureAwait(false);
+        if (end != PickEnd.Picked) return new(end);
+        return WorkerProtocol.Deserialize<OrganizeResult>(line)?.Answer is { } answer && PagePlan.Read(answer, request.Pages) is not null
+            ? new(PickEnd.Picked, answer) : new(PickEnd.Cancelled);
+    }
+
     /// <summary>One dialog: the request line in, the answer line out (Picked means "it answered").</summary>
     private async Task<(PickEnd End, string? Line)> AskAsync(string requestLine, CancellationToken cancellationToken)
     {

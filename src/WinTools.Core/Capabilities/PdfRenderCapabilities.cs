@@ -20,6 +20,16 @@ public static class PdfRenderCapabilities
     public const string ToPngId = "pdfrender.to-png", ToJpgId = "pdfrender.to-jpg", ToTextId = "pdfrender.to-txt", ToMarkdownId = "pdfrender.to-md";
     public const string ImagesToPdfId = "pdfrender.images-to-pdf";
 
+    /// <summary>
+    /// The page thumbnails Organize pages shows (ADR-0029): not a command of the ring, a job the host runs itself, into an
+    /// empty folder of its own. Pages are drawn <see cref="ThumbnailSide"/> pixels on their longer side.
+    /// </summary>
+    public const string ThumbnailsId = "pdfrender.thumbnails";
+    public const int ThumbnailSide = 220;
+
+    /// <summary>The name of a page's thumbnail (from 0): "page 001.png".</summary>
+    public static string ThumbnailName(int index) => $"page {(index + 1).ToString("000", System.Globalization.CultureInfo.InvariantCulture)}.png";
+
     /// <summary>The resolution pages are rendered at: sharp on screen and in print, a few MB a page.</summary>
     public const int RenderDpi = 150;
 

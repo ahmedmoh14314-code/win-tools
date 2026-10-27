@@ -27,6 +27,7 @@ internal sealed class PdfRenderJobModule : IJobModule
     {
         if (result.Outputs is null || result.Facts is null) return false;
         if (!result.Success) return result.Outputs.Count == 0 && result.Facts.Count == 0 && result.Error != ErrorCode.None;
+        if (request.CapabilityId == PdfRenderCapabilities.ThumbnailsId) return ThumbnailsHoldUp(request, result);
         if (request.Inputs.Count == 0 || result.Facts.Any(f => !f.Notice) || result.Facts.Count > 0 && !JobFacts.AreShowable(result.Facts)) return false;
         if (result.Outputs is not [{ Sha256: { Length: 64 } claimed } output]) return false;
         var images = request.CapabilityId == PdfRenderCapabilities.ImagesToPdfId;
@@ -50,8 +51,25 @@ internal sealed class PdfRenderJobModule : IJobModule
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return false; }
     }
 
+    /// <summary>Edit pages' thumbnails: no file, the page count, and exactly that many pictures, "page 001.png" on, in the host's own folder.</summary>
+    private static bool ThumbnailsHoldUp(JobRequest request, JobResult result)
+    {
+        if (request.Inputs.Count != 1 || request.OutputDirectory is not { } folder || result.Outputs.Count != 0
+            || result.Facts is not [{ Label: "Pages", Notice: false } fact]
+            || !int.TryParse(fact.Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var pages)
+            || pages is < 1 or > PdfRenderCapabilities.MaxPages) return false;
+        try
+        {
+            var found = new DirectoryInfo(folder).GetFileSystemInfos().OrderBy(f => f.Name, StringComparer.Ordinal).ToArray();
+            return found.Length == pages
+                && found.Select((f, i) => f is FileInfo { Length: > 0, LinkTarget: null } && f.Name == PdfRenderCapabilities.ThumbnailName(i)).All(ok => ok);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
+
     public IEnumerable<string> TempPathsOf(JobRequest request)
     {
+        if (request.CapabilityId == PdfRenderCapabilities.ThumbnailsId) yield break; // the host deletes its own folder
         if (request.Inputs.Count == 0) yield break;
         string temp;
         try
