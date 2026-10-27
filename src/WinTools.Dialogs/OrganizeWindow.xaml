@@ -54,7 +54,8 @@
           <DataTemplate>
             <StackPanel Width="150">
               <Border Width="150" Height="150" Background="{StaticResource Raised}">
-                <Image Source="{Binding Image}" Stretch="Uniform" Margin="6" RenderOptions.BitmapScalingMode="HighQuality">
+                <!-- A page is never mirrored, in either language. -->
+                <Image Source="{Binding Image}" Stretch="Uniform" Margin="6" RenderOptions.BitmapScalingMode="HighQuality" FlowDirection="LeftToRight">
                   <Image.LayoutTransform>
                     <RotateTransform Angle="{Binding Turn}" />
                   </Image.LayoutTransform>

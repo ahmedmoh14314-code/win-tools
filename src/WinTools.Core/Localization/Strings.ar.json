@@ -527,6 +527,6 @@
   "organize.save": "حفظ كملف PDF جديد",
   "organize.extract": "استخراج المحدد",
   "organize.page": "صفحة {0}",
-  "organize.pageTurned": "صفحة {0} · {1}°",
-  "organize.status": "الصفحات: {0} · المحددة: {1}"
+  "organize.pageTurned": "صفحة {0}، {1}°",
+  "organize.status": "الصفحات: {0}، المحددة: {1}"
 }
