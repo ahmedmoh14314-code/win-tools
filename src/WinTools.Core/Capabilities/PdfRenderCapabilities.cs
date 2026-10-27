@@ -26,6 +26,13 @@ public static class PdfRenderCapabilities
     /// <summary>Most pages rendered or read from one PDF, and most images in one new PDF.</summary>
     public const int MaxPages = 500, MaxImages = 200;
 
+    /// <summary>The most picture bytes one new PDF is made of (it is read again whole to check it).</summary>
+    public const long MaxImagesBytes = 1L << 30;
+
+    /// <summary>A page's file in a To PNG or To JPG folder: "page 001.png", with more digits past 999 pages.</summary>
+    public static string PageFileName(int index, int pages, string extension) =>
+        $"page {(index + 1).ToString(new string('0', Math.Max(3, pages.ToString(System.Globalization.CultureInfo.InvariantCulture).Length)), System.Globalization.CultureInfo.InvariantCulture)}{extension}";
+
     /// <summary>The largest PDF read (it is read whole: PDFium needs random access).</summary>
     public const long MaxPdfBytes = 512L << 20;
 

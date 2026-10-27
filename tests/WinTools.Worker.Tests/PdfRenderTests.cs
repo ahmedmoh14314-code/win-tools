@@ -116,10 +116,60 @@ public sealed class PdfRenderTests : IDisposable
     [InlineData("# title", "\\# title")]
     [InlineData("    code?", "code?")]
     [InlineData("12) item", "12\\) item")]
-    [InlineData("a <b> c", "a &lt;b> c")]
+    [InlineData("a <b> c", "a \\<b\\> c")]
+    [InlineData("![x](\\\\host\\s\\a.png)", "\\!\\[x\\](\\\\\\\\host\\\\s\\\\a.png)")] // no picture fetched from a share (review, #39)
+    [InlineData("[click](javascript:x)", "\\[click\\](javascript:x)")]
+    [InlineData("&lt; and &copy;", "\\&lt; and \\&copy;")]
+    [InlineData("*b* _c_ `d` ~e~ |t|", "\\*b\\* \\_c\\_ \\`d\\` \\~e\\~ \\|t\\|")]
+    [InlineData("- item", "\\- item")]
+    [InlineData("ends with \\", "ends with \\\\")]
     [InlineData("plain 1. text", "plain 1. text")]
     [InlineData("", "")]
     public void Markdown_lines_show_the_text_as_written(string line, string expected) => Assert.Equal(expected, PdfRenderJobs.MarkdownLine(line));
+
+    [Fact]
+    public void An_unpaired_surrogate_becomes_a_replacement_character_not_a_failed_export()
+    {
+        Assert.Equal("a\uFFFDb", PdfRenderJobs.Scalars("a\uD800b"));
+        Assert.Equal("a\uFFFD", PdfRenderJobs.Scalars("a\uD83D")); // a pair cut at the page's character limit
+        Assert.Equal("\uFFFDz", PdfRenderJobs.Scalars("\uDC00z"));
+        Assert.Equal("ok \uD83D\uDE00", PdfRenderJobs.Scalars("ok \uD83D\uDE00"));
+    }
+
+    [Fact]
+    public void A_jpeg_goes_into_the_pdf_without_its_metadata()
+    {
+        // An APP1 XMP segment with a place in it, right after SOI: the product never copies metadata (review, #39).
+        var jpeg = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "samples", "quadrants-64x48.jpg"));
+        var xmp = Encoding.ASCII.GetBytes("http://ns.adobe.com/xap/1.0/\0<x>GPS-SECRET-51.5N</x>");
+        var segment = new byte[4 + xmp.Length];
+        (segment[0], segment[1], segment[2], segment[3]) = (0xFF, 0xE1, (byte)((xmp.Length + 2) >> 8), (byte)(xmp.Length + 2));
+        xmp.CopyTo(segment, 4);
+        var tagged = _dir.Write("photo.jpg", [.. jpeg[..2], .. segment, .. jpeg[2..]]);
+        var r = RunBelieved(Request(PdfRenderCapabilities.ImagesToPdfId, tagged));
+        var pdf = File.ReadAllBytes(r.Outputs[0].Path);
+        Assert.Equal(-1, pdf.AsSpan().IndexOf("GPS-SECRET"u8));
+        Assert.True(pdf.AsSpan().IndexOf("/DCTDecode"u8) > 0); // still embedded as a JPEG, not re-encoded
+    }
+
+    [Fact]
+    public void The_host_believes_a_page_folder_only_with_exactly_its_pages()
+    {
+        var pdf = _dir.Write("doc.pdf", TextPdf(["One"], ["Two"], ["Three"]));
+        var request = Request(PdfRenderCapabilities.ToPngId, pdf);
+        var r = RunBelieved(request);
+        var folder = r.Outputs[0].Path;
+        // Another file beside the pages (review, #39: a compromised worker could leave anything there).
+        File.WriteAllText(Path.Combine(folder, "readme.txt"), "x");
+        Assert.False(PdfRenderJobModule.Instance.IsBelievable(request, r));
+        File.Delete(Path.Combine(folder, "readme.txt"));
+        Assert.True(PdfRenderJobModule.Instance.IsBelievable(request, r));
+        // A page that is not a picture, under its right name and size.
+        var page = Path.Combine(folder, "page 002.png");
+        var size = new FileInfo(page).Length;
+        File.WriteAllBytes(page, new byte[size]);
+        Assert.False(PdfRenderJobModule.Instance.IsBelievable(request, r));
+    }
 
     [Fact]
     public void A_PDF_without_text_says_so_and_writes_nothing()

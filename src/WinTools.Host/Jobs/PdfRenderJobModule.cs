@@ -34,20 +34,43 @@ internal sealed class PdfRenderJobModule : IJobModule
         var source = images ? PdfRenderCapabilities.PageOrder(request.Inputs)[0] : request.Inputs[0];
         try
         {
+            var format = PdfRenderCapabilities.PageFormatOf(request.CapabilityId);
             if (Directory.Exists(output.Path))
             {
-                if (PdfRenderCapabilities.PageFormatOf(request.CapabilityId) is null) return false;
+                // A folder of pages: exactly "page 001" to the count the worker reported, each a picture of the format, no
+                // link and nothing else, and the content hash the worker computed (review, #39: the shape alone let a
+                // compromised worker leave any files there).
+                if (format is not { } f) return false;
                 if (!PdfRenderCapabilities.Candidates(request.CapabilityId, source, request.OutputDirectory).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
                 var folder = new DirectoryInfo(output.Path);
-                return folder.LinkTarget is null
-                    && string.Equals(FolderManifest.ShapeOf(output.Path, PdfRenderCapabilities.MaxPages + 1), claimed, StringComparison.OrdinalIgnoreCase);
+                if (folder.LinkTarget is not null || result.Facts.FirstOrDefault(x => x.Label == "Pages") is not { } count
+                    || !int.TryParse(count.Value, System.Globalization.NumberStyles.AllowThousands, System.Globalization.CultureInfo.InvariantCulture, out var pages)
+                    || pages is < 2 or > PdfRenderCapabilities.MaxPages) return false;
+                var ext = f == Core.Files.ImageFormat.Png ? ".png" : ".jpg";
+                var entries = folder.GetFileSystemInfos().OrderBy(e => e.Name, StringComparer.Ordinal).ToArray();
+                if (entries.Length != pages || entries.Where((e, i) => e is not FileInfo { LinkTarget: null } || e.Name != PdfRenderCapabilities.PageFileName(i, pages, ext)).Any()) return false;
+                if (!entries.All(e => Looks(e.FullName, request.CapabilityId))) return false;
+                return string.Equals(FolderManifest.HashOf(output.Path), claimed, StringComparison.OrdinalIgnoreCase);
             }
-            var onePage = PdfRenderCapabilities.PageFormatOf(request.CapabilityId) is not null;
-            if (!PdfRenderCapabilities.Candidates(request.CapabilityId, source, request.OutputDirectory, onePage).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
+            if (!PdfRenderCapabilities.Candidates(request.CapabilityId, source, request.OutputDirectory, onePage: format is not null).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
+            if (!Looks(output.Path, request.CapabilityId)) return false;
             using var stream = new FileStream(output.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
             return stream.Length > 0 && string.Equals(Convert.ToHexString(SHA256.HashData(stream)), claimed, StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return false; }
+    }
+
+    /// <summary>Whether a written file starts as its command's output must: a PNG or JPEG signature, "%PDF-", or text that is UTF-8.</summary>
+    private static bool Looks(string path, string capabilityId)
+    {
+        var bytes = File.ReadAllBytes(path);
+        return capabilityId switch
+        {
+            PdfRenderCapabilities.ToPngId => bytes.AsSpan().StartsWith((ReadOnlySpan<byte>)[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+            PdfRenderCapabilities.ToJpgId => bytes.AsSpan().StartsWith((ReadOnlySpan<byte>)[0xFF, 0xD8, 0xFF]),
+            PdfRenderCapabilities.ImagesToPdfId => bytes.AsSpan().StartsWith("%PDF-"u8),
+            _ => System.Text.Unicode.Utf8.IsValid(bytes),
+        };
     }
 
     public IEnumerable<string> TempPathsOf(JobRequest request)

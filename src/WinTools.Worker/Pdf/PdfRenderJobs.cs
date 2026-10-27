@@ -113,16 +113,15 @@ internal static class PdfRenderJobs
         var committed = false;
         try
         {
-            var digits = Math.Max(3, pages.ToString(CultureInfo.InvariantCulture).Length);
             for (var i = 0; i < pages; i++)
             {
                 var bytes = RenderPage(doc, i, format);
-                var file = Path.Combine(staging, $"page {(i + 1).ToString(new string('0', digits), CultureInfo.InvariantCulture)}{ext}");
+                var file = Path.Combine(staging, PdfRenderCapabilities.PageFileName(i, pages, ext));
                 using (var fs = new FileStream(file, FileMode.CreateNew, FileAccess.Write, FileShare.None)) fs.Write(bytes);
             }
             if (MarkOfTheWeb.ZoneToCarry(path) is { } z) foreach (var f in Directory.GetFiles(staging)) MarkOfTheWeb.Apply(f, z);
             File.SetAttributes(staging, FileAttributes.Directory);
-            var shape = FolderManifest.ShapeOf(staging) ?? throw new RenderFailure(ErrorCode.OutputValidationFailed, "The pages did not check out; nothing was kept.");
+            var shape = FolderManifest.HashOf(staging) ?? throw new RenderFailure(ErrorCode.OutputValidationFailed, "The pages did not check out; nothing was kept.");
             foreach (var candidate in PdfRenderCapabilities.Candidates(request.CapabilityId, path, request.OutputDirectory))
             {
                 if (File.Exists(candidate) || Directory.Exists(candidate)) continue;
@@ -166,7 +165,8 @@ internal static class PdfRenderJobs
         var any = false;
         for (var i = 0; i < pages; i++)
         {
-            var text = doc.Text(i, MaxCharsPerPage) ?? "";
+            // A page PDFium cannot read fails the export, as it fails To PNG: it is never written as an empty page (review, #39).
+            var text = Scalars(doc.Text(i, MaxCharsPerPage) ?? throw new RenderFailure(ErrorCode.DecodeFailed, $"Page {i + 1} could not be read."));
             text = text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Replace("\0", "", StringComparison.Ordinal);
             any |= !string.IsNullOrWhiteSpace(text);
             if (markdown)
@@ -191,17 +191,50 @@ internal static class PdfRenderJobs
     }
 
     /// <summary>
-    /// A line of the PDF's text as Markdown that shows it as written: no leading spaces (four would make a code block), a
-    /// leading mark (#, &gt;, -, +, *, 1.) escaped, and "&lt;" written as an entity, so no text becomes markup or HTML.
+    /// A line of the PDF's text as Markdown that shows it as written, so no text becomes markup, a link, a picture or HTML
+    /// (review, #39: a PDF's invisible text could carry an image link to a network share, which a previewer would fetch):
+    /// <list type="bullet">
+    /// <item>no leading spaces (four would make a code block);</item>
+    /// <item>every character that makes inline markup escaped with a backslash (the backslash itself, ` * _ [ ] &lt; &gt; ! | ~
+    /// and &amp;, so an entity stays as written);</item>
+    /// <item>a leading block mark escaped: #, +, -, =, and a number followed by "." or ")".</item>
+    /// </list>
     /// </summary>
     internal static string MarkdownLine(string line)
     {
-        var t = line.Trim().Replace("<", "&lt;", StringComparison.Ordinal);
+        var t = line.Trim();
         if (t.Length == 0) return "";
-        if (t[0] is '#' or '>' or '-' or '+' or '*' or '=' or '|' or '`' or '~' or '_') return "\\" + t;
+        var sb = new StringBuilder(t.Length + 8);
+        foreach (var c in t)
+        {
+            if (c is '\\' or '`' or '*' or '_' or '[' or ']' or '<' or '>' or '!' or '|' or '~' or '&') sb.Append('\\');
+            sb.Append(c);
+        }
+        if (t[0] is '#' or '+' or '-' or '=') sb.Insert(0, '\\');
         var digits = 0;
         while (digits < t.Length && char.IsAsciiDigit(t[digits])) digits++;
-        return digits > 0 && digits < t.Length && t[digits] is '.' or ')' ? t.Insert(digits, "\\") : t;
+        if (digits > 0 && digits < t.Length && t[digits] is '.' or ')') sb.Insert(digits, '\\');
+        return sb.ToString();
+    }
+
+    /// <summary>Text with every unpaired surrogate (a malformed ToUnicode map, a page cut mid-pair) as U+FFFD, so it encodes as UTF-8 exactly.</summary>
+    internal static string Scalars(string text)
+    {
+        StringBuilder? sb = null;
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            var paired = char.IsHighSurrogate(c) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]);
+            if (paired || !char.IsSurrogate(c))
+            {
+                sb?.Append(c);
+                if (paired) { sb?.Append(text[i + 1]); i++; }
+                continue;
+            }
+            sb ??= new StringBuilder(text.Length).Append(text, 0, i);
+            sb.Append('\uFFFD');
+        }
+        return sb?.ToString() ?? text;
     }
 
     // ---- Images to PDF ----
@@ -219,6 +252,9 @@ internal static class PdfRenderJobs
             {
                 var writer = new ImagePdfWriter(fs);
                 writer.Begin();
+                // The new PDF is read again whole to check it: its pictures together stay within what the worker can hold (review, #39).
+                if (ordered.Sum(p => new FileInfo(p).Length) > PdfRenderCapabilities.MaxImagesBytes)
+                    throw new RenderFailure(ErrorCode.InputTooLarge, $"The pictures add up to more than {PdfRenderCapabilities.MaxImagesBytes >> 20} MB; make a PDF of fewer at a time.");
                 foreach (var path in ordered)
                 {
                     var bytes = Read(path, ConversionJob.MaxInputBytes);
@@ -226,7 +262,10 @@ internal static class PdfRenderJobs
                     if (format == ImageFormat.Unknown) throw new RenderFailure(ErrorCode.ContentMismatch, $"{Path.GetFileName(path)} is not a picture WinTools reads, whatever its name says.");
                     var (image, orientation) = ImagePipeline.Decode(bytes, format);
                     var components = format == ImageFormat.Jpeg && orientation is < 2 or > 8 ? ImagePdfWriter.EmbeddableJpegComponents(bytes) : 0;
-                    writer.AddPage(Orientation.Apply(image, orientation), components > 0 ? bytes : null, components);
+                    // A JPEG goes in as it is, but without its metadata (EXIF, GPS, XMP, thumbnails, second pictures): the
+                    // product never copies metadata (review, #39). One whose structure cannot be followed is re-encoded.
+                    var stripped = components > 0 ? Metadata.Strip(bytes, ImageFormat.Jpeg, orientation: 1) : null;
+                    writer.AddPage(Orientation.Apply(image, orientation), stripped, stripped is null ? 0 : components);
                 }
                 writer.End();
                 fs.Flush(flushToDisk: true);
