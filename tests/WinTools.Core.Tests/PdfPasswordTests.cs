@@ -131,7 +131,7 @@ public sealed class PdfPasswordTests
     public void A_pdf_gets_a_protect_category_with_both_commands_each_asking_for_the_password()
     {
         var menu = RadialMenu.Build(Resolver, [@"C:\p\a.pdf"]);
-        Assert.Equal(["Tools", "Organize", "Optimize", "Rotate", "Protect", "Actions"], menu.Select(g => g.Label));
+        Assert.Equal(["Convert", "Tools", "Organize", "Optimize", "Protect", "Actions"], menu.Select(g => g.Label));
         var protect = menu.Single(g => g.Label == "Protect").Commands;
         Assert.Equal([PdfCapabilities.ProtectId, PdfCapabilities.UnprotectId], protect.Select(c => c.Id));
         Assert.Equal(["Protect…", "Unlock…"], protect.Select(c => c.Label)); // "Remove protection…" did not fit its sector

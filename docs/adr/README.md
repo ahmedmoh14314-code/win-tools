@@ -32,6 +32,7 @@ Template: `template.md`. Numbering is sequential and never reused. Old ADRs are 
 | [ADR-0026](ADR-0026-secrets-pdf-passwords.md) | A password goes from the dialogs process to one job and reaches qpdf only on its stdin (`@-`); Remove protection never lifts an author's restrictions | Proposed (V2 PR 2.2) | Worker, host and Explorer tests; evaluator pending |
 | [ADR-0027](ADR-0027-encrypted-zip-read.md) | Encrypted ZIPs (ZipCrypto, WinZip AES) read with .NET's own cryptography, checked against `ZipArchive`; the password asked only when an archive needs one | Proposed (V2 PR 5.3) | Evaluator review; Explorer run |
 | [ADR-0028](ADR-0028-media-ffmpeg.md) | Video and audio run the bundled FFmpeg (LGPL build) in a media worker, file protocol only, inputs probed against an allow-list | Proposed (V2 media sprint) | Explorer run |
+| [ADR-0029](ADR-0029-pdf-render-pdfium.md) | PDF pages to images and text, and images to PDF, with the bundled PDFium (no V8, no XFA) in the image worker | Proposed (0.2.0 Beta) | Explorer run |
 | [ADR-0025](ADR-0025-documents-ooxml-read.md) | Office documents read in house as archives of XML: no DTD, no resolver, no macro run; Remove properties copies every other part byte for byte | Proposed (V2 PR 6.1, 6.2) | Evaluator review; Explorer run |
 
 Decision order recommended: 0002 → 0003 → 0001/0004 (same spike) → 0005 → 0011 → 0007 → 0006 → 0008. 0009 and 0010 can be confirmed any time.

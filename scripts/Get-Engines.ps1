@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Fetches the engines the build bundles, pinned and hash-checked: qpdf (ADR-0022) and FFmpeg (ADR-0028).
+  Fetches the engines the build bundles, pinned and hash-checked: qpdf (ADR-0022), FFmpeg (ADR-0028) and PDFium (ADR-0029).
 .DESCRIPTION
   Downloads each engine's official Windows x64 release, checks the archive's SHA-256 against the value pinned here,
   extracts only the files WinTools runs, checks each of their hashes, and puts them in artifacts\engines\<name>.
@@ -10,6 +10,8 @@
   - FFmpeg 8.1.3 (LGPL shared build): BtbN/FFmpeg-Builds, release autobuild-2026-10-24-13-02; the archive hash is the
     one in that release's checksums.sha256. Configured with --enable-version3 and without --enable-gpl or nonfree:
     LGPL 3.0, run as a separate program.
+  - PDFium chromium/8111 (bblanchon/pdfium-binaries): the library alone, built without V8 and XFA (no JavaScript, no
+    forms engine). BSD-3-Clause with permissive third-party licences (third-party\pdfium).
 #>
 param(
     [string] $QpdfArchive = ''
@@ -57,15 +59,30 @@ function Get-Engine {
     $staging = Join-Path $downloads "$Name-staging"
     if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $staging | Out-Null
-    $zip = [System.IO.Compression.ZipFile]::OpenRead($Archive)
-    try {
-        foreach ($file in $Files.Keys) {
-            # Exactly one entry by its known path inside the archive; nothing else is extracted.
-            $entry = $zip.GetEntry("$Prefix/$file")
-            if (-not $entry) { throw "$Prefix/$file is not in the archive." }
-            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, (Join-Path $staging (Split-Path -Leaf $file)), $false)
+    if ($ArchiveName.EndsWith('.tgz')) {
+        # A gzipped tar: Windows' own tar extracts exactly the named entries, then they are flattened like a ZIP's.
+        # (Not $name: PowerShell names ignore case, and it would overwrite $Name.)
+        $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
+        $names = @($Files.Keys | ForEach-Object { if ($Prefix) { "$Prefix/$_" } else { $_ } })
+        & $tar -xzf $Archive -C $staging @names
+        if ($LASTEXITCODE -ne 0) { throw "tar could not extract $($names -join ', ') from $Archive." }
+        foreach ($entryName in $names) {
+            $extracted = Join-Path $staging ($entryName -replace '/', '\')
+            if (-not (Test-Path -LiteralPath $extracted)) { throw "$entryName is not in the archive." }
+            if ((Split-Path -Parent $extracted) -ne $staging) { Move-Item -LiteralPath $extracted -Destination (Join-Path $staging (Split-Path -Leaf $entryName)) }
         }
-    } finally { $zip.Dispose() }
+        Get-ChildItem -LiteralPath $staging -Directory | Remove-Item -Recurse -Force
+    } else {
+        $zip = [System.IO.Compression.ZipFile]::OpenRead($Archive)
+        try {
+            foreach ($file in $Files.Keys) {
+                # Exactly one entry by its known path inside the archive; nothing else is extracted.
+                $entry = $zip.GetEntry("$Prefix/$file")
+                if (-not $entry) { throw "$Prefix/$file is not in the archive." }
+                [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, (Join-Path $staging (Split-Path -Leaf $file)), $false)
+            }
+        } finally { $zip.Dispose() }
+    }
     foreach ($file in $Files.Keys) {
         $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $staging (Split-Path -Leaf $file))).Hash.ToLowerInvariant()
         if ($hash -ne $Files[$file]) { throw "$file has SHA-256 $hash, not the pinned $($Files[$file]). Not used." }
@@ -105,4 +122,12 @@ Get-Engine -Name 'ffmpeg-8.1.3' `
         'bin/swresample-6.dll' = 'feaef02141f2fa5ef04904cf2c89f6accd9b2236eeb7805ca57a5df2480850a9'
         'bin/swscale-9.dll'    = 'a2b0785591a69e10d23c025a2e18afe6ee42c778b90ee2bee07d2ac353b7bc8c'
         'LICENSE.txt'          = 'da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768'
+    })
+
+# PDFium: the library only (rendering and text for PDF to PNG, JPG, TXT and Markdown, and the check of Images to PDF).
+Get-Engine -Name 'pdfium-8111' `
+    -Url 'https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/8111/pdfium-win-x64.tgz' `
+    -ArchiveName 'pdfium-win-x64-8111.tgz' -ArchiveSha256 '3452d11031050ec65e57f180215b57b9e6d465e3fbedafa8a77ad90885c7d23e' `
+    -Prefix '' -Files ([ordered]@{
+        'bin/pdfium.dll' = 'a318c39c137482dc4687c2973b7ec1c27fc1c20253cf2dc31928f922eab89e8f'
     })
