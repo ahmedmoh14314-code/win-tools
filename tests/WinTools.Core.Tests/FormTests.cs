@@ -54,6 +54,21 @@ public sealed class FormTests
         Assert.Equal(("form.range", 0), Problem(SubtitleCapabilities.ShiftCustomId, "4000"));
     }
 
+    [Theory]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    [InlineData("1e3")]
+    [InlineData("\u0663")] // an Arabic-Indic three: refused, not read as a number the user did not see
+    [InlineData("1 5")]
+    public void Only_plain_numbers_are_read_never_NaN_or_infinity(string text)
+    {
+        // NaN passes every range test, so it once reached the worker as a shift (review, #38).
+        Assert.Equal(("form.badNumber", 0), Problem(MediaCapabilities.SplitVideoId, text));
+        Assert.Equal("form.badNumber", Problem(SubtitleCapabilities.ShiftCustomId, text).Item1);
+        Assert.Equal(("form.badTime", 0), Problem(MediaCapabilities.TrimVideoId, text, ""));
+    }
+
     [Fact]
     public void An_answer_is_read_back_only_in_its_one_spelling_with_exactly_its_keys()
     {

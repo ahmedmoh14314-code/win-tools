@@ -80,6 +80,76 @@ public sealed class DialogsProcessTests
         }
     }
 
+    private static string RequestFor(string what) => what switch
+    {
+        "secret" => WorkerProtocol.Serialize(new SecretRequest("Test", Confirm: false, 200, 200)),
+        "rename" => WorkerProtocol.Serialize(new RenameRequest("Test", ["a.txt", "b.txt"], 200, 200)),
+        _ => WorkerProtocol.Serialize(new FormRequest("Test", what, 200, 200)),
+    };
+
+    /// <summary>
+    /// The Cancel button, pressed through UI Automation as a screen reader would, closes the window and answers
+    /// "cancelled". These windows are shown with Show, not ShowDialog, and WPF's IsCancel only sets DialogResult on a
+    /// dialog: before the fix the button did nothing and the job waited until its timeout (review, #38).
+    /// </summary>
+    [Theory]
+    [InlineData("media.trim")]
+    [InlineData("secret")]
+    [InlineData("rename")]
+    public async Task Cancel_closes_a_dialog_and_answers_cancelled(string what)
+    {
+        using var p = Start("en", RequestFor(what));
+        try
+        {
+            var window = WaitForWindow(p.Id, TimeSpan.FromSeconds(10));
+            Assert.NotEqual(0, window);
+            var cancel = System.Windows.Automation.AutomationElement.FromHandle(window).FindFirst(System.Windows.Automation.TreeScope.Descendants,
+                new System.Windows.Automation.AndCondition(
+                    new System.Windows.Automation.PropertyCondition(System.Windows.Automation.AutomationElement.ControlTypeProperty, System.Windows.Automation.ControlType.Button),
+                    new System.Windows.Automation.PropertyCondition(System.Windows.Automation.AutomationElement.NameProperty, "Cancel")));
+            Assert.NotNull(cancel);
+            ((System.Windows.Automation.InvokePattern)cancel.GetCurrentPattern(System.Windows.Automation.InvokePattern.Pattern)).Invoke();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            string? answer;
+            try { answer = await p.StandardOutput.ReadLineAsync(timeout.Token); }
+            catch (OperationCanceledException) { answer = "the window stayed open after Cancel"; }
+            Assert.True(p.WaitForExit(10_000), answer);
+            Assert.Matches(@"^\{""\w+"":null\}$", answer); // {"Answer":null}, {"Secret":null}, {"Rule":null}: cancelled
+        }
+        finally
+        {
+            if (!p.HasExited) p.Kill();
+        }
+    }
+
+    private static nint WaitForWindow(int pid, TimeSpan timeout)
+    {
+        var until = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < until)
+        {
+            nint found = 0;
+            EnumWindows((h, _) =>
+            {
+                if (IsWindowVisible(h) && GetWindowThreadProcessId(h, out var owner) != 0 && owner == pid) { found = h; return false; }
+                return true;
+            }, 0);
+            if (found != 0) return found;
+            Thread.Sleep(100);
+        }
+        return 0;
+    }
+
+    private delegate bool EnumWindowsProc(nint hwnd, nint lParam);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc callback, nint lParam);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(nint hwnd, out int processId);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(nint hwnd);
+
     [Fact]
     public void A_form_for_a_command_without_one_is_answered_cancelled()
     {

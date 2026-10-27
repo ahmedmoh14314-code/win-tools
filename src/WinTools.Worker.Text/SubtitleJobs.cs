@@ -46,7 +46,14 @@ internal static class SubtitleJobs
             var doc = SubtitleParser.Parse(decoded.Text, format);
             if (doc.Problems.Count > 0) return JobResult.Fail(id, ErrorCode.DecodeFailed, $"The file has errors, so it was not changed: {doc.Problems[0]}");
             if (doc.Cues.Count == 0) return JobResult.Fail(id, ErrorCode.NothingToDo, "The file has no cues.");
-            var output = SubtitleCapabilities.ShiftOf(request.CapabilityId, Answer(request)) is { } by ? SubtitleTiming.Shift(doc, by) : doc;
+            var shift = SubtitleCapabilities.ShiftOf(request.CapabilityId, Answer(request));
+            // A shift that would push a cue wholly before 0:00 would erase its timing: refused, never clamped away (review,
+            // #38). A cue that only starts before 0:00 is cut to start there, and the toast says how many were.
+            if (shift is { } early && doc.Cues.Any(c => c.End + early <= TimeSpan.Zero))
+                return JobResult.Fail(id, ErrorCode.LimitExceeded,
+                    $"{Math.Abs(early.TotalSeconds).ToString("0.###", CultureInfo.InvariantCulture)} s earlier would move subtitles before the start; the first one starts at {Time(doc.Cues.Min(c => c.Start))}.");
+            var clamped = shift is { } by ? SubtitleTiming.ClampedBy(doc, by) : 0;
+            var output = shift is { } move ? SubtitleTiming.Shift(doc, move) : doc;
             if (output.Cues.Any(c => c.End > SubtitleWriter.MaxTime))
                 return JobResult.Fail(id, ErrorCode.LimitExceeded, "A cue would end after 999:59:59, which subtitle files cannot hold.");
             var target = SubtitleCapabilities.OutputFormat(request.CapabilityId, path);
@@ -57,7 +64,7 @@ internal static class SubtitleJobs
                 return JobResult.Fail(id, ErrorCode.NothingToDo, "The file already is clean UTF-8.");
             // A legacy code page is a judgement, not a fact the file states: say which one was used (third look, PR 7.1).
             var readAs = decoded.EncodingName.StartsWith("Windows-", StringComparison.Ordinal) ? $"Read as {decoded.EncodingName}" : null;
-            return Commit(request, path, bytes, target, output, SubtitleWriter.Dropped(output, target), readAs);
+            return Commit(request, path, bytes, target, output, SubtitleWriter.Dropped(output, target), readAs, clamped);
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return JobResult.Fail(id, ErrorCode.SourceNotFound, "The file is no longer there."); }
         catch (UnauthorizedAccessException) { return JobResult.Fail(id, ErrorCode.OutputDirectoryNotWritable, "The destination folder is not writable."); }
@@ -111,7 +118,7 @@ internal static class SubtitleJobs
 
     private static string Time(TimeSpan t) => string.Create(CultureInfo.InvariantCulture, $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}");
 
-    private static JobResult Commit(JobRequest request, string source, byte[] bytes, SubtitleFormat format, SubtitleDocument written, IReadOnlyList<string> dropped, string? readAs)
+    private static JobResult Commit(JobRequest request, string source, byte[] bytes, SubtitleFormat format, SubtitleDocument written, IReadOnlyList<string> dropped, string? readAs, int clamped = 0)
     {
         var dir = new DirectoryInfo(request.OutputDirectory ?? Path.GetDirectoryName(source)!);
         if (!dir.Exists) return JobResult.Fail(request.Id, request.OutputDirectory is null ? ErrorCode.SourceNotFound : ErrorCode.OutputDirectoryNotWritable, "The destination folder does not exist.");
@@ -149,6 +156,7 @@ internal static class SubtitleJobs
                     var facts = new List<JobFact>();
                     if (readAs is not null) facts.Add(new JobFact("Read as", readAs, Notice: true));
                     if (dropped.Count > 0) facts.Add(new JobFact("Dropped", "Not kept: " + string.Join(", ", dropped), Notice: true));
+                    if (clamped > 0) facts.Add(new JobFact("Clamped", clamped == 1 ? "1 subtitle now starts at 0:00" : $"{clamped:N0} subtitles now start at 0:00", Notice: true));
                     return new JobResult(request.Id, true, ErrorCode.None, null, [new JobOutput(candidate, hash)], facts);
                 }
                 catch (IOException ex) when (ex.HResult is ErrorFileExists or ErrorAlreadyExists) { }

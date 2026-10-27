@@ -79,7 +79,9 @@ public static class Forms
                 FormFieldKind.Count => int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var n) ? n : null,
                 _ => ReadSeconds(text),
             };
-            if (value is not { } v) return new(null, f.Kind == FormFieldKind.Time ? "form.badTime" : "form.badNumber", i);
+            // Only digits, ':' and '.' (and a leading sign for seconds) reach the number parser, and only a finite value
+            // counts: .NET reads "NaN" and "Infinity" whatever the styles say, and NaN passes every range test (review, #38).
+            if (!Plain(text, f.Kind) || value is not { } v || !double.IsFinite(v)) return new(null, f.Kind == FormFieldKind.Time ? "form.badTime" : "form.badNumber", i);
             if (v < f.Min || v > f.Max) return new(null, "form.range", i);
             values[f.Key] = v;
         }
@@ -94,6 +96,23 @@ public static class Forms
             if (values.TryGetValue(f.Key, out var v)) answer.Append(v.ToString("0.###", CultureInfo.InvariantCulture));
         }
         return new(answer.ToString(), Values: new FormValues(values));
+    }
+
+    /// <summary>Whether a text holds only what its kind is written with: digits, ':' and '.' for a time, digits for a count, a sign, digits and '.' for seconds.</summary>
+    private static bool Plain(string text, FormFieldKind kind)
+    {
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            var ok = char.IsAsciiDigit(c) || kind switch
+            {
+                FormFieldKind.Time => c is ':' or '.',
+                FormFieldKind.Seconds => c == '.' || i == 0 && c is '-' or '+',
+                _ => false,
+            };
+            if (!ok) return false;
+        }
+        return true;
     }
 
     /// <summary>An answer read back: exactly the command's keys, in order, each value valid; anything else is null.</summary>

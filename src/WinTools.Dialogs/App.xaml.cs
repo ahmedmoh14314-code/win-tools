@@ -75,6 +75,20 @@ public partial class App : Application
     private static void Present(Window window)
     {
         window.FlowDirection = UiText.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+        // Esc and the Cancel button close the window, which answers "cancelled": WPF's IsCancel does that only for a window
+        // shown with ShowDialog, and these are shown with Show (review, #38).
+        var closed = false; // a window may close itself on the same key (the pick list does): close it only once
+        window.Closed += (_, _) => closed = true;
+        window.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key != System.Windows.Input.Key.Escape || closed) return;
+            e.Handled = true;
+            window.Close();
+        };
+        window.AddHandler(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, new RoutedEventHandler((_, e) =>
+        {
+            if (e.OriginalSource is System.Windows.Controls.Button { IsCancel: true } && !closed) window.Close();
+        }));
         window.Show();
     }
 
