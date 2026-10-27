@@ -6,9 +6,9 @@ using WinTools.Core.Localization;
 namespace WinTools.Dialogs;
 
 /// <summary>
-/// Reads one request line from stdin, shows the dialog it asks for (a pick list, or a secret since V2 PR 2.2), writes one
-/// answer line to stdout and exits. A malformed request shows nothing and answers "cancelled": the host decides what
-/// that means.
+/// Reads one request line from stdin, shows the dialog it asks for (a pick list, a secret since V2 PR 2.2, a rename, a
+/// destination folder since ADR-0032), writes one answer line to stdout and exits. A malformed request shows nothing
+/// and answers "cancelled": the host decides what that means.
 /// </summary>
 public partial class App : Application
 {
@@ -29,6 +29,11 @@ public partial class App : Application
             var window = new FormWindow(form, fields);
             window.Closed += (_, _) => Answer(new FormResult(window.Answer));
             Present(window);
+            return;
+        }
+        if (WorkerProtocol.Deserialize<DialogEnvelope>(line)?.Kind == DialogKinds.Folder)
+        {
+            Answer(new FolderResult(PickFolder(WorkerProtocol.Deserialize<FolderRequest>(line))));
             return;
         }
         if (WorkerProtocol.Deserialize<DialogEnvelope>(line)?.Kind == DialogKinds.Rename)
@@ -90,6 +95,30 @@ public partial class App : Application
             if (e.OriginalSource is System.Windows.Controls.Button { IsCancel: true } && !closed) window.Close();
         }));
         window.Show();
+    }
+
+    /// <summary>
+    /// Remembers the last destination for WinTools alone (the folder window keeps its state per client id), so the window
+    /// opens where the user last copied or moved to, without the host sending a path.
+    /// </summary>
+    private static readonly Guid FolderClient = new("4f1f2a3c-7f0e-4c1a-9a55-2f3b9f1d6e21");
+
+    /// <summary>
+    /// Copy to and Move to (ADR-0032): Windows' own folder window (WPF's <c>OpenFolderDialog</c>, the common item dialog)
+    /// with the host's title; its buttons are in Windows' language. OK answers the folder; Esc, Cancel or closing it,
+    /// null. A malformed request shows nothing and answers null.
+    /// </summary>
+    private static string? PickFolder(FolderRequest? request)
+    {
+        if (request is not { Title.Length: > 0 }) return null;
+        var picker = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = request.Title,
+            Multiselect = false,
+            ClientGuid = FolderClient,
+            AddToRecent = false, // where files were copied is nobody's business but the user's
+        };
+        return picker.ShowDialog() == true && picker.FolderName is { Length: > 0 } folder ? folder : null;
     }
 
     private static string? ReadRequestLine()

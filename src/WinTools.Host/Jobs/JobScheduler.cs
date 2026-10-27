@@ -137,8 +137,9 @@ internal sealed class JobScheduler
         _live[job.Id] = job;
         _log.Event("job.queued", new { job = job.Id, op = capability.Id, module = capability.Module, files = paths.Count });
         // A command that fills the clipboard runs at once, beside the queue: behind a long hash it would overwrite whatever
-        // the user copied meanwhile, minutes later (evaluator, PR #18).
-        if (capability.Produces == CapabilityOutput.Clipboard) { _ = Task.Run(() => RunOneAsync(_modules[capability.Module], job)); return job; }
+        // the user copied meanwhile, minutes later (evaluator, PR #18). One that opens a window (Show in folder) too: the
+        // window must come while the user is looking for it (ADR-0032).
+        if (capability.Produces is CapabilityOutput.Clipboard or CapabilityOutput.Window) { _ = Task.Run(() => RunOneAsync(_modules[capability.Module], job)); return job; }
         if (!queue.Writer.TryWrite(job)) { _live.TryRemove(job.Id, out _); return null; }
         return job;
     }

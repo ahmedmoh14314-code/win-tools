@@ -359,6 +359,11 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             _ = AskFormAndRunAsync(capability, paths, x, y);
             return;
         }
+        if (capability.Dialog == DialogKinds.Folder)
+        {
+            _ = AskFolderAndRunAsync(capability, paths, x, y);
+            return;
+        }
         if (capability.Prompt is { WhenRequired: false } first)
         {
             Ask(capability, first, paths, x, y);
@@ -500,6 +505,41 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         {
             _log.Event("form.error", new { type = ex.GetType().Name });
             _feedback.DialogUnavailable(UiText.T("toast.formWindow"));
+        }
+    }
+
+    /// <summary>
+    /// Copy to and Move to (ADR-0032): Windows' folder window (the dialogs process; it gets no path) answers with the
+    /// destination, which the host checks before queueing: a usable folder, and no dropped folder going into itself. A
+    /// cancel runs nothing and says nothing. The destination is never logged.
+    /// </summary>
+    private async Task AskFolderAndRunAsync(CapabilityDescriptor capability, IReadOnlyList<string> paths, int x, int y)
+    {
+        // Fire and forget from Drop: nothing here may throw unobserved.
+        try
+        {
+            var title = UiText.T(capability.Id == FilesCapabilities.MoveToId ? "dialog.moveTo" : "dialog.copyTo");
+            var outcome = await DialogsClient.Default.AskFolderAsync(new FolderRequest(title, x, y)).ConfigureAwait(false);
+            _log.Event("transfer.ask", new { op = capability.Id, end = outcome.End.ToString(), files = paths.Count });
+            if (outcome.End == PickEnd.Unavailable) { _feedback.DialogUnavailable(UiText.T("toast.folderWindow")); return; }
+            if (outcome.End != PickEnd.Picked) return;
+            if (TransferPlan.Destination(outcome.Folder) is not { } destination || !Directory.Exists(destination))
+            {
+                _feedback.Refused(UiText.T("toast.badDestination"), UiText.T("toast.badDestination.text"));
+                return;
+            }
+            if (paths.Any(p => TransferPlan.IntoItself(p, destination)))
+            {
+                _feedback.Refused(UiText.T("toast.intoItself"), UiText.T("toast.intoItself.text"));
+                return;
+            }
+            if (_jobs.Enqueue(capability, paths, new Dictionary<string, string>(StringComparer.Ordinal) { [DialogParameters.Name] = destination }) is null)
+                _log.Event("job.refused", new { op = capability.Id, module = capability.Module });
+        }
+        catch (Exception ex)
+        {
+            _log.Event("transfer.error", new { type = ex.GetType().Name });
+            _feedback.DialogUnavailable(UiText.T("toast.folderWindow"));
         }
     }
 

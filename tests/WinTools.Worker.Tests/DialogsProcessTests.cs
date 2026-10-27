@@ -159,6 +159,26 @@ public sealed class DialogsProcessTests
         Assert.Null(WorkerProtocol.Deserialize<FormResult>(line)!.Answer);
     }
 
+    [Theory]
+    [InlineData("en")]
+    [InlineData("ar")]
+    public void The_folder_window_opens_and_waits_in_either_language(string language)
+    {
+        // ADR-0032: Windows' folder window for Copy to and Move to; ending the process closes it, nothing is picked.
+        using var p = Start(language, WorkerProtocol.Serialize(new FolderRequest("Choose where to copy", 200, 200)));
+        AssertWaitsForTheUser(p);
+    }
+
+    [Fact]
+    public void A_folder_request_without_a_title_is_answered_cancelled_at_once()
+    {
+        using var p = Start("en", "{\"kind\":\"folder\",\"title\":\"\",\"x\":0,\"y\":0}");
+        var line = p.StandardOutput.ReadLine();
+        Assert.True(p.WaitForExit(10_000));
+        Assert.NotNull(line);
+        Assert.Null(WorkerProtocol.Deserialize<FolderResult>(line)!.Folder);
+    }
+
     [Fact]
     public void A_malformed_request_is_answered_cancelled()
     {
