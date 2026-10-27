@@ -397,6 +397,7 @@
   "fact.Attributes": "الخصائص",
   "fact.Kept": "أبقي",
   "fact.Dropped": "حُذف",
+  "fact.Clamped": "نُقل إلى البداية",
   "fact.Structure": "البنية",
   "fact.Read as": "قُرئ كـ",
   "fact.Embedded": "مضمّن",

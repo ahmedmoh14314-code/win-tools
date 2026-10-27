@@ -397,6 +397,7 @@
   "fact.Attributes": "Attributes",
   "fact.Kept": "Kept",
   "fact.Dropped": "Dropped",
+  "fact.Clamped": "Moved to the start",
   "fact.Structure": "Structure",
   "fact.Read as": "Read as",
   "fact.Embedded": "Embedded",

@@ -41,8 +41,16 @@ internal sealed class MediaJobModule : IJobModule
                     if (result.Outputs is not [{ Sha256: { Length: 64 } shape } output] || request.Inputs.Count != 1) return false;
                     if (!MediaCapabilities.Candidates(request.CapabilityId, request.Inputs[0], request.OutputDirectory).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
                     var folder = new DirectoryInfo(output.Path);
-                    return folder.Exists && folder.LinkTarget is null
-                        && string.Equals(FolderManifest.ShapeOf(output.Path, MediaJobsLimits.MaxFrames + 1), shape, StringComparison.OrdinalIgnoreCase);
+                    if (!folder.Exists || folder.LinkTarget is not null
+                        || !string.Equals(FolderManifest.ShapeOf(output.Path, MediaJobsLimits.MaxFrames + 1), shape, StringComparison.OrdinalIgnoreCase)) return false;
+                    if (request.CapabilityId == MediaCapabilities.FramesId) return true;
+                    // Split: exactly the parts the form asked for, "part 00" to the last, none empty (review, #38).
+                    var answer = request.Parameters is { } p && p.TryGetValue(DialogParameters.Name, out var a) ? a : null;
+                    if (Forms.Read(request.CapabilityId, answer)?.Get(Forms.SplitParts) is not { } parts) return false;
+                    var ext = MediaCapabilities.ExtensionOf(request.CapabilityId == MediaCapabilities.SplitVideoId ? MediaCapabilities.TrimVideoId : MediaCapabilities.TrimAudioId, request.Inputs[0]);
+                    var expected = Enumerable.Range(0, (int)parts).Select(i => $"part {i:00}{ext}").ToArray();
+                    var found = folder.GetFileSystemInfos().OrderBy(f => f.Name, StringComparer.Ordinal).ToArray();
+                    return found.Select(f => f.Name).SequenceEqual(expected, StringComparer.OrdinalIgnoreCase) && found.All(f => f is FileInfo { Length: > 0 });
                 }
                 default:
                 {

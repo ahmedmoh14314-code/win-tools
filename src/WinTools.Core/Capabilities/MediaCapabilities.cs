@@ -158,14 +158,25 @@ public static class MediaCapabilities
             _ when TargetOf(capabilityId) is { } t => t.Extension,
             // A re-encoded video is H.264 in MP4, which every player opens; WebM stays WebM (VP9).
             CompressVideoId or CompressVideo720Id or Speed2xId or SpeedHalfId => source == FileKinds.WebM ? ".webm" : ".mp4",
-            // Raw AAC (ADTS) has no muxer of its own here: its edits are AAC in M4A.
-            _ when Path.GetExtension(sourcePath).Equals(".aac", StringComparison.OrdinalIgnoreCase) => ".m4a",
             // A smaller copy of a lossless file is AAC in M4A; a lossy one keeps its format at a lower rate.
             CompressAudioId when source == FileKinds.Wav || source == FileKinds.Flac || source == FileKinds.Aiff => ".m4a",
-            // Otherwise the source's own container: the audio removed, a quieter or mono copy of the same kind of file.
-            _ => Path.GetExtension(sourcePath).ToLowerInvariant(),
+            // Otherwise the source's own container, under its usual name: the audio removed, a trimmed, quieter or mono copy.
+            _ => OwnContainer(Path.GetExtension(sourcePath).ToLowerInvariant()),
         };
     }
+
+    /// <summary>
+    /// The name the worker writes a kind of file under: .m4v is MP4, .aif AIFF, .oga OGG (review, #38: there was no muxer
+    /// for those names), and raw AAC (ADTS), which has no muxer here, becomes AAC in M4A.
+    /// </summary>
+    private static string OwnContainer(string extension) => extension switch
+    {
+        ".m4v" => ".mp4",
+        ".aif" => ".aiff",
+        ".oga" => ".ogg",
+        ".aac" => ".m4a",
+        _ => extension,
+    };
 
     /// <summary>The words added to an output's name ("clip (compressed).mp4"); none for a conversion, which changes the extension.</summary>
     public static string? NameSuffix(string capabilityId) => capabilityId switch
