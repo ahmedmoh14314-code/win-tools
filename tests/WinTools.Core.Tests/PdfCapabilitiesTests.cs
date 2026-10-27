@@ -29,12 +29,13 @@ public sealed class PdfCapabilitiesTests
     public void One_pdf_gets_split_optimize_rotate_and_info_but_not_merge()
     {
         Assert.Equal(["pdf.split", "pdf.rotate-left", "pdf.rotate-right", "pdf.rotate-180", "pdf.optimize", "pdf.linearize", "pdf.repair", "pdf.info", "pdf.protect", "pdf.unprotect",
-            "files.sha256", "files.copy-path", "files.copy-name", "files.rename", "files.copy-folder", "archive.zip"], Ids(@"C:\p\a.pdf"));
+            "files.sha256", "files.copy-path", "files.move-to", "files.copy-to", "files.copy-name", "files.rename", "files.copy-folder", "files.show-in-folder", "files.terminal",
+            "archive.zip"], Ids(@"C:\p\a.pdf"));
         var menu = RadialMenu.Build(Resolver, [@"C:\p\a.pdf"]);
         Assert.Equal(["Tools", "Organize", "Optimize", "Rotate", "Protect", "Actions"], menu.Select(g => g.Label)); // Protect since V2 PR 2.2; Tools first and Actions since the wheel PR
         Assert.Equal(["Smaller (lossless)", "Fast web view", "Repair"], menu[2].Commands.Select(c => c.Label));
         Assert.Equal(["PDF info", "SHA-256", "Folder path"], menu[0].Commands.Select(c => c.Label));
-        Assert.Equal(["Copy path", "Copy name", "Rename files", "Add to ZIP"], menu[^1].Commands.Select(c => c.Label));
+        Assert.Equal(["Copy path", "Move to…", "Copy to…", "More…"], menu[^1].Commands.Select(c => c.Label)); // ADR-0032
     }
 
     [Fact]
