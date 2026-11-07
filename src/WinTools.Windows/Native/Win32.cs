@@ -71,6 +71,7 @@ internal static partial class User32
     [LibraryImport(Lib)] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool DestroyWindow(nint hwnd);
     [LibraryImport(Lib)] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool ShowWindow(nint hwnd, int cmd);
     [LibraryImport(Lib)] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool IsWindowVisible(nint hwnd);
+    [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf16)] public static partial nint FindWindowW(string? className, string? windowName);
     [LibraryImport(Lib, SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool SetWindowPos(nint hwnd, nint after, int x, int y, int cx, int cy, uint flags);
     [LibraryImport(Lib)] public static partial int SetWindowRgn(nint hwnd, nint rgn, [MarshalAs(UnmanagedType.Bool)] bool redraw);
     [LibraryImport(Lib)] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool InvalidateRect(nint hwnd, nint rect, [MarshalAs(UnmanagedType.Bool)] bool erase);

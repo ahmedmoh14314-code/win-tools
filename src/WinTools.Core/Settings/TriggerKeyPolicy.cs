@@ -16,8 +16,11 @@ public readonly record struct KeyVerdict(bool Allowed, string? Reason);
 /// <item><b>F2, F3, F4, F6, F10 and F11</b> are refused: a stray press renames, searches, opens the address bar, moves the
 /// focus, opens the menu bar or goes full screen.</item>
 /// <item><b>F5</b> refreshes Explorer's view, and <b>F1</b> opens Help.</item>
-/// <item><b>Letters and digits</b> are refused: the ring opens on any left-button drag, not only on a file drag, so a
-/// letter pressed while holding the mouse in another program (a game, a drawing program) would open it there.</item>
+/// <item><b>Letters A to Z</b> (ADR-0021 amendment, 2026-11-07) work only during a file drag, recognised by the shell's
+/// drag-image window: then the key is swallowed, so it is typed nowhere, even held past the drop. At any other time the
+/// letter is ordinary typing, and a letter pressed while holding the mouse in a game or a drawing program does nothing here.
+/// A drag from a program that shows no shell drag image cannot use a letter; Space still works there.</item>
+/// <item><b>Digits</b> are refused: nothing asked for them, and they select in games while the mouse is held.</item>
 /// </list>
 /// A refused key in the settings file is reported in the load note with its reason, and the settings window says why
 /// other keys are not offered.
@@ -25,13 +28,18 @@ public readonly record struct KeyVerdict(bool Allowed, string? Reason);
 public static class TriggerKeyPolicy
 {
     /// <summary>The allowed keys in the order the settings window lists them.</summary>
-    public static IReadOnlyList<string> Order { get; } = ["Space", "F7", "F9", "F12"];
+    public static IReadOnlyList<string> Order { get; } = ["Space", "F7", "F9", "F12", .. Letters()];
 
     /// <summary>The allowed keys and their virtual-key codes.</summary>
-    public static IReadOnlyDictionary<string, int> Allowed { get; } = new Dictionary<string, int>
+    public static IReadOnlyDictionary<string, int> Allowed { get; } = new Dictionary<string, int>(Letters().Select(l => KeyValuePair.Create(l, (int)l[0])))
     {
         ["Space"] = 0x20, ["F7"] = 0x76, ["F9"] = 0x78, ["F12"] = 0x7B,
     };
+
+    private static IEnumerable<string> Letters() => Enumerable.Range('A', 26).Select(c => ((char)c).ToString());
+
+    /// <summary>Whether a trigger key works only during a file drag, and is then swallowed: the letters (their virtual keys are their capitals).</summary>
+    public static bool NeedsFileDrag(int virtualKey) => virtualKey is >= 'A' and <= 'Z';
 
     private const string Stray = "a press that reaches Explorer, such as the key held past the drop, would";
 
@@ -48,8 +56,8 @@ public static class TriggerKeyPolicy
         "F10" => new(false, $"F10 opens the menu bar, and Shift+F10 the context menu; {Stray} open them."),
         "F11" => new(false, $"F11 switches Explorer to full screen; {Stray} switch it."),
         "Ctrl" or "Shift" or "Alt" or "Win" => new(false, "Modifier keys change what Explorer does with the drop (copy, move, link)."),
-        { Length: 1 } k when char.IsAsciiLetterOrDigit(k[0]) =>
-            new(false, "Letters and digits are typed while holding the mouse in other programs (games, drawing); they would open the menu there."),
+        { Length: 1 } k when char.IsAsciiLetterLower(k[0]) => new(false, "Letters are named in capitals: A to Z."),
+        { Length: 1 } k when char.IsAsciiDigit(k[0]) => new(false, "Digits are typed while holding the mouse in other programs (games, drawing)."),
         _ => new(false, "Not a key WinTools can use as the trigger."),
     };
 }

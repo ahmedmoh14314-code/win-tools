@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using WinTools.Core.Interaction;
+using WinTools.Core.Settings;
 using WinTools.Windows.Native;
 
 namespace WinTools.Windows.Input;
@@ -9,7 +10,8 @@ namespace WinTools.Windows.Input;
 /// WH_KEYBOARD_LL and WH_MOUSE_LL on a dedicated thread that does nothing but pump messages (ADR-0003), so a busy UI
 /// thread can never delay the callbacks past the system's hook timeout. Each callback reads the event struct in place,
 /// runs the allocation-free <see cref="TriggerDetector"/>, posts a compact message to the target window when there is
-/// something to report, and returns. Nothing is swallowed. Both hooks are installed or neither.
+/// something to report, and returns. Nothing is swallowed, except a letter trigger during a file drag, which must be typed
+/// nowhere (ADR-0021 amendment), with its repeats and its release. Both hooks are installed or neither.
 /// </summary>
 public sealed class LowLevelHooks : IDisposable
 {
@@ -24,6 +26,7 @@ public sealed class LowLevelHooks : IDisposable
     private nint _keyboardHook, _mouseHook;
     private uint _threadId;
     private int _installError;
+    private bool _swallowing; // the letter that opened the ring: its repeats and release stay out of every program
 
     /// <param name="triggerVirtualKey">The trigger key from the settings (Space by default).</param>
     public LowLevelHooks(nint targetWindow, int triggerVirtualKey = TriggerDetector.VkSpace)
@@ -81,18 +84,40 @@ public sealed class LowLevelHooks : IDisposable
                 var k = (KBDLLHOOKSTRUCT*)lParam;
                 var msg = (uint)wParam;
                 var isDown = msg is Msg.KEYDOWN or Msg.SYSKEYDOWN;
+                if (_swallowing && _detector.IsTriggerKey((int)k->vkCode))
+                {
+                    if (!isDown)
+                    {
+                        _swallowing = false;
+                        _detector.OnKey((int)k->vkCode, isDown: false);
+                    }
+                    return 1;
+                }
                 if (isDown && _detector.IsTriggerKey((int)k->vkCode))
                 {
                     var leftVk = User32.GetSystemMetrics(User32.SM_SWAPBUTTON) != 0 ? 0x02 : 0x01; // VK_RBUTTON when buttons are swapped
                     _detector.Resync(User32.GetAsyncKeyState(leftVk) < 0, User32.GetAsyncKeyState(0x11) < 0, User32.GetAsyncKeyState(0x10) < 0, User32.GetAsyncKeyState(0x12) < 0);
                 }
                 var signal = _detector.OnKey((int)k->vkCode, isDown);
+                if (signal is InputSignal.Trigger or InputSignal.TriggerRefused && TriggerKeyPolicy.NeedsFileDrag((int)k->vkCode))
+                {
+                    if (!FileDragShowing()) return User32.CallNextHookEx(_keyboardHook, code, wParam, lParam); // ordinary typing
+                    if (signal == InputSignal.Trigger)
+                    {
+                        _swallowing = true;
+                        Post(signal);
+                        return 1;
+                    }
+                }
                 if (signal != InputSignal.None) Post(signal);
             }
             catch (Exception) { /* nothing may escape a hook callback */ }
         }
         return User32.CallNextHookEx(_keyboardHook, code, wParam, lParam);
     }
+
+    /// <summary>Whether the shell's drag image is up: a file drag from Explorer or the Desktop. One window lookup, no message sent.</summary>
+    private static bool FileDragShowing() => User32.FindWindowW("SysDragImage", null) is var h && h != 0 && User32.IsWindowVisible(h);
 
     private unsafe nint MouseProc(int code, nuint wParam, nint lParam)
     {

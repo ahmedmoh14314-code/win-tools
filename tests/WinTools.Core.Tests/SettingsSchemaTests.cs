@@ -101,7 +101,8 @@ public sealed class SettingsSchemaTests
     // it is another shortcut (Alt+F4, Shift+F10); neither was measured. Offered: only keys that do nothing in Explorer if
     // they reach it (Space only selects, F7, F9 and F12 do nothing there). F2-F4, F6, F10 and F11 rename, search, focus,
     // open the menu or go full screen; F5 refreshes; F1 opens Help; F8 deletes in Total Commander and Far, which a held
-    // key reaches too (second review); letters and digits would open the ring over games and drawing programs.
+    // key reaches too (second review); digits would open the ring over games and drawing programs. Letters work only
+    // during a file drag, and are then swallowed (ADR-0021 amendment).
     [Theory]
     [InlineData("Space", true)]
     [InlineData("F7", true)]
@@ -116,8 +117,10 @@ public sealed class SettingsSchemaTests
     [InlineData("F6", false)]
     [InlineData("F10", false)]
     [InlineData("F11", false)]
-    [InlineData("A", false)]
-    [InlineData("Q", false)]
+    [InlineData("A", true)]
+    [InlineData("Y", true)]
+    [InlineData("Z", true)]
+    [InlineData("y", false)]
     [InlineData("1", false)]
     [InlineData("Ctrl", false)]
     public void Every_key_offered_or_refused_has_a_reason(string key, bool allowed)
@@ -131,7 +134,7 @@ public sealed class SettingsSchemaTests
 
     [Fact]
     public void The_window_lists_the_keys_in_a_fixed_order() =>
-        Assert.Equal(["Space", "F7", "F9", "F12"], TriggerKeyPolicy.Order);
+        Assert.Equal(["Space", "F7", "F9", "F12", .. Enumerable.Range(0, 26).Select(i => ((char)(0x41 + i)).ToString())], TriggerKeyPolicy.Order);
 
     [Fact]
     public void Only_allowed_keys_are_trigger_keys() =>

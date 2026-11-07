@@ -54,3 +54,11 @@ The low-level keyboard hook passes every key on (rules/windows-integration.md: h
 
 ## Evaluator review
 One round (2026-10-24), no blocker. Major, fixed: the policy refused F2–F7 for lack of evidence while allowing F8–F12 with none either (decision 2 now says so and the spike measures all of F2–F12). Minors fixed: the refusal reasons reached no one (load note and window hint); Reset left stale error messages and had no confirmation; the footer could overlap the buttons; a schema 1 file with an object field named like a section lost its values (decision 4); the output-folder load note missed schema 2 files; no newer-schema test used sections; `ToJson` lowered a newer schema number; the ADR index row and ADR-0013's schema note. Open: Reset and the window are not yet checked by hand (the desktop was in use).
+
+## Amendment: letters during a file drag (2026-11-07)
+The owner asked for letters such as Y or Z. Letters A to Z are now offered, under the file-drag-only condition this ADR left open.
+- A probe of a real Explorer drag on Windows 11 (build 26200) saw the shell's `SysDragImage` window visible from the start of the drag until the ring appeared.
+- The keyboard hook looks for that window when a letter trigger is pressed with the left button down. Without it the letter is passed on as ordinary typing and nothing opens, so holding the mouse in a game or drawing program is unaffected.
+- With it, the key is swallowed along with its repeats and release, so it is typed nowhere, even held past the drop. This is the one key the hook swallows.
+- Limits: a drag from a program that shows no shell drag image cannot use a letter (Space still can). If the key's release is lost, as on the secure desktop, the next press of that letter is swallowed once.
+- Digits stay refused.
