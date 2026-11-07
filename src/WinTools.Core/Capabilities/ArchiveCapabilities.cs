@@ -7,7 +7,8 @@ namespace WinTools.Core.Capabilities;
 /// The Archives module, ZIP first (V2 plan §9, PR 5.1, ADR-0023): Extract into a new folder, Test the archive's integrity
 /// (every entry decompressed and its CRC-32 checked), ZIP info, and Add to ZIP for any files and folders. Extraction never
 /// writes outside its own new folder, never overwrites, never opens what it extracted. An encrypted ZIP is extracted and
-/// tested with its password, asked only when the archive needs one (V2 PR 5.3, ADR-0027).
+/// tested with its password, asked only when the archive needs one (V2 PR 5.3, ADR-0027). 7z and RAR (RAR 4 and 5) are
+/// extracted, tested and described the same way, read with SharpCompress (ADR-0030); their passwords take the same path.
 /// </summary>
 public static class ArchiveCapabilities
 {
@@ -19,11 +20,14 @@ public static class ArchiveCapabilities
     public static IReadOnlyList<CapabilityCategory> Categories { get; } =
     [
         new("archive", "Archive", "archive", 12),
-        new("actions", "Actions", "actions", 95),
+        new("actions", "Actions", "actions", 95, MostOnRing: CapabilityCategory.LongLabels),
     ];
 
-    /// <summary>The archives Extract, Test and Info read (V2 PR 5.2 adds TAR and TAR.GZ).</summary>
-    private static readonly IReadOnlySet<string> ZipOnly = new HashSet<string>(StringComparer.Ordinal) { FileKinds.Zip.Id, FileKinds.Tar.Id, FileKinds.TarGz.Id };
+    /// <summary>The archives Extract, Test and Info read (V2 PR 5.2 adds TAR and TAR.GZ; ADR-0030 adds 7z and RAR).</summary>
+    private static readonly IReadOnlySet<string> ZipOnly = new HashSet<string>(StringComparer.Ordinal)
+    {
+        FileKinds.Zip.Id, FileKinds.Tar.Id, FileKinds.TarGz.Id, FileKinds.SevenZip.Id, FileKinds.Rar.Id,
+    };
     private static readonly IReadOnlySet<string> GzipOnly = new HashSet<string>(StringComparer.Ordinal) { FileKinds.Gzip.Id };
     private static readonly IReadOnlySet<string> AnyFileOrFolder = FileKinds.Declared.Select(k => k.Id).ToHashSet(StringComparer.Ordinal);
 

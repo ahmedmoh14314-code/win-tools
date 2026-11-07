@@ -29,7 +29,7 @@ public sealed partial class UiSurfaceTests
     {
         // With General Files (V2 PR 1.4): a file no module reads (one category) and a folder.
         // Every module since V2: PDF, archives, subtitles, documents, video and audio, and mixed video.
-        foreach (var names in new[] { new[] { "a.png" }, ["a.jpg"], ["a.webp"], ["a.bmp"], ["a.tif"], ["a.png", "b.jpg"], ["a.png", "b.jpg", "c.webp"], ["notes.txt"], ["holiday\\"],
+        foreach (var names in new[] { new[] { "a.png" }, ["a.jpg"], ["a.webp"], ["a.bmp"], ["a.tif"], ["a.heic"], ["a.avif"], ["a.heic", "b.jpg"], ["a.png", "b.jpg"], ["a.png", "b.jpg", "c.webp"], ["notes.txt"], ["holiday\\"],
             ["a.pdf"], ["a.pdf", "b.pdf"], ["a.zip"], ["a.tar.gz"], ["a.gz"], ["a.srt"], ["a.docx"], ["a.mp4"], ["a.gif"], ["a.mp3"], ["a.wav"], ["a.mp4", "b.mov"] })
         {
             var menu = MenuFor(names);

@@ -3,7 +3,16 @@ using WinTools.Core.Files;
 
 namespace WinTools.Core.Capabilities;
 
-public enum OperationKind { Convert, Resize, Compress, Rotate, StripMetadata, Info }
+public enum OperationKind { Convert, Resize, Compress, Rotate, StripMetadata, Info, Flip, Crop, Adjust, Collage }
+
+/// <summary>Flip horizontal mirrors left and right; flip vertical turns the picture upside down as a mirror would.</summary>
+public enum FlipAxis { Horizontal, Vertical }
+
+/// <summary>The one-click adjustments (ADR-0031): fixed presets, no sliders.</summary>
+public enum Adjustment { BlackAndWhite, Brighter, Darker, MoreContrast, MoreVivid, Sharpen, Blur }
+
+/// <summary>A crop's shape, width to height ("16:9").</summary>
+public readonly record struct AspectRatio(int Width, int Height);
 
 public enum CompressLevel { High, Balanced, Small, Lossless }
 
@@ -41,10 +50,13 @@ public sealed record ResizeSpec(ResizeMode Mode, int Percent = 0, int Width = 0,
 
 /// <summary>
 /// A declarative description of one command the radial menu can offer. Adding a format or an operation adds rows,
-/// not code in the UI. Operations other than Convert keep the file's format.
+/// not code in the UI. Operations other than Convert and Collage keep the file's format, except that an edit of a HEIF
+/// photo writes JPEG (<see cref="ImageFormats.EditedAs"/>). Collage joins 2 to <see cref="OperationCatalog.MaxCollageInputs"/>
+/// images into one (PNG, or JPEG when every input is a JPEG).
 /// </summary>
 public sealed record Operation(string Id, string Label, OperationKind Kind, ImageFormat Target = ImageFormat.Unknown,
-    ResizeSpec? Resize = null, CompressLevel Compress = CompressLevel.Balanced, int RotateDegrees = 0)
+    ResizeSpec? Resize = null, CompressLevel Compress = CompressLevel.Balanced, int RotateDegrees = 0,
+    FlipAxis Flip = FlipAxis.Horizontal, AspectRatio Aspect = default, Adjustment Adjust = Adjustment.BlackAndWhite)
 {
     /// <summary>Whether this operation is valid for a file whose content is <paramref name="source"/>.</summary>
     public bool AppliesTo(ImageFormat source)
@@ -53,10 +65,11 @@ public sealed record Operation(string Id, string Label, OperationKind Kind, Imag
         return Kind switch
         {
             OperationKind.Convert => source != Target && ImageFormats.CanEncode(Target),
-            OperationKind.Resize or OperationKind.Rotate => ImageFormats.CanEncode(source),
+            OperationKind.Resize or OperationKind.Rotate or OperationKind.Flip or OperationKind.Crop or OperationKind.Adjust => ImageFormats.CanEncode(ImageFormats.EditedAs(source)),
             OperationKind.Compress => Compress == CompressLevel.Lossless ? source == ImageFormat.Png : source is ImageFormat.Jpeg or ImageFormat.WebP,
-            OperationKind.StripMetadata => source != ImageFormat.Bmp, // BMP carries none
-            OperationKind.Info => true,
+            // BMP carries none; HEIF and AVIF would need a re-encode, which removing metadata never does.
+            OperationKind.StripMetadata => source is not (ImageFormat.Bmp or ImageFormat.Heif or ImageFormat.Avif),
+            OperationKind.Info or OperationKind.Collage => true,
             _ => false,
         };
     }
@@ -65,7 +78,17 @@ public sealed record Operation(string Id, string Label, OperationKind Kind, Imag
     public bool WritesFile => Kind != OperationKind.Info;
 
     /// <summary>The format written for a file whose content is <paramref name="source"/>.</summary>
-    public ImageFormat OutputFormat(ImageFormat source) => Kind == OperationKind.Convert ? Target : source;
+    public ImageFormat OutputFormat(ImageFormat source) => Kind switch
+    {
+        OperationKind.Convert => Target,
+        OperationKind.Collage => CollageFormat([source]),
+        OperationKind.Info or OperationKind.Compress or OperationKind.StripMetadata => source,
+        _ => ImageFormats.EditedAs(source),
+    };
+
+    /// <summary>What a collage of images of these formats is written as: JPEG when every one is a JPEG (photos stay
+    /// photos), otherwise PNG, which keeps transparency and loses nothing.</summary>
+    public static ImageFormat CollageFormat(IEnumerable<ImageFormat> sources) => sources.All(s => s == ImageFormat.Jpeg) ? ImageFormat.Jpeg : ImageFormat.Png;
 
     /// <summary>Text added to the output name ("photo (resized 50%).jpg"); null for a plain conversion ("photo.png").</summary>
     public string? NameSuffix => Kind switch
@@ -80,6 +103,19 @@ public sealed record Operation(string Id, string Label, OperationKind Kind, Imag
         OperationKind.Compress => "compressed",
         OperationKind.Rotate => RotateDegrees switch { 90 => "rotated right", 270 => "rotated left", _ => "rotated 180" },
         OperationKind.StripMetadata => "no metadata",
+        OperationKind.Flip => Flip == FlipAxis.Horizontal ? "flipped horizontally" : "flipped vertically",
+        OperationKind.Crop => $"cropped {Aspect.Width}x{Aspect.Height}",
+        OperationKind.Adjust => Adjust switch
+        {
+            Adjustment.BlackAndWhite => "black and white",
+            Adjustment.Brighter => "brighter",
+            Adjustment.Darker => "darker",
+            Adjustment.MoreContrast => "more contrast",
+            Adjustment.MoreVivid => "more vivid",
+            Adjustment.Sharpen => "sharpened",
+            _ => "blurred",
+        },
+        OperationKind.Collage => "collage",
         _ => null,
     };
 }
@@ -87,6 +123,11 @@ public sealed record Operation(string Id, string Label, OperationKind Kind, Imag
 /// <summary>The operations this build supports, generated from the format table and the fixed menu presets.</summary>
 public static class OperationCatalog
 {
+    public const string CollageId = "collage";
+
+    /// <summary>The most images one collage takes (a 4×4 grid).</summary>
+    public const int MaxCollageInputs = 16;
+
     public static IReadOnlyList<Operation> All { get; } = Build();
 
     private static Operation[] Build()
@@ -107,6 +148,19 @@ public static class OperationCatalog
         ops.Add(new Operation("rotate.180", "180°", OperationKind.Rotate, RotateDegrees: 180));
         ops.Add(new Operation("metadata.strip", "Remove metadata", OperationKind.StripMetadata));
         ops.Add(new Operation("metadata.info", "Image info", OperationKind.Info));
+        // ADR-0031: flips (beside the rotations), centred crops, one-click adjustments, and the collage of a selection.
+        ops.Add(new Operation("flip.horizontal", "Flip left-right", OperationKind.Flip, Flip: FlipAxis.Horizontal));
+        ops.Add(new Operation("flip.vertical", "Upside down", OperationKind.Flip, Flip: FlipAxis.Vertical));
+        foreach (var (w, h) in new[] { (1, 1), (4, 3), (16, 9), (9, 16) })
+            ops.Add(new Operation($"crop.{w}x{h}", $"Crop {w}:{h}", OperationKind.Crop, Aspect: new AspectRatio(w, h)));
+        ops.Add(new Operation("adjust.black-and-white", "Black & white", OperationKind.Adjust, Adjust: Adjustment.BlackAndWhite));
+        ops.Add(new Operation("adjust.brighter", "Brighter", OperationKind.Adjust, Adjust: Adjustment.Brighter));
+        ops.Add(new Operation("adjust.darker", "Darker", OperationKind.Adjust, Adjust: Adjustment.Darker));
+        ops.Add(new Operation("adjust.contrast", "More contrast", OperationKind.Adjust, Adjust: Adjustment.MoreContrast));
+        ops.Add(new Operation("adjust.vivid", "More vivid", OperationKind.Adjust, Adjust: Adjustment.MoreVivid));
+        ops.Add(new Operation("adjust.sharpen", "Sharpen", OperationKind.Adjust, Adjust: Adjustment.Sharpen));
+        ops.Add(new Operation("adjust.blur", "Blur", OperationKind.Adjust, Adjust: Adjustment.Blur));
+        ops.Add(new Operation(CollageId, "Collage", OperationKind.Collage));
         return [.. ops];
     }
 

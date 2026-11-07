@@ -6,7 +6,7 @@ using WinTools.Core.Jobs;
 namespace WinTools.Worker.Imaging;
 
 /// <summary>
-/// Decode → orient → operation (convert, resize, rotate, compress) → encode, with every format meeting at
+/// Decode → orient → operation (convert, resize, rotate, flip, crop, adjust, compress) → encode, with every format meeting at
 /// <see cref="RasterImage"/>. Policies:
 /// <list type="bullet">
 /// <item>Transparency is kept for PNG, WebP and TIFF outputs and composited onto white for JPEG and BMP.</item>
@@ -30,12 +30,15 @@ internal static class ImagePipeline
     public static Encoded Run(byte[] input, ImageFormat source, Operation op, int? jpegQuality = null, int? webpQuality = null)
     {
         // Everything is processed at 8 bits per channel. Converting to another format says so in its docs; operations that
-        // promise to keep the file as it is (lossless compression, rotate, resize) refuse deeper images instead.
-        if (op.Kind != OperationKind.Convert && BitDepth.MoreThan8(input, source))
-            throw new ImagingException(ErrorCode.UnsupportedContent, "16-bit images are not supported by this operation yet (it would reduce them to 8 bits); converting is possible.");
+        // promise to keep the file as it is (lossless compression, rotate, resize) refuse deeper images instead. An edit of
+        // a HEIF photo writes a JPEG (8 bits) anyway, as a conversion does.
+        var output = op.OutputFormat(source);
+        if (op.Kind != OperationKind.Convert && output == source && BitDepth.MoreThan8(input, source))
+            throw new ImagingException(ErrorCode.UnsupportedContent, source is ImageFormat.Avif
+                ? "AVIF images deeper than 8 bits are not supported by this operation yet (it would reduce them to 8 bits); converting is possible."
+                : "16-bit images are not supported by this operation yet (it would reduce them to 8 bits); converting is possible.");
         var (image, orientation) = Decode(input, source);
         image = Orientation.Apply(image, orientation);
-        var output = op.OutputFormat(source);
         var keepLossless = source == ImageFormat.WebP && SkiaCodec.IsLosslessWebP(input);
         byte[] bytes;
         switch (op.Kind)
@@ -47,6 +50,18 @@ internal static class ImagePipeline
                     ImageFormat.WebP when webpQuality is { } q => SkiaCodec.EncodeWebP(image, Math.Clamp(q, 1, 100), lossless: false),
                     _ => Encode(image, output),
                 };
+                break;
+            case OperationKind.Flip:
+                image = Edits.Flip(image, op.Flip);
+                bytes = EncodeKeepingQuality(image, output, keepLossless);
+                break;
+            case OperationKind.Crop:
+                image = Edits.Crop(image, op.Aspect);
+                bytes = EncodeKeepingQuality(image, output, keepLossless);
+                break;
+            case OperationKind.Adjust:
+                image = Edits.Adjust(image, op.Adjust);
+                bytes = EncodeKeepingQuality(image, output, keepLossless);
                 break;
             case OperationKind.StripMetadata:
                 return StripMetadata(input, source, image, orientation);
@@ -75,6 +90,7 @@ internal static class ImagePipeline
     {
         if (WicCodec.Handles(format)) return WicCodec.Decode(bytes, format);
         if (format == ImageFormat.WebP) return SkiaCodec.DecodeWebP(bytes);
+        if (format is ImageFormat.Heif or ImageFormat.Avif) return HeifCodec.Decode(bytes, format);
         throw new ImagingException(ErrorCode.UnsupportedOperation, $"{format} cannot be decoded.");
     }
 
@@ -83,6 +99,7 @@ internal static class ImagePipeline
     {
         if (WicCodec.Handles(format)) return WicCodec.Encode(image, format);
         if (format == ImageFormat.WebP) return SkiaCodec.EncodeWebP(image, SkiaCodec.DefaultWebPQuality, lossless: false);
+        if (format == ImageFormat.Avif) return HeifCodec.EncodeAvif(image);
         throw new ImagingException(ErrorCode.UnsupportedOperation, $"{format} cannot be encoded.");
     }
 
@@ -125,8 +142,12 @@ internal static class ImagePipeline
         var (image, orientation) = Decode(input, format);
         var shown = Orientation.Apply(image, orientation);
         var meta = Metadata.Inspect(input, format);
-        return new ImageInfo(ImageFormats.DisplayName(format), shown.Width, shown.Height, input.LongLength, Math.Round(image.DpiX, 1), Math.Round(image.DpiY, 1),
-            image.HasTransparency(), orientation, meta.Exif, meta.Gps, meta.Xmp, meta.Icc || image.IccProfile is not null, meta.Text, BitDepth.MoreThan8(input, format), meta.Other);
+        // HEIF and AVIF state no resolution, and their orientation is the file's irot and imir (a grid comes back turned).
+        var heif = format is ImageFormat.Heif or ImageFormat.Avif ? Heif.Read(input, out _) : null;
+        double dpiX = heif is null ? Math.Round(image.DpiX, 1) : 0, dpiY = heif is null ? Math.Round(image.DpiY, 1) : 0;
+        return new ImageInfo(ImageFormats.DisplayName(format), shown.Width, shown.Height, input.LongLength, dpiX, dpiY,
+            image.HasTransparency(), heif?.Orientation ?? orientation, meta.Exif, meta.Gps, meta.Xmp, meta.Icc || image.IccProfile is not null, meta.Text,
+            BitDepth.MoreThan8(input, format), meta.Other, heif?.BitDepth ?? 0);
     }
 
     /// <summary>JPEG and WebP: the smallest copy that keeps the preset's measured fidelity. PNG: lossless only, verified

@@ -16,7 +16,7 @@ Template: `template.md`. Numbering is sequential and never reused. Old ADRs are 
 | [ADR-0009](ADR-0009-dependency-license-policy.md) | Dependency and license policy | Proposed | Product owner confirmation |
 | [ADR-0010](ADR-0010-telemetry-policy.md) | Telemetry and diagnostics policy | Proposed | Product owner confirmation |
 | [ADR-0011](ADR-0011-error-result-model.md) | Error / result model across process boundaries | Accepted (first slice) | — |
-| [ADR-0012](ADR-0012-svg-and-heic-input.md) | SVG and HEIC/HEIF as input formats | Accepted (both deferred for V1) | — |
+| [ADR-0012](ADR-0012-svg-and-heic-input.md) | SVG and HEIC/HEIF as input formats | Accepted (both deferred for V1); HEIC superseded by ADR-0031 | — |
 | [ADR-0013](ADR-0013-settings-and-output-policy.md) | Settings foundation and output policy | Accepted (data layer; UI deferred) | — |
 | [ADR-0014](ADR-0014-hierarchical-radial-menu.md) | Hierarchical radial menu during the drag | Accepted | — |
 | [ADR-0015](ADR-0015-worker-resource-limits.md) | Worker resource limits: pixels, memory cap, memory-bounded pool | Accepted | — |
@@ -32,7 +32,10 @@ Template: `template.md`. Numbering is sequential and never reused. Old ADRs are 
 | [ADR-0026](ADR-0026-secrets-pdf-passwords.md) | A password goes from the dialogs process to one job and reaches qpdf only on its stdin (`@-`); Remove protection never lifts an author's restrictions | Proposed (V2 PR 2.2) | Worker, host and Explorer tests; evaluator pending |
 | [ADR-0027](ADR-0027-encrypted-zip-read.md) | Encrypted ZIPs (ZipCrypto, WinZip AES) read with .NET's own cryptography, checked against `ZipArchive`; the password asked only when an archive needs one | Proposed (V2 PR 5.3) | Evaluator review; Explorer run |
 | [ADR-0028](ADR-0028-media-ffmpeg.md) | Video and audio run the bundled FFmpeg (LGPL build) in a media worker, file protocol only, inputs probed against an allow-list | Proposed (V2 media sprint) | Explorer run |
+| [ADR-0030](ADR-0030-archives-7z-rar.md) | 7z and RAR read with SharpCompress in the archive worker, behind its own checks; split archives refused; RAR's unRAR licence allows extraction only | Proposed (0.2.0 Beta) | Evaluator review; Explorer run |
+| [ADR-0032](ADR-0032-file-actions.md) | Copy to and Move to run in the host, never overwriting, verified across volumes; Show in folder and Open in Terminal build no command line from a path; Share stays out | Proposed (0.2.0 Beta) | Evaluator review; Explorer run; owner decision on the Windows SDK licence for Share |
 | [ADR-0029](ADR-0029-pdf-render-pdfium.md) | PDF pages to images and text, and images to PDF, with the bundled PDFium (no V8, no XFA) in the image worker | Proposed (0.2.0 Beta) | Explorer run |
+| [ADR-0031](ADR-0031-images-heif-avif-edits-collage.md) | HEIC and AVIF read through the bundled FFmpeg behind our own structure check (supersedes ADR-0012's HEIC part); To AVIF, flips, crops, adjustments and Collage | Proposed (Tangerine parity) | Evaluator review; Explorer run |
 | [ADR-0025](ADR-0025-documents-ooxml-read.md) | Office documents read in house as archives of XML: no DTD, no resolver, no macro run; Remove properties copies every other part byte for byte | Proposed (V2 PR 6.1, 6.2) | Evaluator review; Explorer run |
 
 Decision order recommended: 0002 → 0003 → 0001/0004 (same spike) → 0005 → 0011 → 0007 → 0006 → 0008. 0009 and 0010 can be confirmed any time.

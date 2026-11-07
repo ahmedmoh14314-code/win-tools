@@ -16,6 +16,10 @@ internal readonly record struct SecretOutcome(PickEnd End, string? Secret = null
 /// <summary>The rename or form dialog's outcome (V2 PR 7.2); <see cref="Rule"/> (the answer) is set only for <see cref="PickEnd.Picked"/>.</summary>
 internal readonly record struct RenameOutcome(PickEnd End, string? Rule = null);
 
+/// <summary>The folder window's outcome (ADR-0032); <see cref="Folder"/>, as the window answered it, only for
+/// <see cref="PickEnd.Picked"/>. The caller checks it before using it.</summary>
+internal readonly record struct FolderOutcome(PickEnd End, string? Folder = null);
+
 /// <summary>
 /// Starts the dialogs process (WinTools.Dialogs.exe) for one dialog and waits for its answer (V2 PR 1.3). The request
 /// goes on its stdin and the answer comes on its stdout, one JSON line each; it never receives file paths, which stay
@@ -26,6 +30,9 @@ internal sealed class DialogsClient(string dialogsExe)
 {
     /// <summary>How long a dialog may stay open before the host gives up on it.</summary>
     public static readonly TimeSpan Patience = TimeSpan.FromMinutes(10);
+
+    /// <summary>How long Edit pages may stay open: arranging a long PDF is work the user must not lose to a timeout (review, #40).</summary>
+    public static readonly TimeSpan OrganizePatience = TimeSpan.FromHours(8);
 
     /// <summary>How long a dialog that answered may take to exit before it is ended.</summary>
     private static readonly TimeSpan ExitGrace = TimeSpan.FromSeconds(2);
@@ -68,8 +75,26 @@ internal sealed class DialogsClient(string dialogsExe)
             ? new(PickEnd.Picked, answer) : new(PickEnd.Cancelled);
     }
 
+    /// <summary>Asks Edit pages' window for its plan (ADR-0029): only a plan that fits the PDF's page count counts as an answer.</summary>
+    public async Task<RenameOutcome> AskOrganizeAsync(OrganizeRequest request, CancellationToken cancellationToken = default)
+    {
+        var (end, line) = await AskAsync(WorkerProtocol.Serialize(request), cancellationToken, OrganizePatience).ConfigureAwait(false);
+        if (end != PickEnd.Picked) return new(end);
+        return WorkerProtocol.Deserialize<OrganizeResult>(line)?.Answer is { } answer && PagePlan.Read(answer, request.Pages) is not null
+            ? new(PickEnd.Picked, answer) : new(PickEnd.Cancelled);
+    }
+
+    /// <summary>Asks for a destination folder (Copy to, Move to; ADR-0032). An empty answer counts as cancelled; any other
+    /// is returned as given, for the caller to check (<see cref="WinTools.Core.Files.TransferPlan.Destination"/>).</summary>
+    public async Task<FolderOutcome> AskFolderAsync(FolderRequest request, CancellationToken cancellationToken = default)
+    {
+        var (end, line) = await AskAsync(WorkerProtocol.Serialize(request), cancellationToken).ConfigureAwait(false);
+        if (end != PickEnd.Picked) return new(end);
+        return WorkerProtocol.Deserialize<FolderResult>(line)?.Folder is { Length: > 0 } folder ? new(PickEnd.Picked, folder) : new(PickEnd.Cancelled);
+    }
+
     /// <summary>One dialog: the request line in, the answer line out (Picked means "it answered").</summary>
-    private async Task<(PickEnd End, string? Line)> AskAsync(string requestLine, CancellationToken cancellationToken)
+    private async Task<(PickEnd End, string? Line)> AskAsync(string requestLine, CancellationToken cancellationToken, TimeSpan? patienceFor = null)
     {
         if (!File.Exists(dialogsExe)) return (PickEnd.Unavailable, null);
         var psi = new ProcessStartInfo(dialogsExe)
@@ -91,7 +116,7 @@ internal sealed class DialogsClient(string dialogsExe)
             WinTools.Windows.WorkerJobObject.TryAssign(process); // ends with the host, like the workers
             _ = WinTools.Windows.Native.User32.AllowSetForegroundWindow((uint)process.Id); // effective only if the host may set the foreground itself (ADR-0019)
             using var patience = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            patience.CancelAfter(Patience);
+            patience.CancelAfter(patienceFor ?? Patience);
             try
             {
                 await process.StandardInput.WriteLineAsync(requestLine.AsMemory(), patience.Token).ConfigureAwait(false);

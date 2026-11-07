@@ -23,8 +23,12 @@ public static class FileKinds
     public static FileKind Bmp { get; } = new("bmp", FileFamily.Image, "BMP", [".bmp", ".dib"]);
     public static FileKind Tiff { get; } = new("tiff", FileFamily.Image, "TIFF", [".tif", ".tiff"]);
 
+    /// <summary>HEIF photos (iPhone and many Android cameras) and AVIF images, read through the bundled FFmpeg (ADR-0031).</summary>
+    public static FileKind Heic { get; } = new("heic", FileFamily.Image, "HEIC", [".heic", ".heif", ".hif"]);
+    public static FileKind Avif { get; } = new("avif", FileFamily.Image, "AVIF", [".avif"]);
+
     /// <summary>The image kinds (the image module's inputs).</summary>
-    public static IReadOnlyList<FileKind> All { get; } = [Png, Jpeg, WebP, Bmp, Tiff];
+    public static IReadOnlyList<FileKind> All { get; } = [Png, Jpeg, WebP, Bmp, Tiff, Heic, Avif];
 
     /// <summary>A PDF document (V2 PR 2.1). Its worker checks the "%PDF-" header before any engine sees the file.</summary>
     public static FileKind Pdf { get; } = new("pdf", FileFamily.Pdf, "PDF", [".pdf"]);
@@ -36,6 +40,10 @@ public static class FileKinds
     public static FileKind Tar { get; } = new("tar", FileFamily.Archive, "TAR", [".tar"]);
     public static FileKind TarGz { get; } = new("tgz", FileFamily.Archive, "TAR.GZ", [".tgz"]);
     public static FileKind Gzip { get; } = new("gz", FileFamily.Archive, "GZIP", [".gz"]);
+
+    /// <summary>7z and RAR (RAR 4 and RAR 5), read with SharpCompress (ADR-0030). Their worker checks the signature first.</summary>
+    public static FileKind SevenZip { get; } = new("7z", FileFamily.Archive, "7z", [".7z"]);
+    public static FileKind Rar { get; } = new("rar", FileFamily.Archive, "RAR", [".rar"]);
 
     /// <summary>SubRip and WebVTT subtitles (V2 PR 7.1). Text formats: the worker decodes and parses them, bounded.</summary>
     public static FileKind Srt { get; } = new("srt", FileFamily.Subtitle, "SRT", [".srt"]);
@@ -75,10 +83,10 @@ public static class FileKinds
     public static FileKind AnyFile { get; } = new("file", FileFamily.Other, "File", []);
 
     /// <summary>Every kind a capability's input rule may name.</summary>
-    public static IReadOnlyList<FileKind> Declared { get; } = [.. All, Pdf, Zip, Tar, TarGz, Gzip, Srt, Vtt, Docx, Xlsx, Pptx, .. Video, .. Audio, Folder, AnyFile];
+    public static IReadOnlyList<FileKind> Declared { get; } = [.. All, Pdf, Zip, Tar, TarGz, Gzip, SevenZip, Rar, Srt, Vtt, Docx, Xlsx, Pptx, .. Video, .. Audio, Folder, AnyFile];
 
     private static readonly Dictionary<string, FileKind> ByExtension =
-        ((IEnumerable<FileKind>)[.. All, Pdf, Zip, Tar, TarGz, Gzip, Srt, Vtt, Docx, Xlsx, Pptx, .. Video, .. Audio]).SelectMany(k => k.Extensions.Select(e => (e, k))).ToDictionary(p => p.e, p => p.k, StringComparer.OrdinalIgnoreCase);
+        ((IEnumerable<FileKind>)[.. All, Pdf, Zip, Tar, TarGz, Gzip, SevenZip, Rar, Srt, Vtt, Docx, Xlsx, Pptx, .. Video, .. Audio]).SelectMany(k => k.Extensions.Select(e => (e, k))).ToDictionary(p => p.e, p => p.k, StringComparer.OrdinalIgnoreCase);
 
     private static readonly Dictionary<string, FileKind>.AlternateLookup<ReadOnlySpan<char>> BySpan = ByExtension.GetAlternateLookup<ReadOnlySpan<char>>();
 

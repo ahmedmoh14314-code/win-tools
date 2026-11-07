@@ -11,12 +11,12 @@ public sealed class CapabilityResolverTests
     private static string[] Ids(IEnumerable<CapabilityDescriptor> ops) => ops.Where(o => o.Category == "convert").Select(o => o.Id).ToArray();
 
     [Theory]
-    [InlineData(@"C:\p\photo.png", "convert.to-jpeg convert.to-webp convert.to-bmp convert.to-tiff")]
-    [InlineData(@"C:\p\photo.JPG", "convert.to-png convert.to-webp convert.to-bmp convert.to-tiff")]
-    [InlineData(@"C:\p\photo.jfif", "convert.to-png convert.to-webp convert.to-bmp convert.to-tiff")]
-    [InlineData(@"C:\p\photo.webp", "convert.to-jpeg convert.to-png convert.to-bmp convert.to-tiff")]
-    [InlineData(@"C:\p\photo.bmp", "convert.to-jpeg convert.to-png convert.to-webp convert.to-tiff")]
-    [InlineData(@"C:\p\photo.tiff", "convert.to-jpeg convert.to-png convert.to-webp convert.to-bmp")]
+    [InlineData(@"C:\p\photo.png", "convert.to-jpeg convert.to-webp convert.to-bmp convert.to-tiff convert.to-avif")]
+    [InlineData(@"C:\p\photo.JPG", "convert.to-png convert.to-webp convert.to-bmp convert.to-tiff convert.to-avif")]
+    [InlineData(@"C:\p\photo.jfif", "convert.to-png convert.to-webp convert.to-bmp convert.to-tiff convert.to-avif")]
+    [InlineData(@"C:\p\photo.webp", "convert.to-jpeg convert.to-png convert.to-bmp convert.to-tiff convert.to-avif")]
+    [InlineData(@"C:\p\photo.bmp", "convert.to-jpeg convert.to-png convert.to-webp convert.to-tiff convert.to-avif")]
+    [InlineData(@"C:\p\photo.tiff", "convert.to-jpeg convert.to-png convert.to-webp convert.to-bmp convert.to-avif")]
     public void Each_format_gets_every_other_format_as_a_target_and_never_itself(string path, string expected)
     {
         Assert.Equal(expected.Split(' '), Ids(R.Resolve([path])));
@@ -24,7 +24,6 @@ public sealed class CapabilityResolverTests
 
     [Theory]
     [InlineData(@"C:\p\notes.txt")]
-    [InlineData(@"C:\p\image.heic")]
     [InlineData(@"C:\p\drawing.svg")]
     [InlineData(@"C:\p\no-extension")]
     [InlineData(@"C:\p\archive.png.zip")]
@@ -37,8 +36,8 @@ public sealed class CapabilityResolverTests
     public void Mixed_selections_get_the_intersection()
     {
         // PNG and JPEG: "To PNG" is invalid for the PNG and "To JPEG" for the JPEG, so only the shared targets remain.
-        Assert.Equal(["convert.to-webp", "convert.to-bmp", "convert.to-tiff"], Ids(R.Resolve([@"C:\a.png", @"C:\b.jpg"])));
-        Assert.Equal(["convert.to-bmp", "convert.to-tiff"], Ids(R.Resolve([@"C:\a.png", @"C:\b.jpg", @"C:\c.webp"])));
+        Assert.Equal(["convert.to-webp", "convert.to-bmp", "convert.to-tiff", "convert.to-avif"], Ids(R.Resolve([@"C:\a.png", @"C:\b.jpg"])));
+        Assert.Equal(["convert.to-bmp", "convert.to-tiff", "convert.to-avif"], Ids(R.Resolve([@"C:\a.png", @"C:\b.jpg", @"C:\c.webp"])));
     }
 
     [Fact]
@@ -82,7 +81,7 @@ public sealed class CapabilityMatrixTests
     [Fact]
     public void Labels_and_ids_come_from_the_format_table()
     {
-        Assert.Equal(["To JPEG", "To PNG", "To WebP", "To BMP", "To TIFF"],
+        Assert.Equal(["To JPEG", "To PNG", "To WebP", "To BMP", "To TIFF", "To AVIF"],
             OperationCatalog.All.Where(o => o.Kind == OperationKind.Convert).Select(o => o.Label));
         Assert.Equal(OperationCatalog.All.Count, OperationCatalog.All.Select(o => o.Id).Distinct().Count());
     }

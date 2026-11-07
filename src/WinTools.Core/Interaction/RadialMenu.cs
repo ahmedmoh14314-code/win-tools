@@ -56,12 +56,15 @@ public static class RadialMenu
     /// </summary>
     public const int ShownBeforeMore = 5;
 
-    /// <summary>A category ring is Back plus its commands; beyond seven, five of them and "More…".</summary>
+    /// <summary>A category ring is Back plus its commands; beyond seven, five of them and "More…". A category of long labels
+    /// (<see cref="CapabilityCategory.MostOnRing"/>) overflows sooner: beyond its limit, one fewer than that and "More…".</summary>
     private static MenuGroup Fit(MenuGroup group)
     {
-        if (group.Commands.Count <= RingCapacity - 1) return group;
-        var shown = group.Commands.Take(ShownBeforeMore).ToArray();
-        var rest = group.Commands.Skip(ShownBeforeMore).ToArray();
+        var limit = Math.Min(RingCapacity - 1, group.Category.MostOnRing ?? RingCapacity - 1);
+        if (group.Commands.Count <= limit) return group;
+        var count = Math.Min(ShownBeforeMore, limit - 1);
+        var shown = group.Commands.Take(count).ToArray();
+        var rest = group.Commands.Skip(count).ToArray();
         var more = new CapabilityDescriptor(MoreId, "More…", group.Category.Id, "menu", new InputRule(new HashSet<string>()), // never resolved: it only carries the overflow
             CapabilityShape.Selection, CapabilityOutput.Facts, LongRunning: false, Payload: rest);
         return group with { Commands = [.. shown, more] };

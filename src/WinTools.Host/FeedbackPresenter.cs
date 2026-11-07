@@ -81,6 +81,13 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         }), TaskScheduler.Default);
     });
 
+    /// <summary>A command's preparation ended and its window takes over (Edit pages): the progress toast goes, nothing is said. Any thread.</summary>
+    public void HandedOver() => ui.Post(() =>
+    {
+        _done = _total;
+        if (toast.Content is { Progress: not null }) toast.Hide();
+    });
+
     public void Progress(CapabilityDescriptor capability, int done, int total) => ui.Post(() =>
     {
         _done = Math.Max(_done, done);
@@ -98,6 +105,12 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
             if (!progressShowing) ShowToast(ToastContent.From(copied)); // a batch's progress toast is never replaced; the sound still says it
             sounds.Play(copied.Kind == FeedbackKind.Success ? UiSound.Success : UiSound.Failure);
             log.Event("toast", new { kind = copied.Kind.ToString(), copied = items[0].Inputs, shown = !progressShowing });
+            return;
+        }
+        if (capability.Produces == CapabilityOutput.Window && items.All(i => i.Result.Success))
+        {
+            // The window that opened is the answer (Show in folder, Open in Terminal, ADR-0032); only a failure is said.
+            log.Event("toast", new { kind = "window", shown = false });
             return;
         }
         var facts = items.Where(i => i.Result.Success && i.Result.Facts.Count > 0).ToArray(); // only a believed success shows facts

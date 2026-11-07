@@ -60,6 +60,7 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 ## Done since #31 (with evidence)
 - **Forms** (#38): `FormTests`, `MediaWorkerTests` (Trim, Split, Crop on the bundled FFmpeg), `DialogsProcessTests` (the form opens in both languages). Explorer: Trim video 10/10, Trim audio 10/10, Shift… 10/10, Crop 1:1 3/3.
 - **Arabic** (#37): every wheel label fits at 96–192 DPI in both languages (`ArabicWheelTests`, `UiSurfaceTests`); the ring, toasts and info panel checked by eye with `WinTools.Preview --lang ar`.
+- **7z and RAR** (ADR-0030): Extract, Test and Archive info for 7z, RAR 4 and RAR 5, passwords included, one folder per archive in a batch (`SevenZipRarWorkerTests`, `SevenZipRarCapabilityTests`). Limits in the ADR: split archives refused; damage in a protected RAR 5 file reported as not checked. Explorer run pending.
 
 ## Not done (V2 Definition of Done, §9 and §15)
 - **PDF:**
@@ -70,12 +71,11 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 - **Documents:** TXT/Markdown/CSV → PDF (needs the rendering backend); the optional external converter.
 - **Archives:**
   - TAR/GZ create;
-  - 7z/RAR extract (SharpCompress review);
-  - batch extraction.
+  - split 7z and RAR archives (ADR-0030 refuses them).
 - **General Files:** MD5; Copy/Move to a folder, Terminal here, Share, a shelf.
 - **Settings V2 extras:** module defaults and conflict detection beyond the trigger policy.
 - **Subtitles:** ASS/SSA; TXT export.
-- **Images:** HEIC/AVIF, SVG, crop, edit, annotate, redact, collage, Images→PDF.
+- **Images:** SVG, annotate, redact, background removal; Compress and Remove metadata for HEIC and AVIF (ADR-0031 says why).
 - **Wheel:** keyboard navigation; letter triggers (only after the typing-interference test).
 - **Stage 8 hardening:**
   - fuzzing per parser;

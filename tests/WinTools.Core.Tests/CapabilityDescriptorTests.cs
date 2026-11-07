@@ -26,7 +26,7 @@ public sealed class CapabilityDescriptorTests
 
     [Theory]
     [InlineData(@"C:\p\notes.txt")]
-    [InlineData(@"C:\p\archive.png.rar")] // .zip is an archive kind since V2 PR 5.1; RAR is not (yet)
+    [InlineData(@"C:\p\archive.png.cab")] // .zip is an archive kind since V2 PR 5.1, .rar and .7z since ADR-0030; .cab is not
     [InlineData(@"C:\p\no-extension")]
     [InlineData(@"C:\p\trailing.")]
     [InlineData(@"C:\p\.png.folder\file")]
@@ -55,13 +55,13 @@ public sealed class CapabilityDescriptorTests
     }
 
     [Theory]
-    [InlineData("convert.to-png", "convert", "File", "jpeg webp bmp tiff")]
+    [InlineData("convert.to-png", "convert", "File", "jpeg webp bmp tiff heic avif")]
     [InlineData("compress.high", "compress", "File", "jpeg webp")]
     [InlineData("compress.lossless", "compress", "File", "png")]
-    [InlineData("resize.percent-50", "resize", "File", "png jpeg webp bmp tiff")]
-    [InlineData("rotate.right", "rotate", "File", "png jpeg webp bmp tiff")]
+    [InlineData("resize.percent-50", "resize", "File", "png jpeg webp bmp tiff heic avif")]
+    [InlineData("rotate.right", "image-edit", "File", "png jpeg webp bmp tiff heic avif")]
     [InlineData("metadata.strip", "tools", "File", "png jpeg webp tiff")]
-    [InlineData("metadata.info", "tools", "Facts", "png jpeg webp bmp tiff")]
+    [InlineData("metadata.info", "tools", "Facts", "png jpeg webp bmp tiff heic avif")]
     public void Each_image_capability_declares_its_category_output_and_the_kinds_it_reads(string id, string category, string produces, string kinds)
     {
         var c = ImageCapabilities.Catalog(null).Single(c => c.Id == id);

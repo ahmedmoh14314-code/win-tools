@@ -12,7 +12,7 @@ public sealed record PickRequest(string Title, IReadOnlyList<PickItem> Items, in
 /// <summary>Which dialog a request asks for, so the dialogs process reads the right request (V2 PR 2.2).</summary>
 public static class DialogKinds
 {
-    public const string Pick = "pick", Secret = "secret", Rename = "rename", Form = "form";
+    public const string Pick = "pick", Secret = "secret", Rename = "rename", Form = "form", Organize = "organize", Folder = "folder";
 }
 
 /// <summary>
@@ -35,6 +35,16 @@ public sealed record RenameRequest(string Title, IReadOnlyList<string> Names, in
 
 /// <summary>The rename dialog's answer: the rule (serialized, <see cref="Files.RenameRule"/>), or null when cancelled.</summary>
 public sealed record RenameResult(string? Rule);
+
+/// <summary>
+/// Copy to and Move to (ADR-0032): a destination folder to pick, in Windows' own folder window. Like every request it
+/// carries no file path; the window starts where the user last picked one. The answer is a path, which the host checks
+/// again (<see cref="Files.TransferPlan.Destination"/>) before anything is copied or moved.
+/// </summary>
+public sealed record FolderRequest(string Title, int X, int Y, string Kind = DialogKinds.Folder);
+
+/// <summary>The folder window's answer: the folder picked, or null when cancelled.</summary>
+public sealed record FolderResult(string? Folder);
 
 /// <summary>Only the kind of a request, read first: the rest is read as that kind's request.</summary>
 public sealed record DialogEnvelope(string? Kind);

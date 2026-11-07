@@ -948,7 +948,7 @@ using (var explorer = opened)
                 "lockedzip" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1 && dialogInFront == true && secretAsked,
                 "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "file" or "folder" or "pdf" or "zip" or "tgz" or "srt" or "docx" or "video" or "audio" when facts => output is null && infoShown && focusKept == true && accepted == 1,
                 "srt" or "video" or "audio" when formCancel => output is null && accepted == 1 && dialogInFront == true && formClosed
-                    && HostLines().Skip(hostLogLines).Any(l => l.Contains("\"ev\":\"form.ask\"", StringComparison.Ordinal) && l.Contains("\"end\":\"Cancelled\"", StringComparison.Ordinal)),
+                    && ev.Any(e => Ev(e) == "form.ask" && Data(e).TryGetProperty("end", out var fe) && fe.GetString() == "Cancelled"),
                 "zip" or "tgz" or "srt" or "docx" or "video" or "audio" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1
                     && (formKeys is null || dialogInFront == true), // a form: it came to the front and was answered
                 "rename" => output is not null && Path.GetFileName(output) == "2026 notes.txt" && accepted == 1 && dialogInFront == true,
