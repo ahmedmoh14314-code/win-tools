@@ -113,7 +113,7 @@ internal static class Program
             var pdfRender = new JobModuleRunner(PdfRenderJobModule.Instance, new WorkerClient(workerPath, PdfTimeout, PdfRenderJobModule.Instance, parallelism: 2), PdfRenderJobModule.Parameters);
             var jobs = new JobScheduler([images, files, pdf, archives, subtitles, documents, office, media, pdfRender], log, () => Volatile.Read(ref current), feedback);
             _ = Task.Run(() => OfficeJobModule.SweepLeftovers()); // copies of documents a crash left behind (ADR-0033)
-            coordinator = new InteractionCoordinator(log, window, jobs, feedback, sounds, settings);
+            // Edit pages' thumbnails: the image worker with PDFium, one at a time, outside the scheduler (no toast of their own).
             using (coordinator)
             {
                 coordinator.Start();

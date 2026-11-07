@@ -532,5 +532,20 @@
   "say.Read as Windows-1256 (Arabic)": "Read as Windows-1256 (Arabic)",
   "say.Hidden sheets are included.": "Hidden sheets are included.",
   "toast.altText": "Windows uses Alt with keys for its own shortcuts, so WinTools does not open while Alt is held.",
-  "toast.titleOne": "{0} {1}"
+  "toast.titleOne": "{0} {1}",
+  "cmd.pdf.organize": "Edit pages…",
+  "dialog.organize": "Pages of {0}",
+  "toast.organizeWindow": "the page window",
+  "organize.hint": "Select pages, then turn, move, repeat or delete them. Drag a page to move it. Save writes a new PDF; the original stays as it is.",
+  "organize.turnLeft": "Turn left",
+  "organize.turnRight": "Turn right",
+  "organize.earlier": "Move earlier",
+  "organize.later": "Move later",
+  "organize.duplicate": "Duplicate",
+  "organize.delete": "Delete",
+  "organize.save": "Save as new PDF",
+  "organize.extract": "Extract selected",
+  "organize.page": "Page {0}",
+  "organize.pageTurned": "Page {0} · {1}°",
+  "organize.status": "Pages: {0} · selected: {1}"
 }
