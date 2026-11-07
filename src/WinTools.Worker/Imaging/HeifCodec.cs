@@ -136,6 +136,7 @@ internal static class HeifCodec
         {
             var root = Path.Combine(Path.GetTempPath(), "WinTools");
             Directory.CreateDirectory(root);
+            SweepAbandoned(root);
             for (var attempt = 0; attempt < 5; attempt++)
             {
                 var path = Path.Combine(root, "img-" + Guid.NewGuid().ToString("N"));
@@ -147,6 +148,26 @@ internal static class HeifCodec
                 }
             }
             throw new ImagingException(ErrorCode.Internal, "No private working folder could be made in the temporary folder.");
+        }
+
+        /// <summary>
+        /// A killed worker cannot clean up, and its folder holds a copy of the user's picture: folders far older than any
+        /// request's limit are removed by the next run. Plain folders of our own name only; a link is never followed.
+        /// </summary>
+        private static void SweepAbandoned(string root)
+        {
+            try
+            {
+                foreach (var old in new DirectoryInfo(root).EnumerateDirectories("img-*"))
+                {
+                    if (old.LinkTarget is not null || DateTime.UtcNow - old.LastWriteTimeUtc < TimeSpan.FromHours(1)) continue;
+                    try { old.Delete(recursive: true); }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                }
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         public string File(string name) => Path.Combine(_path, name);

@@ -77,6 +77,10 @@ public static class FeedbackText
         OperationKind.Resize => "Resizing",
         OperationKind.Rotate => "Rotating",
         OperationKind.StripMetadata => "Removing metadata from",
+        OperationKind.Flip => "Flipping",
+        OperationKind.Crop => "Cropping",
+        OperationKind.Adjust => "Adjusting",
+        OperationKind.Collage => "Making a collage of",
         _ => "Reading",
     };
 
@@ -88,6 +92,19 @@ public static class FeedbackText
         OperationKind.Resize => op.Resize!.Mode == ResizeMode.Percent ? $"Resized to {op.Resize.Percent}%" : $"Resized to fit {op.Label}",
         OperationKind.Rotate => op.RotateDegrees switch { 90 => "Rotated right", 270 => "Rotated left", _ => "Rotated 180°" },
         OperationKind.StripMetadata => "Metadata removed",
+        OperationKind.Flip => op.Flip == FlipAxis.Horizontal ? "Flipped horizontally" : "Flipped vertically",
+        OperationKind.Crop => $"Cropped to {op.Aspect.Width}:{op.Aspect.Height}",
+        OperationKind.Adjust => op.Adjust switch
+        {
+            Adjustment.BlackAndWhite => "Now black and white",
+            Adjustment.Brighter => "Brightened",
+            Adjustment.Darker => "Darkened",
+            Adjustment.MoreContrast => "Contrast raised",
+            Adjustment.MoreVivid => "Colours strengthened",
+            Adjustment.Sharpen => "Sharpened",
+            _ => "Blurred",
+        },
+        OperationKind.Collage => "Collage made",
         _ => op.Label,
     };
 
@@ -98,6 +115,10 @@ public static class FeedbackText
         OperationKind.Resize => "resize",
         OperationKind.Rotate => "rotate",
         OperationKind.StripMetadata => "remove metadata from",
+        OperationKind.Flip => "flip",
+        OperationKind.Crop => "crop",
+        OperationKind.Adjust => "adjust",
+        OperationKind.Collage => "make a collage of",
         _ => "read",
     };
 
@@ -106,6 +127,7 @@ public static class FeedbackText
         OperationKind.Resize => "Already that size or smaller",
         OperationKind.Compress => "Already optimized: a smaller copy would not save enough or would look different",
         OperationKind.StripMetadata => "No metadata to remove",
+        OperationKind.Crop => "Already that shape",
         _ => "Nothing needed doing",
     };
 

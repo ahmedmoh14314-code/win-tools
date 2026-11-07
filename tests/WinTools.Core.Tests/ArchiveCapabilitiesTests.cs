@@ -124,7 +124,7 @@ public sealed class ArchiveCapabilitiesTests
         Assert.Equal(["Tools", "Archive", "Actions"], menu.Select(g => g.Label)); // Tools: SHA-256 and Folder path
         Assert.Equal(["Extract to folder", "Test", "Archive info"], menu[1].Commands.Select(c => c.Label)); // TAR and TAR.GZ too since V2 PR 5.2
         Assert.Contains("archive.zip", Ids(@"C:\p\a.png", @"C:\p\b.pdf", @"C:\p\holiday\"));
-        Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Rotate", "Actions"], RadialMenu.Build(Resolver, [@"C:\p\a.png"]).Select(g => g.Label)); // Add to ZIP: no new sector of its own
+        Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Edit", "Actions"], RadialMenu.Build(Resolver, [@"C:\p\a.png"]).Select(g => g.Label)); // Add to ZIP: no new sector of its own
         Assert.DoesNotContain("archive.extract", Ids(@"C:\p\a.zip", @"C:\p\b.png"));
     }
 

@@ -149,10 +149,10 @@ public static class OperationCatalog
         ops.Add(new Operation("metadata.strip", "Remove metadata", OperationKind.StripMetadata));
         ops.Add(new Operation("metadata.info", "Image info", OperationKind.Info));
         // ADR-0031: flips (beside the rotations), centred crops, one-click adjustments, and the collage of a selection.
-        ops.Add(new Operation("flip.horizontal", "Flip horizontal", OperationKind.Flip, Flip: FlipAxis.Horizontal));
-        ops.Add(new Operation("flip.vertical", "Flip vertical", OperationKind.Flip, Flip: FlipAxis.Vertical));
+        ops.Add(new Operation("flip.horizontal", "Flip left-right", OperationKind.Flip, Flip: FlipAxis.Horizontal));
+        ops.Add(new Operation("flip.vertical", "Upside down", OperationKind.Flip, Flip: FlipAxis.Vertical));
         foreach (var (w, h) in new[] { (1, 1), (4, 3), (16, 9), (9, 16) })
-            ops.Add(new Operation($"crop.{w}x{h}", $"{w}:{h}", OperationKind.Crop, Aspect: new AspectRatio(w, h)));
+            ops.Add(new Operation($"crop.{w}x{h}", $"Crop {w}:{h}", OperationKind.Crop, Aspect: new AspectRatio(w, h)));
         ops.Add(new Operation("adjust.black-and-white", "Black & white", OperationKind.Adjust, Adjust: Adjustment.BlackAndWhite));
         ops.Add(new Operation("adjust.brighter", "Brighter", OperationKind.Adjust, Adjust: Adjustment.Brighter));
         ops.Add(new Operation("adjust.darker", "Darker", OperationKind.Adjust, Adjust: Adjustment.Darker));

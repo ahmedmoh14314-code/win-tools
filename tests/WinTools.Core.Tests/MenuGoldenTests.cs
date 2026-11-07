@@ -66,7 +66,8 @@ public sealed class MenuGoldenTests
                 foreach (var group in RadialMenu.Build(resolver, selection))
                 {
                     text.Append("  [").Append(group.Category.Label).Append("] ").AppendLine(group.Label); // V1 printed the enum name, which was the label
-                    foreach (var op in group.Commands.Select(ImageCapabilities.OperationOf))
+                    // A "More…" sector stands for the commands it holds, in order.
+                    foreach (var op in group.Commands.SelectMany(c => RadialMenu.IsMore(c) ? RadialMenu.Overflow(c) : [c]).Select(ImageCapabilities.OperationOf))
                         text.Append("    ").Append(op.Id).Append(" | ").Append(op.Label).Append(" | writes ").Append(op.WritesFile)
                             .Append(" | suffix ").Append(op.NameSuffix ?? "-").Append(" | out ")
                             .AppendLine(string.Join(",", selection.Select(p => Out(op, p))));

@@ -17,10 +17,19 @@ public sealed class FormatMatrixTests : IDisposable
         ConversionJob.Run(new ConversionRequest($"m{Interlocked.Increment(ref _seq)}", OperationCatalog.Convert(target).Id, source));
 
     /// <summary>The quadrant sample in the given format, all made by independent encoders (GDI+, and Pillow for WebP).</summary>
-    private string Sample(ImageFormat format, string stem = "q") =>
-        _dir.CopySample("quadrants-64x48" + ImageFormats.Extension(format), stem + ImageFormats.Extension(format));
+    private string Sample(ImageFormat format, string stem = "q")
+    {
+        if (format is not (ImageFormat.Heif or ImageFormat.Avif))
+            return _dir.CopySample("quadrants-64x48" + ImageFormats.Extension(format), stem + ImageFormats.Extension(format));
+        // HEIC and AVIF: made here from the same quadrants (ADR-0031), since no independent encoder ships with the tests.
+        var png = _dir.CopySample("quadrants-64x48.png", "made-from.png");
+        var avif = format == ImageFormat.Avif;
+        var coded = HeifSamples.Encode(_dir.Path, png, "format=yuv420p", av1: avif);
+        File.Delete(png);
+        return _dir.Write(stem + (avif ? ".avif" : ".heic"), new HeifBuilder { Avif = avif }.Build([coded], 1, 1, 64, 48));
+    }
 
-    private static bool Lossy(ImageFormat f) => f is ImageFormat.Jpeg or ImageFormat.WebP;
+    private static bool Lossy(ImageFormat f) => f is ImageFormat.Jpeg or ImageFormat.WebP or ImageFormat.Heif or ImageFormat.Avif;
 
     public static TheoryData<ImageFormat, ImageFormat> Pairs()
     {

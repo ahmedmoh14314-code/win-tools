@@ -34,6 +34,22 @@ public sealed class HeifMeasurement(ITestOutputHelper output) : IDisposable
         }
     }
 
+    /// <summary>A real camera file from outside the repository (WINTOOLS_HEIC_SAMPLE names it): what the structure reader
+    /// finds, and a PNG next to it in WINTOOLS_HEIC_OUT to look at. Such files are never committed.</summary>
+    [MeasurementFact]
+    public void Real_sample()
+    {
+        var path = Environment.GetEnvironmentVariable("WINTOOLS_HEIC_SAMPLE");
+        if (path is null) return;
+        var src = _dir.Write("sample.heic", File.ReadAllBytes(path));
+        var read = WinTools.Core.Files.Heif.Read(File.ReadAllBytes(src), out var why);
+        output.WriteLine(read is null ? $"refused: {why}" : $"{read.Width}x{read.Height} tiles {read.Tiles} orientation {read.Orientation} av1 {read.Av1} depth {read.BitDepth} icc {read.Icc?.Length} exif {read.Exif?.Length} xmp {read.Xmp} other {read.OtherMetadata} alpha {read.AlphaItem}");
+        var watch = Stopwatch.StartNew();
+        var r = ConversionJob.Run(new WinTools.Core.Jobs.ConversionRequest("real", "convert.to-png", src));
+        output.WriteLine($"to PNG: {watch.Elapsed.TotalSeconds:0.00} s, {r.Success} {r.Error} {r.Message}");
+        if (r.OutputPath is not null && Environment.GetEnvironmentVariable("WINTOOLS_HEIC_OUT") is { } copy) File.Copy(r.OutputPath, copy, overwrite: true);
+    }
+
     private static byte[] WicTestPhoto(int width, int height)
     {
         var photo = CompressionCorpus.Photo(seed: 3, width: width, height: height);

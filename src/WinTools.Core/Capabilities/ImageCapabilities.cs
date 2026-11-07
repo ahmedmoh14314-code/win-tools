@@ -3,23 +3,24 @@ using WinTools.Core.Files;
 namespace WinTools.Core.Capabilities;
 
 /// <summary>
-/// The image module's catalog: each <see cref="Operation"/> as a capability. Ids, labels, categories and catalog order
-/// are exactly those of V1 (MenuGoldenTests); which files an operation applies to is still
-/// <see cref="Operation.AppliesTo"/>, asked through the file's kind.
+/// The image module's catalog: each <see cref="Operation"/> as a capability, pinned by MenuGoldenTests; which files an
+/// operation applies to is still <see cref="Operation.AppliesTo"/>, asked through the file's kind. Collage is the one
+/// command that takes the whole selection.
 /// </summary>
 public static class ImageCapabilities
 {
     public const string Module = "images";
+    public const string EditCategory = "image-edit";
 
-    /// <summary>The image module's categories, in V1's order.</summary>
+    /// <summary>The image module's categories: V1's, with Edit (ADR-0031).</summary>
     public static IReadOnlyList<CapabilityCategory> Categories { get; } =
     [
         new("convert", "Convert", "convert", 10),
         new("compress", "Compress", "compress", 20),
         new("resize", "Resize", "resize", 30),
-        new("crop", "Crop", "crop", 35),        // ADR-0031
-        new("rotate", "Rotate", "rotate", 40),  // the rotations and, since ADR-0031, the flips
-        new("adjust", "Adjust", "adjust", 45),  // ADR-0031
+        // The rotations, flips, crops and adjustments together (ADR-0031): a top ring holds six groups with room for their
+        // labels. Rotate's old place, so the rotations stay one stroke away; its own id, so video's rings keep their order.
+        new(EditCategory, "Edit", "edit", 40),
         new("tools", "Tools", "tools", 11), // Convert, then Tools, then the module's own groups, Actions last (Tangerine's order)
     ];
 
@@ -67,9 +68,7 @@ public static class ImageCapabilities
         OperationKind.Convert => "convert",
         OperationKind.Compress => "compress",
         OperationKind.Resize => "resize",
-        OperationKind.Rotate or OperationKind.Flip => "rotate",
-        OperationKind.Crop => "crop",
-        OperationKind.Adjust => "adjust",
+        OperationKind.Rotate or OperationKind.Flip or OperationKind.Crop or OperationKind.Adjust => EditCategory,
         _ => "tools",
     };
 }

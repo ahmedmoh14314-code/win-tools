@@ -61,7 +61,7 @@ public sealed class PdfCapabilitiesTests
     public void An_image_menu_is_unchanged_by_the_pdf_module()
     {
         Assert.DoesNotContain(Ids(@"C:\p\a.png"), id => id.StartsWith("pdf.", StringComparison.Ordinal));
-        Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Rotate", "Actions"], RadialMenu.Build(Resolver, [@"C:\p\a.png"]).Select(g => g.Label));
+        Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Edit", "Actions"], RadialMenu.Build(Resolver, [@"C:\p\a.png"]).Select(g => g.Label));
     }
 
     [Fact]
