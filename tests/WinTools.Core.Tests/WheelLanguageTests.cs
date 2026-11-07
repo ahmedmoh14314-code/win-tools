@@ -38,11 +38,11 @@ public sealed class WheelLanguageTests
         {
             UiText.Use("ar");
             var menu = RadialMenu.Build(Resolver, [@"C:\p\a.png"]);
-            Assert.Equal(["تحويل", "أدوات", "ضغط", "الحجم", "تدوير", "إجراءات"], menu.Select(g => g.Label));
+            Assert.Equal(["تحويل", "أدوات", "ضغط", "الحجم", "تحرير", "إجراءات"], menu.Select(g => g.Label));
             Assert.Contains("إلى PNG", menu[0].Commands.Select(c => c.Label).Concat(RadialMenu.Build(Resolver, [@"C:\p\a.jpg"])[0].Commands.Select(c => c.Label)));
             Assert.Equal("رجوع", MenuNavigator.BackLabel);
             UiText.Use("en");
-            Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Rotate", "Actions"], RadialMenu.Build(Resolver, [@"C:\p\a.png"]).Select(g => g.Label));
+            Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Edit", "Actions"], RadialMenu.Build(Resolver, [@"C:\p\a.png"]).Select(g => g.Label));
             Assert.Equal("Back", MenuNavigator.BackLabel);
         }
         finally { UiText.Use("en"); }

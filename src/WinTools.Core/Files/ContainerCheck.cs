@@ -19,6 +19,7 @@ public static class ContainerCheck
             ImageFormat.WebP => CheckWebP(data),
             ImageFormat.Bmp => CheckBmp(data),
             ImageFormat.Tiff => TiffCheck.Check(data),
+            ImageFormat.Heif or ImageFormat.Avif => Heif.Read(data, out var why) is null ? why : null,
             _ => "unsupported format",
         } ?? "";
         return reason.Length == 0;

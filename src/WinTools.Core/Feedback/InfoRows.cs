@@ -14,7 +14,7 @@ public static class InfoRows
         var mp = (double)i.Width * i.Height / 1_000_000;
         var rows = new List<InfoRow>
         {
-            new("Format", i.DeeperThan8Bits ? $"{i.Format} · 16-bit" : i.Format),
+            new("Format", i.DeeperThan8Bits ? string.Create(CultureInfo.InvariantCulture, $"{i.Format} · {(i.BitsPerChannel > 8 ? i.BitsPerChannel : 16)}-bit") : i.Format),
             new("Dimensions", string.Create(CultureInfo.InvariantCulture, $"{i.Width} × {i.Height} px") + (mp >= 0.1 ? string.Create(CultureInfo.InvariantCulture, $" · {mp:0.#} MP") : "")),
             new("File size", FeedbackText.Size(i.FileBytes)),
             new("Resolution", i.DpiX > 0 && i.DpiY > 0

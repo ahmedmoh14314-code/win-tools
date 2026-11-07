@@ -40,8 +40,16 @@ public static class Metadata
         ImageFormat.Png => InspectPng(d),
         ImageFormat.WebP => InspectWebP(d),
         ImageFormat.Tiff => InspectTiff(d),
+        ImageFormat.Heif or ImageFormat.Avif => InspectHeif(d),
         _ => default,
     };
+
+    /// <summary>HEIF and AVIF: an Exif item (and its GPS pointer), an XMP item, a colr profile, and other metadata items.</summary>
+    private static MetadataFound InspectHeif(ReadOnlySpan<byte> d)
+    {
+        if (Heif.Read(d, out _) is not { } image) return default;
+        return new MetadataFound(image.Exif is not null, image.Exif is { } exif && TiffHasTag(exif, 34853), image.Xmp, image.Icc is not null, false, image.OtherMetadata);
+    }
 
     /// <summary>
     /// The file with only allowed elements, or null if this format is not stripped at the byte level (TIFF, BMP) or the

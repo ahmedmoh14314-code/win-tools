@@ -41,13 +41,13 @@ public sealed class GeneralFilesTests
     public void A_folder_gets_info_and_copy_path_but_no_hash() => Assert.Equal(Folder, Ids(@"C:\p\holiday\"));
 
     [Fact]
-    public void An_image_keeps_v1s_five_categories_and_gets_the_general_commands_under_tools()
+    public void An_image_keeps_its_categories_and_gets_the_general_commands_under_tools()
     {
-        // A sixth category would narrow V1's top ring until "Compress" reaches into the hub gap (UiSurfaceTests): the
-        // module shares Tools, as categories are designed to be shared (ADR-0019).
+        // The module adds no category of its own: it shares Tools, as categories are designed to be shared (ADR-0019), and
+        // the image ring is full (six groups: a seventh leaves no room for "Compress").
         var menu = RadialMenu.Build(Resolver, [@"C:\p\a.png"]);
         // Convert, Tools and Actions (Tangerine parity): the file commands have their own group since the wheel PR.
-        Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Rotate", "Actions"], menu.Select(g => g.Label));
+        Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Edit", "Actions"], menu.Select(g => g.Label));
         // V2 PR 7.2: seven do not fit; the commands a normal user needs first stay on the ring, the rest go under "More…".
         // File info only where no module has its own: an image has Image info.
         Assert.Equal(["Remove metadata", "Image info", "SHA-256", "Folder path"], menu[1].Commands.Select(c => c.Label));

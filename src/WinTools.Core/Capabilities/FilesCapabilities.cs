@@ -6,8 +6,8 @@ namespace WinTools.Core.Capabilities;
 /// <summary>
 /// The General Files module (V2 PR 1.4, the walking skeleton of a second module): File info and SHA-256, read in the
 /// text worker, and Copy path, which runs in the host and parses nothing. They accept any file; File info and Copy path
-/// accept folders too. They share the Tools category with the image module: a sixth category would narrow the image
-/// module's top ring until its labels reach into the hub gap, and categories are designed to be shared (ADR-0019).
+/// accept folders too. They share the Tools category with the image module, whose top ring is full, and categories
+/// are designed to be shared (ADR-0019).
 /// V2 PR 7.2 adds Copy name and Copy folder path (the host, like Copy path) and Batch rename (a dialog with a preview, then
 /// the host renames; files only, in one folder, never overwriting). ADR-0032 adds Copy to and Move to (a folder picked in
 /// the dialogs process, then the host copies or moves, never overwriting), Show in folder and Open in Terminal (the host

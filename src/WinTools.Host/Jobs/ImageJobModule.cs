@@ -43,21 +43,26 @@ internal sealed class ImageJobModule : IJobModule
     /// so a pre-existing or replaced file is not believed;</item>
     /// <item>its real format is one this operation can produce (the conversion target, or the source's own format for
     /// operations that keep it);</item>
-    /// <item>its name is one the naming policy allows for this source, operation and format.</item>
+    /// <item>its name is one the naming policy allows for this source, operation and format;</item>
+    /// <item>Collage (ADR-0031): 2 to 16 inputs, named after the first in name order, PNG unless every input is a JPEG;
+    /// the only facts it may carry are notices for the toast.</item>
     /// </list>
     /// </summary>
     public bool IsBelievable(JobRequest request, JobResult result)
     {
         if (result.Outputs is null || result.Facts is null) return false; // a worker can send any shape
         if (!result.Success) return result.Outputs.Count == 0 && result.Facts.Count == 0 && result.Error != ErrorCode.None;
-        if (OperationCatalog.Find(request.CapabilityId) is not { } op || request.Inputs.Count != 1) return false;
+        if (OperationCatalog.Find(request.CapabilityId) is not { } op) return false;
+        var collage = op.Kind == OperationKind.Collage;
+        if (collage ? request.Inputs.Count is < 2 or > OperationCatalog.MaxCollageInputs : request.Inputs.Count != 1) return false;
         if (!op.WritesFile) return result.Outputs.Count == 0 && JobFacts.AreShowable(result.Facts); // "Image info": facts, no file
-        if (result.Outputs is not [{ Sha256: { Length: 64 } claimed } output] || result.Facts.Count > 0) return false;
-        var source = request.Inputs[0];
+        if (result.Outputs is not [{ Sha256: { Length: 64 } claimed } output]) return false;
+        if (result.Facts.Count > 0 && (!collage || result.Facts.Any(f => !f.Notice) || !JobFacts.AreShowable(result.Facts))) return false;
+        var source = collage ? PdfCapabilities.MergeOrder(request.Inputs)[0] : request.Inputs[0];
         try
         {
             // The name first: only a path the naming policy allows is ever opened, whatever the worker claims.
-            var expected = op.OutputFormat(SourceFormat(source));
+            var expected = collage ? Operation.CollageFormat(request.Inputs.Select(SourceFormat)) : op.OutputFormat(SourceFormat(source));
             if (expected == ImageFormat.Unknown || !OutputNaming.Candidates(source, expected, op.NameSuffix, request.OutputDirectory).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
             using var file = new FileStream(output.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
             var header = new byte[FileSignature.HeaderLength];
@@ -71,11 +76,18 @@ internal sealed class ImageJobModule : IJobModule
 
     public IEnumerable<string> TempPathsOf(JobRequest request)
     {
-        if (request.Inputs.Count != 1) yield break;
+        if (request.Inputs.Count == 0) yield break;
         string temp;
-        try { temp = OutputNaming.TempPath(request.Inputs[0], request.Id, request.OutputDirectory); }
+        try { temp = OutputNaming.TempPath(request.Inputs.Count == 1 ? request.Inputs[0] : PdfCapabilities.MergeOrder(request.Inputs)[0], request.Id, request.OutputDirectory); }
         catch (ArgumentException) { yield break; }
         yield return temp;
+    }
+
+    /// <summary>This request's limit (ADR-0031): the rule both ends share, on the sources' real formats.</summary>
+    public static TimeSpan TimeoutFor(JobRequest request)
+    {
+        var op = OperationCatalog.Find(request.CapabilityId);
+        return ImageTimeLimits.For(op?.Kind == OperationKind.Collage, op?.Target ?? ImageFormat.Unknown, request.Inputs.Select(SourceFormat));
     }
 
     /// <summary>The source's real format from its header (the hint from its name if it can no longer be read).</summary>

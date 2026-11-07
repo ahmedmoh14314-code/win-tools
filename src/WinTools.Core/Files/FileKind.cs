@@ -23,8 +23,12 @@ public static class FileKinds
     public static FileKind Bmp { get; } = new("bmp", FileFamily.Image, "BMP", [".bmp", ".dib"]);
     public static FileKind Tiff { get; } = new("tiff", FileFamily.Image, "TIFF", [".tif", ".tiff"]);
 
+    /// <summary>HEIF photos (iPhone and many Android cameras) and AVIF images, read through the bundled FFmpeg (ADR-0031).</summary>
+    public static FileKind Heic { get; } = new("heic", FileFamily.Image, "HEIC", [".heic", ".heif", ".hif"]);
+    public static FileKind Avif { get; } = new("avif", FileFamily.Image, "AVIF", [".avif"]);
+
     /// <summary>The image kinds (the image module's inputs).</summary>
-    public static IReadOnlyList<FileKind> All { get; } = [Png, Jpeg, WebP, Bmp, Tiff];
+    public static IReadOnlyList<FileKind> All { get; } = [Png, Jpeg, WebP, Bmp, Tiff, Heic, Avif];
 
     /// <summary>A PDF document (V2 PR 2.1). Its worker checks the "%PDF-" header before any engine sees the file.</summary>
     public static FileKind Pdf { get; } = new("pdf", FileFamily.Pdf, "PDF", [".pdf"]);
