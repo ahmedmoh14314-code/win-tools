@@ -16,6 +16,8 @@ public static class FormatHint
         "webp" => ImageFormat.WebP,
         "bmp" => ImageFormat.Bmp,
         "tiff" => ImageFormat.Tiff,
+        "heic" => ImageFormat.Heif,
+        "avif" => ImageFormat.Avif,
         _ => ImageFormat.Unknown,
     };
 }

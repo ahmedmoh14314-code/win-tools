@@ -1,6 +1,6 @@
 # ADR-0012: SVG and HEIC/HEIF as input formats
 
-- **Status:** Accepted (2026-10-21). Both are deferred for V1; the conditions for revisiting them are below.
+- **Status:** Accepted (2026-10-21). Both are deferred for V1; the conditions for revisiting them are below. The HEIC part is superseded by ADR-0031; SVG stays deferred.
 - **Date:** 2026-10-21
 - **Related requirements:** SCOPE-001, SEC-001, SEC-003, SAFE-003
 

@@ -79,6 +79,10 @@ public static class FeedbackText
         OperationKind.Resize => "Resizing",
         OperationKind.Rotate => "Rotating",
         OperationKind.StripMetadata => "Removing metadata from",
+        OperationKind.Flip => "Flipping",
+        OperationKind.Crop => "Cropping",
+        OperationKind.Adjust => "Adjusting",
+        OperationKind.Collage => "Making a collage of",
         _ => "Reading",
     };
 
@@ -90,6 +94,19 @@ public static class FeedbackText
         OperationKind.Resize => op.Resize!.Mode == ResizeMode.Percent ? $"Resized to {op.Resize.Percent}%" : $"Resized to fit {op.Label}",
         OperationKind.Rotate => op.RotateDegrees switch { 90 => "Rotated right", 270 => "Rotated left", _ => "Rotated 180°" },
         OperationKind.StripMetadata => "Metadata removed",
+        OperationKind.Flip => op.Flip == FlipAxis.Horizontal ? "Flipped horizontally" : "Flipped vertically",
+        OperationKind.Crop => $"Cropped to {op.Aspect.Width}:{op.Aspect.Height}",
+        OperationKind.Adjust => op.Adjust switch
+        {
+            Adjustment.BlackAndWhite => "Now black and white",
+            Adjustment.Brighter => "Brightened",
+            Adjustment.Darker => "Darkened",
+            Adjustment.MoreContrast => "Contrast raised",
+            Adjustment.MoreVivid => "Colours strengthened",
+            Adjustment.Sharpen => "Sharpened",
+            _ => "Blurred",
+        },
+        OperationKind.Collage => "Collage made",
         _ => op.Label,
     };
 
@@ -100,6 +117,10 @@ public static class FeedbackText
         OperationKind.Resize => "resize",
         OperationKind.Rotate => "rotate",
         OperationKind.StripMetadata => "remove metadata from",
+        OperationKind.Flip => "flip",
+        OperationKind.Crop => "crop",
+        OperationKind.Adjust => "adjust",
+        OperationKind.Collage => "make a collage of",
         _ => "read",
     };
 
@@ -108,6 +129,7 @@ public static class FeedbackText
         OperationKind.Resize => "Already that size or smaller",
         OperationKind.Compress => "Already optimized: a smaller copy would not save enough or would look different",
         OperationKind.StripMetadata => "No metadata to remove",
+        OperationKind.Crop => "Already that shape",
         _ => "Nothing needed doing",
     };
 
@@ -139,7 +161,7 @@ public static class FeedbackText
             or ErrorCode.UnsupportedContent or ErrorCode.UnsupportedOperation or ErrorCode.DecodeFailed or ErrorCode.EncodeFailed
             or ErrorCode.OutputDirectoryNotWritable or ErrorCode.OutputDirectoryIsLink or ErrorCode.NoFreeOutputName or ErrorCode.DiskFull
             or ErrorCode.WorkerTimeout or ErrorCode.WorkerCrashed or ErrorCode.Cancelled or ErrorCode.InvalidRequest or ErrorCode.IsAFolder
-            or ErrorCode.ClipboardUnavailable or ErrorCode.OnlineOnly => error.ToString(),
+            or ErrorCode.ClipboardUnavailable or ErrorCode.OnlineOnly or ErrorCode.SplitArchive => error.ToString(),
         ErrorCode.OutputValidationFailed => nameof(ErrorCode.EncodeFailed),
         ErrorCode.OutputNameInvalid => nameof(ErrorCode.NoFreeOutputName),
         ErrorCode.WorkerProtocolError => nameof(ErrorCode.WorkerCrashed),
@@ -175,7 +197,7 @@ public static class FeedbackText
 
     /// <summary>Every notice a believed success carries (skipped and renamed entries), or null.</summary>
     private static string? Notices(JobItem item) =>
-        item.Result.Facts.Where(f => f.Notice).Select(f => UiText.Say(f.Value)).ToArray() is { Length: > 0 } n ? string.Join(" · ", n) : null; // a fixed notice has its translation
+        item.Result.Facts.Where(f => f.Notice).Select(f => UiText.Say(UiText.Value(f.Value))).ToArray() is { Length: > 0 } n ? string.Join(" · ", n) : null; // a fixed notice has its translation
 
     /// <summary>The notices every item carries, in the first item's order, or null.</summary>
     private static string? CommonNotices(JobItem[] items)

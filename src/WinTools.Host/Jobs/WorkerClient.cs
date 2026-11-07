@@ -25,7 +25,7 @@ namespace WinTools.Host.Jobs;
 /// <item>The host re-checks every success claim through the module (for images: allowed name, real format, SHA-256).</item>
 /// </list>
 /// </summary>
-internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IJobModule module, IReadOnlyDictionary<string, string>? environment = null, int parallelism = 0) : IJobExecutor
+internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IJobModule module, IReadOnlyDictionary<string, string>? environment = null, int parallelism = 0, Func<JobRequest, TimeSpan>? timeoutFor = null) : IJobExecutor
 {
     /// <summary>Measured choice (docs/performance): half the logical processors, between 1 and 4, bounded by memory.</summary>
     public static int DefaultParallelism => Lanes(Environment.ProcessorCount, SystemMemory.AvailableCommitBytes());
@@ -168,7 +168,8 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IJobM
     private async Task<Attempt> RunOneAsync(Process process, JobRequest request, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(jobTimeout);
+        var limit = timeoutFor?.Invoke(request) ?? jobTimeout; // a module may give some of its requests longer
+        timeout.CancelAfter(limit);
         string? line;
         try
         {
@@ -178,7 +179,7 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IJobM
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new(null, JobResult.Fail(request.Id, ErrorCode.WorkerTimeout, $"The job did not finish within {jobTimeout.TotalSeconds:0} s."));
+            return new(null, JobResult.Fail(request.Id, ErrorCode.WorkerTimeout, $"The job did not finish within {limit.TotalSeconds:0} s."));
         }
         catch (OperationCanceledException)
         {

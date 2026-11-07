@@ -27,6 +27,8 @@ public sealed class MenuGoldenTests
         [@"C:\p\a.jpe"], [@"C:\p\a.TIF"], [@"C:\p\a.Png"], [@"C:\p\a.gif"], [@"C:\p\a.heic"], [@"C:\p.png\a.jpg"],
         [@"C:\p\a.b.png"], [@"C:\p\.png"], [@"C:\p\a.PNG "], [@"C:\صور\😀 a.webp"],
         [@"C:\p\" + new string('x', 250) + @"\a.png"],
+        // ADR-0031: AVIF, HEIF under its other name, and HEIC beside a JPEG (a collage of a phone photo and another)
+        [@"C:\p\a.avif"], [@"C:\p\a.HEIF"], [@"C:\p\a.heic", @"C:\p\b.jpg"],
     ];
 
     private static readonly string?[] CustomResizes = [null, "resize.width-800", "resize.box-1920x1080-stretch", "resize.height-600-upscale",
@@ -42,6 +44,8 @@ public sealed class MenuGoldenTests
             ".webp" => Files.ImageFormat.WebP,
             ".bmp" or ".dib" => Files.ImageFormat.Bmp,
             ".tif" or ".tiff" => Files.ImageFormat.Tiff,
+            ".heic" or ".heif" or ".hif" => Files.ImageFormat.Heif,
+            ".avif" => Files.ImageFormat.Avif,
             _ => Files.ImageFormat.Unknown,
         };
         return op.OutputFormat(source).ToString();
@@ -62,7 +66,8 @@ public sealed class MenuGoldenTests
                 foreach (var group in RadialMenu.Build(resolver, selection))
                 {
                     text.Append("  [").Append(group.Category.Label).Append("] ").AppendLine(group.Label); // V1 printed the enum name, which was the label
-                    foreach (var op in group.Commands.Select(ImageCapabilities.OperationOf))
+                    // A "More…" sector stands for the commands it holds, in order.
+                    foreach (var op in group.Commands.SelectMany(c => RadialMenu.IsMore(c) ? RadialMenu.Overflow(c) : [c]).Select(ImageCapabilities.OperationOf))
                         text.Append("    ").Append(op.Id).Append(" | ").Append(op.Label).Append(" | writes ").Append(op.WritesFile)
                             .Append(" | suffix ").Append(op.NameSuffix ?? "-").Append(" | out ")
                             .AppendLine(string.Join(",", selection.Select(p => Out(op, p))));

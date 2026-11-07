@@ -8,6 +8,8 @@
     <PackageVersion Include="SkiaSharp" Version="4.153.1" />
     <!-- Text worker only: Markdown to HTML, raw HTML disabled (ADR-0033). -->
     <PackageVersion Include="Markdig" Version="1.4.0" />
+    <!-- Archive worker only (ADR-0030): 7z and RAR reading. Never referenced by the host. -->
+    <PackageVersion Include="SharpCompress" Version="0.50.7" />
   </ItemGroup>
   <ItemGroup>
     <!-- Test-only. Nothing ships in the product. -->

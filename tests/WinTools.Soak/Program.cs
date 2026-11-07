@@ -198,7 +198,7 @@ internal sealed class NoEvents : IOverlayEvents
 
 internal static class Views
 {
-    private static readonly string[] Categories = ["Convert", "Compress", "Resize", "Rotate", "Tools"];
+    private static readonly string[] Categories = ["Convert", "Compress", "Resize", "Edit", "Tools"];
     private static readonly string[] Commands = ["Back", "To JPEG", "To WebP", "To BMP", "To TIFF"];
     public static MenuView Top(int hot) => new(Categories, 0, hot, false, "");
     public static MenuView Level(int hot, bool armed) => new(Commands, MenuNavigator.LevelStart(0, 5, 4), hot, armed, "Convert", MenuNavigator.BackSweep(5, 4));

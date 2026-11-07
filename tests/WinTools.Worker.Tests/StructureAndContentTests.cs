@@ -155,6 +155,7 @@ public sealed class StructureAndContentTests : IDisposable
         Assert.DoesNotContain("WinTools.Worker.Pdf", host); // the PDF worker and its qpdf: a separate process only (ADR-0022)
         Assert.DoesNotContain("WinTools.Worker.Common", host);
         Assert.DoesNotContain("WinTools.Worker.Archive", host); // the archive worker: a separate process only (ADR-0023)
+        Assert.DoesNotContain("SharpCompress", host); // its 7z and RAR reader too (ADR-0030)
     }
 }
 

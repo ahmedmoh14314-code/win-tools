@@ -10,11 +10,11 @@ public sealed class RadialMenuTests
         RadialMenu.Build(CapabilityResolver.Images(new AppSettings().CustomResizeId()), paths);
 
     [Fact]
-    public void Jpeg_gets_all_five_categories_in_fixed_order()
+    public void Jpeg_gets_every_category_in_fixed_order()
     {
         var menu = MenuFor(@"C:\p\photo.jpg");
-        Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Rotate"], menu.Select(g => g.Label)); // Tools second since the wheel PR
-        Assert.Equal(["To PNG", "To WebP", "To BMP", "To TIFF"], menu[0].Commands.Select(c => c.Label));
+        Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Edit"], menu.Select(g => g.Label)); // Tools second since the wheel PR
+        Assert.Equal(["To PNG", "To WebP", "To BMP", "To TIFF", "To AVIF"], menu[0].Commands.Select(c => c.Label));
         Assert.Equal(["High quality", "Balanced", "Smallest"], menu[2].Commands.Select(c => c.Label));
         Assert.Equal(["Remove metadata", "Image info"], menu[1].Commands.Select(c => c.Label));
     }
@@ -35,7 +35,7 @@ public sealed class RadialMenuTests
     public void Categories_without_commands_are_left_out()
     {
         var bmp = MenuFor(@"C:\p\scan.bmp");
-        Assert.Equal(["Convert", "Tools", "Resize", "Rotate"], bmp.Select(g => g.Label)); // no compression, no metadata
+        Assert.Equal(["Convert", "Tools", "Resize", "Edit"], bmp.Select(g => g.Label)); // no compression, no metadata
         Assert.Equal(["Image info"], bmp[1].Commands.Select(c => c.Label));
         Assert.Equal(["Lossless"], MenuFor(@"C:\p\a.png").Single(g => g.Category.Id == "compress").Commands.Select(c => c.Label));
     }
@@ -45,7 +45,7 @@ public sealed class RadialMenuTests
     {
         var menu = MenuFor(@"C:\p\a.jpg", @"C:\p\b.png");
         Assert.DoesNotContain(menu, g => g.Category.Id == "compress"); // JPEG levels vs PNG lossless: nothing common
-        Assert.Equal(["To WebP", "To BMP", "To TIFF"], menu[0].Commands.Select(c => c.Label));
+        Assert.Equal(["To WebP", "To BMP", "To TIFF", "To AVIF"], menu[0].Commands.Select(c => c.Label));
     }
 
     [Fact]
@@ -58,16 +58,20 @@ public sealed class RadialMenuTests
     [Fact]
     public void A_new_operation_appears_without_any_menu_change()
     {
-        var mirror = new Operation("rotate.mirror", "Mirror", OperationKind.Rotate);
+        var mirror = new Operation("rotate.mirror", "Mirror", OperationKind.Compress, Compress: CompressLevel.High);
         var menu = RadialMenu.Build(new CapabilityResolver([.. OperationCatalog.All.Select(ImageCapabilities.Describe), ImageCapabilities.Describe(mirror)]), [@"C:\p\photo.webp"]);
-        Assert.Equal(["Left", "Right", "180°", "Mirror"], menu.Single(g => g.Category.Id == "rotate").Commands.Select(c => c.Label));
+        Assert.Equal(["High quality", "Balanced", "Smallest", "Mirror"], menu.Single(g => g.Category.Id == "compress").Commands.Select(c => c.Label));
     }
 
     [Theory]
     [InlineData(OperationKind.Convert, "convert")]
     [InlineData(OperationKind.Compress, "compress")]
     [InlineData(OperationKind.Resize, "resize")]
-    [InlineData(OperationKind.Rotate, "rotate")]
+    [InlineData(OperationKind.Rotate, "image-edit")]
+    [InlineData(OperationKind.Flip, "image-edit")]
+    [InlineData(OperationKind.Crop, "image-edit")]
+    [InlineData(OperationKind.Adjust, "image-edit")]
+    [InlineData(OperationKind.Collage, "tools")]
     [InlineData(OperationKind.StripMetadata, "tools")]
     [InlineData(OperationKind.Info, "tools")]
     public void Each_operation_kind_has_its_category(OperationKind kind, string expected)
@@ -131,7 +135,7 @@ public sealed class MenuNavigatorTests
         Move(n, At(RingGeometry.SectorCentre(0, 5), 60), Ms(500));
         Assert.Null(n.Open);                       // a graze into a category does not open it
         Assert.Null(n.Armed(TimeSpan.FromSeconds(5)));
-        Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Rotate"], n.View(Ms(0)).Labels);
+        Assert.Equal(["Convert", "Tools", "Compress", "Resize", "Edit"], n.View(Ms(0)).Labels);
         Assert.Equal(0, n.View(Ms(500)).Hot);
     }
 
@@ -142,7 +146,7 @@ public sealed class MenuNavigatorTests
         OpenCategory(n, 0, Ms(100));
         Assert.Equal("convert", n.Open!.Category.Id);
         var view = n.View(Ms(100));
-        Assert.Equal(["Back", "To PNG", "To WebP", "To BMP", "To TIFF"], view.Labels);
+        Assert.Equal(["Back", "To PNG", "To WebP", "To BMP", "To TIFF", "To AVIF"], view.Labels);
         Assert.Equal("Convert", view.Hub);
         // Back points the way the stroke came (opposite to Convert) and is at least as wide as a category.
         Assert.Equal(RingGeometry.Normalize(RingGeometry.SectorCentre(0, 5) + Math.PI), RingGeometry.SectorCentre(0, view.Labels.Count, view.Start, view.FirstSweep), 9);
@@ -166,7 +170,7 @@ public sealed class MenuNavigatorTests
     public void Back_returns_to_the_categories_and_nothing_is_armed_there()
     {
         var n = new MenuNavigator(MenuFor(@"C:\p\photo.jpg"), 96);
-        OpenCategory(n, 3, Ms(0)); // Resize: Convert, Tools, Compress, Resize, Rotate
+        OpenCategory(n, 3, Ms(0)); // Resize: Convert, Tools, Compress, Resize, Edit
         var view = n.View(Ms(0));
         var back = RingGeometry.SectorCentre(0, view.Labels.Count, view.Start, view.FirstSweep);
         Move(n, At(back, 50), Ms(300));
@@ -177,7 +181,7 @@ public sealed class MenuNavigatorTests
         n.Shown(0, 0, Ms(350), 96);
         Assert.Null(n.Open);
         OpenCategory(n, 4, Ms(500));                   // and another category opens from there
-        Assert.Equal("rotate", n.Open!.Category.Id);
+        Assert.Equal(ImageCapabilities.EditCategory, n.Open!.Category.Id);
     }
 
     [Fact]

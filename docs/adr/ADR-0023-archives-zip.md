@@ -12,7 +12,7 @@
 ## Decision
 1. **ZIP first, with no third-party code:** `System.IO.Compression.ZipArchive` in a new disposable worker, `WinTools.Worker.Archive`, run like the other workers.
    - TAR, TAR.GZ and GZIP (`System.Formats.Tar`, `GZipStream`) come next.
-   - 7z and RAR extraction need SharpCompress (D3) and its own review.
+   - 7z and RAR extraction need SharpCompress (D3) and its own review. (Done: ADR-0030.)
 2. **Commands:**
    - "Archive" category on a `.zip`: Extract to folder, Test, ZIP info.
    - "Add to ZIP" for any files and folders, last in the shared Tools, so no other menu gains a ring sector.

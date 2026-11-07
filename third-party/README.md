@@ -11,6 +11,7 @@ every file here (except this one) into `THIRD-PARTY-NOTICES.txt` in the installe
 | `qpdf/` | libjpeg-turbo, statically linked into qpdf | 3.2.0 | IJG and BSD-3-Clause | `share/libjpeg-turbo/copyright`, same archive |
 | `qpdf/` | OpenSSL, statically linked into qpdf | 3.6.4 | Apache-2.0 | `share/openssl/copyright`, same archive |
 | `dotnet/` | .NET runtime and Windows Desktop runtime (self-contained in the installer) | 10.0.13 | MIT; the notices of the libraries they include | `LICENSE.TXT` and `THIRD-PARTY-NOTICES.TXT` of the runtime packs the payload is published with (Microsoft.NETCore.App.Runtime.win-x64, Microsoft.WindowsDesktop.App.Runtime.win-x64) |
+| `sharpcompress/` | SharpCompress (archive worker, ADR-0030) | 0.50.7 | MIT; RAR decoder under the unRAR licence; Ms-PL, Apache-2.0 and MIT parts | `LICENSE.txt` at tag 0.50.7 of github.com/adamhathcock/sharpcompress; `NOTICE.md` written from its source headers and `reference/unrar/license.txt`; `ms-pl.txt` and `apache-2.0.txt` from GitHub's licence list |
 | `skiasharp/` | SkiaSharp and its native library (image worker) | 4.153.1 | MIT; the libraries in its notices file | `LICENSE.txt` of the SkiaSharp package; `THIRD-PARTY-NOTICES.txt` of SkiaSharp.NativeAssets.Win32 |
 | `markdig/` | Markdig (text worker, ADR-0033) | 1.4.0 | BSD-2-Clause | `license.txt` at tag 1.4.0 of github.com/xoofx/markdig |
 
