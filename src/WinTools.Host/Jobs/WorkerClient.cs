@@ -47,6 +47,9 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IJobM
 
     public const int MaxRestartsPerLane = 3;
 
+    /// <summary>How many times a killed job's temp folder is tried, 250 ms apart.</summary>
+    private const int DeleteAttempts = 8;
+
     /// <summary>How long a worker that was sent a cancel message may take to answer before it is killed.</summary>
     public static readonly TimeSpan CancelGrace = TimeSpan.FromSeconds(1);
 
@@ -254,9 +257,18 @@ internal sealed class WorkerClient(string workerPath, TimeSpan jobTimeout, IJobM
     {
         foreach (var temp in module.TempPathsOf(request))
         {
-            // A module's staging folder (Split's pages) has the temp file's deterministic name; it is never a result.
-            try { if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true); else File.Delete(temp); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { }
+            // A module's staging folder (Split's pages) has the temp file's deterministic name; it is never a result. A
+            // grandchild killed with the worker (LibreOffice) may hold its files a moment longer, so a folder is tried again.
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true); else File.Delete(temp);
+                    break;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < DeleteAttempts && Directory.Exists(temp)) { Thread.Sleep(250); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { break; }
+            }
         }
     }
 

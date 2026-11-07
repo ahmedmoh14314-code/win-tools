@@ -202,13 +202,20 @@ public partial class MainWindow : Window
             });
     }
 
-    /// <summary>Every command, grouped by what it works on, in the language in use: what is listed is what the wheel offers.</summary>
+    /// <summary>
+    /// Every command, grouped by what it works on, in the language in use: what is listed is what the wheel offers. A
+    /// command that needs a program the user installs is listed only when it was found; otherwise the page says what it
+    /// needs (ADR-0033: "Office to PDF needs LibreOffice (free), which was not found on this PC").
+    /// </summary>
     private void BuildFeatures()
     {
-        var catalog = CapabilityResolver.For(null).Catalog;
+        var libreOffice = WinTools.Windows.Shell.InstalledPrograms.LibreOffice();
+        var catalog = CapabilityResolver.For(null, ExternalPrograms.Set(libreOffice)).Catalog;
         foreach (var group in catalog.GroupBy(c => c.Module))
         {
             FeatureList.Children.Add(new TextBlock { Text = UiText.TOr("module." + group.Key, group.Key), Style = (Style)FindResource("SectionTitle") });
+            if (group.Key == DocumentCapabilities.Module && libreOffice is null)
+                FeatureList.Children.Add(new TextBlock { Text = UiText.T("features.libreOfficeMissing"), Style = (Style)FindResource("Hint"), Margin = new Thickness(0, 0, 0, 6) });
             var wrap = new WrapPanel();
             foreach (var c in group)
                 wrap.Children.Add(new Border

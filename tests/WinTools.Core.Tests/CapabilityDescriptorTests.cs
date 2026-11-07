@@ -25,7 +25,7 @@ public sealed class CapabilityDescriptorTests
     }
 
     [Theory]
-    [InlineData(@"C:\p\notes.txt")]
+    [InlineData(@"C:\p\notes.log")] // .txt is a document kind since ADR-0033 (To PDF through LibreOffice)
     [InlineData(@"C:\p\archive.png.cab")] // .zip is an archive kind since V2 PR 5.1, .rar and .7z since ADR-0030; .cab is not
     [InlineData(@"C:\p\no-extension")]
     [InlineData(@"C:\p\trailing.")]

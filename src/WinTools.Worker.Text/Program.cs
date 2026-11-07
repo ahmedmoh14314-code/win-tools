@@ -15,8 +15,10 @@ internal static class Program
         using var input = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false), false, 4096);
         using var output = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
         // One worker for the text-only modules: General Files and Subtitles (V2 plan §6).
+        // Office to PDF (ADR-0033) runs the user's LibreOffice from here, as a child process.
         WorkerLoop.Run(input, output, r => r.CapabilityId.StartsWith("subtitles.", StringComparison.Ordinal) ? SubtitleJobs.Run(r)
-            : r.CapabilityId.StartsWith("documents.", StringComparison.Ordinal) ? DocumentJobs.Run(r) : FileJobs.Run(r));
+            : r.CapabilityId.StartsWith("documents.", StringComparison.Ordinal) ? DocumentJobs.Run(r)
+            : r.CapabilityId.StartsWith("office.", StringComparison.Ordinal) ? OfficeJobs.Run(r) : FileJobs.Run(r));
         return 0;
     }
 

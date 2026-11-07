@@ -24,19 +24,20 @@ internal static class DocumentJobs
     private const int ErrorFileExists = unchecked((int)0x80070050), ErrorAlreadyExists = unchecked((int)0x800700B7);
     private const FileAttributes RecallOnOpen = (FileAttributes)0x00040000, RecallOnDataAccess = (FileAttributes)0x00400000;
 
-    private sealed class DocFailure(ErrorCode code, string message) : Exception(message)
+    internal sealed class DocFailure(ErrorCode code, string message) : Exception(message)
     {
         public ErrorCode Code { get; } = code;
     }
 
-    private enum Kind { Word, Excel, PowerPoint }
+    internal enum Kind { Word, Excel, PowerPoint }
 
     public static JobResult Run(JobRequest request)
     {
         var id = request.Id;
         if (id is not { Length: > 0 and <= 64 } || id.Any(c => !char.IsAsciiLetterOrDigit(c)))
             return JobResult.Fail("invalid", ErrorCode.InvalidRequest, "Request id must be 1-64 ASCII letters or digits.");
-        if (request.CapabilityId is not (DocumentCapabilities.ExtractTextId or DocumentCapabilities.InfoId or DocumentCapabilities.RemovePropertiesId))
+        if (request.CapabilityId is not (DocumentCapabilities.ExtractTextId or DocumentCapabilities.InfoId or DocumentCapabilities.RemovePropertiesId
+            or DocumentCapabilities.ToXlsxId or DocumentCapabilities.ToCsvId or DocumentCapabilities.ToHtmlId))
             return JobResult.Fail(id, ErrorCode.UnsupportedOperation, "This worker does not run that command.");
         if (request.Parameters is { Count: > 0 }) return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters.");
         if (request.Inputs is not [var path] || !PathPolicy.IsSupported(path) || Path.EndsInDirectorySeparator(path))
@@ -45,6 +46,8 @@ internal static class DocumentJobs
             return JobResult.Fail(id, ErrorCode.InvalidRequest, "The output folder must be a canonical, fully qualified path.");
         try
         {
+            // CSV, TSV and Markdown are text, not packages (ADR-0033).
+            if (request.CapabilityId is DocumentCapabilities.ToXlsxId or DocumentCapabilities.ToHtmlId) return ConvertJobs.FromText(request, path);
             var kind = FileKinds.IdentifyByName(path) switch
             {
                 var k when k == FileKinds.Docx => Kind.Word,
@@ -57,10 +60,13 @@ internal static class DocumentJobs
             {
                 DocumentCapabilities.InfoId => Info(id, zip, kind),
                 DocumentCapabilities.ExtractTextId => ExtractText(request, path, zip, kind),
+                DocumentCapabilities.ToCsvId => kind == Kind.Excel ? ConvertJobs.ToCsv(request, path, zip)
+                    : throw new DocFailure(ErrorCode.UnsupportedContent, "Only an Excel workbook has sheets to write as CSV."),
                 _ => RemoveProperties(request, path, zip, kind),
             };
         }
         catch (DocFailure ex) { return JobResult.Fail(id, ex.Code, ex.Message); }
+        catch (Csv.Problem ex) { return JobResult.Fail(id, ex.Limit ? ErrorCode.LimitExceeded : ErrorCode.DecodeFailed, ex.Message); }
         catch (XmlException) { return JobResult.Fail(id, ErrorCode.DecodeFailed, "A part of the document is not valid XML (or declares a DTD, which is never read)."); }
         catch (InvalidDataException) { return JobResult.Fail(id, ErrorCode.DecodeFailed, "The document's package is damaged."); }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return JobResult.Fail(id, ErrorCode.SourceNotFound, "The file is no longer there."); }
@@ -69,7 +75,7 @@ internal static class DocumentJobs
     }
 
     /// <summary>Opens the package after the checks every archive passes, and checks it is the kind its name says.</summary>
-    private static ZipArchive Open(string path, Kind kind)
+    internal static ZipArchive Open(string path, Kind kind)
     {
         if (Directory.Exists(path)) throw new DocFailure(ErrorCode.IsAFolder, "It is a folder.");
         var info = new FileInfo(path);
@@ -149,7 +155,7 @@ internal static class DocumentJobs
     private static string Name(Kind kind) => kind switch { Kind.Word => "Word document", Kind.Excel => "Excel workbook", _ => "PowerPoint presentation" };
 
     /// <summary>A part's text, bounded; null when the part is not there.</summary>
-    private static string? ReadPart(ZipArchive zip, string name)
+    internal static string? ReadPart(ZipArchive zip, string name)
     {
         var entry = zip.GetEntry(name);
         if (entry is null) return null;
@@ -166,18 +172,21 @@ internal static class DocumentJobs
     }
 
     /// <summary>An XML reader that reads no DTD, resolves nothing and stops at <see cref="MaxPartChars"/>.</summary>
-    private static XmlReader Xml(string text) => XmlReader.Create(new StringReader(text), new XmlReaderSettings
+    internal static XmlReader Xml(string text) => Xml(new StringReader(text), MaxPartChars);
+
+    /// <summary>The same reader over any text, with its own limit (0: none, for a part this worker wrote itself).</summary>
+    internal static XmlReader Xml(TextReader text, long maxChars) => XmlReader.Create(text, new XmlReaderSettings
     {
         DtdProcessing = DtdProcessing.Prohibit,
         XmlResolver = null,
-        MaxCharactersInDocument = MaxPartChars,
+        MaxCharactersInDocument = maxChars,
         MaxCharactersFromEntities = 0,
         IgnoreComments = true,
         IgnoreProcessingInstructions = true,
     });
 
     /// <summary>The parts named prefix + N + ".xml", in number order (slide10 after slide9).</summary>
-    private static IEnumerable<(int Number, string Name)> Numbered(ZipArchive zip, string prefix) =>
+    internal static IEnumerable<(int Number, string Name)> Numbered(ZipArchive zip, string prefix) =>
         zip.Entries.Select(e => e.FullName)
             .Where(n => n.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && n.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)
                 && int.TryParse(n.AsSpan(prefix.Length, n.Length - prefix.Length - 4), NumberStyles.None, CultureInfo.InvariantCulture, out _))
@@ -295,7 +304,7 @@ internal static class DocumentJobs
     }
 
     /// <summary>The zero-based column of a cell reference ("C2" is 2), or null.</summary>
-    private static int? ColumnOf(string? reference)
+    internal static int? ColumnOf(string? reference)
     {
         if (string.IsNullOrEmpty(reference)) return null;
         var column = 0;
@@ -331,7 +340,7 @@ internal static class DocumentJobs
     /// Writes the output to an exclusive hidden temp, checks it, carries the source's zone and claims the first free
     /// candidate name; the temp never survives a failure.
     /// </summary>
-    private static JobResult Commit(JobRequest request, string source, IEnumerable<string> candidates, Action<FileStream> write, Func<string, bool> valid, IReadOnlyList<JobFact> facts)
+    internal static JobResult Commit(JobRequest request, string source, IEnumerable<string> candidates, Action<FileStream> write, Func<string, bool> valid, IReadOnlyList<JobFact> facts)
     {
         var dir = new DirectoryInfo(request.OutputDirectory ?? Path.GetDirectoryName(source)!);
         if (!dir.Exists) return JobResult.Fail(request.Id, request.OutputDirectory is null ? ErrorCode.SourceNotFound : ErrorCode.OutputDirectoryNotWritable, "The destination folder does not exist.");
@@ -476,7 +485,7 @@ internal static class DocumentJobs
         return names;
     }
 
-    private static ZipArchiveEntry? Find(ZipArchive zip, string name) =>
+    internal static ZipArchiveEntry? Find(ZipArchive zip, string name) =>
         zip.Entries.FirstOrDefault(e => string.Equals(e.FullName, name, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
