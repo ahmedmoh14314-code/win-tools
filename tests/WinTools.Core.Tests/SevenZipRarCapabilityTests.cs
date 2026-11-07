@@ -34,19 +34,18 @@ public sealed class SevenZipRarCapabilityTests
     }
 
     [Fact]
-    public void A_refused_part_names_its_likely_reason_in_both_languages_and_batch_rename_keeps_its_own()
+    public void Only_a_split_archive_is_called_one_in_either_language()
     {
         var extract = ArchiveCapabilities.Catalog.Single(c => c.Id == ArchiveCapabilities.ExtractId);
-        var rename = FilesCapabilities.Catalog.Single(c => c.Id == FilesCapabilities.RenameId);
         try
         {
             UiText.Use("en");
-            Assert.Contains("split into several files", FeedbackText.Reason(ErrorCode.UnsupportedContent, LocalWords.For(extract)), StringComparison.Ordinal);
+            Assert.Contains("split into several files", FeedbackText.Reason(ErrorCode.SplitArchive, LocalWords.For(extract)), StringComparison.Ordinal);
+            // A TAR's sparse entry or a 7z's unknown method is not a split archive.
+            Assert.DoesNotContain("split", FeedbackText.Reason(ErrorCode.UnsupportedContent, LocalWords.For(extract)), StringComparison.Ordinal);
             UiText.Use("ar");
-            var arabic = FeedbackText.Reason(ErrorCode.UnsupportedContent, LocalWords.For(extract));
-            Assert.Equal(UiText.T("reason.archive.UnsupportedContent"), arabic);
-            Assert.Contains("مقسّم", arabic, StringComparison.Ordinal);
-            Assert.Equal(UiText.T("reason.rename.NoFreeOutputName"), FeedbackText.Reason(ErrorCode.NoFreeOutputName, LocalWords.For(rename)));
+            Assert.Contains("مقسّم", FeedbackText.Reason(ErrorCode.SplitArchive, LocalWords.For(extract)), StringComparison.Ordinal);
+            Assert.DoesNotContain("مقسّم", FeedbackText.Reason(ErrorCode.UnsupportedContent, LocalWords.For(extract)), StringComparison.Ordinal);
         }
         finally { UiText.Use("en"); }
     }
@@ -60,6 +59,7 @@ public sealed class SevenZipRarCapabilityTests
     [InlineData("No errors in the files that could be checked", "لا أخطاء في الملفات التي أمكن فحصها")]
     [InlineData("No errors: every file's check value matches", "لا أخطاء: قيمة الفحص لكل ملف مطابقة")]
     [InlineData("Password-protected RAR 5 files cannot all be checked for damage", "لا يمكن فحص كل ملفات RAR 5 المحمية بكلمة مرور بحثًا عن التلف")]
+    [InlineData("The end of this old RAR archive could not be confirmed; files may be missing", "تعذّر التأكد من نهاية أرشيف RAR القديم هذا؛ قد تكون بعض الملفات مفقودة")]
     [InlineData("One part of an archive split into several files, which WinTools does not extract yet", "جزء من أرشيف مقسّم إلى عدة ملفات، ولا يستخرج WinTools هذا النوع بعد")]
     public void What_info_and_test_say_about_a_7z_or_rar_reads_in_arabic(string english, string arabic)
     {

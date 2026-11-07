@@ -37,15 +37,16 @@
    - **Declared sizes:** before anything is written, the headers are read and the sum of every declared size, kept or not, must meet the 20 GB and whole-archive rules, as TAR's first pass does. So a solid block that must be decompressed to skip a refused entry cannot run past the limits unseen, and an honest bomb is refused without decompressing a byte.
    - **Solid archives:** a 7z or a solid RAR is read once, in order, through one reader. The per-file ratio rule applies only to a non-solid RAR; the others have the whole-archive rule, on declared sizes first and on the bytes as they come out.
    - **Links:** RAR 5's redirections (symbolic links, junctions, hard links, file copies), reparse points, and Unix link modes (7z, RAR 4) are never created. Device modes in a 7z are skipped. Windows attributes are not read as Unix modes: `NOT_CONTENT_INDEXED` has the bits of a character device.
-   - **7z's start header:** its directory must lie inside the file. Otherwise the archive is cut short, or is the first file of a split one, and the library is not asked (also a second fence for GHSA-7jcq-g98g-83v5).
-   - **Whatever the library throws** on a hostile file is a damaged archive, never a crash. `OutOfMemoryException`, under the worker's heap limit, is `LimitExceeded`: RAR's window can be large, and an archive made with a dictionary beyond the limit is refused. This holds for entry streams too (`GuardedStream`). Our own writes stay outside it, so a full disk is still `DiskFull`.
+   - **7z's start header:** its directory must lie inside the file. Otherwise the archive is cut short, or is the first file of a split one, and the library is not asked (also a second fence for GHSA-7jcq-g98g-83v5). The CRC-32s of the start header and the directory are checked here too, before the library reads them. The library checks them as well, and checks a compressed directory's CRC-32 only when one is stored.
+   - **RAR's end:** a RAR cut at a file boundary reads as a shorter, sound archive, and the library says nothing. Extract and Test walk the headers with the library's public `RarHeaderFactory`, encrypted ones included, to the end-of-archive header. A RAR 5 without one is damaged. A RAR 4 without one may be whole (very old archives) or cut, so it succeeds only with the notice "The end of this old RAR archive could not be confirmed; files may be missing". Data after the end header is ignored, as RAR ignores it.
+   - **Whatever the library throws** on a hostile file is a damaged archive, never a crash. `OutOfMemoryException`, under the worker's heap limit, is `LimitExceeded`: RAR's window can be large, and an archive made with a dictionary beyond the limit is refused. This holds for entry streams too (`GuardedStream`). Our own writes stay outside it, so a full disk is still `DiskFull`. Closing an entry, the reader or the archive runs while such a failure unwinds, so it never throws in its place.
 5. **Passwords take ADR-0027's path, unchanged:** Extract and Test run first without one; a locked archive is refused with `PasswordRequired` before the staging folder exists, and the host asks.
    - **Encrypted names** (7z's encrypted header, RAR's `-hp`) open with the password too. Without it, Extract and Test ask; Info says "Names and contents protected with a password", with no listing.
    - **Wrong password:** RAR 5 has a check value, so `PasswordIncorrect`. 7z and RAR 4 cannot tell it from damage, so `DecodeFailed` with both in the message, as ADR-0027 does for a check value that fails.
    - **Forms:** the library takes text and makes the format's bytes itself, so ADR-0027's code-page candidates do not apply. The password is tried as typed, then in its NFKC form. A retry costs a second run, only when the first failed that way.
-6. **Split archives are refused, not guessed at:** `.part1.rar`, `.r00` and every other part give `UnsupportedContent`, with their own reason in the toast. The job was given one file, and the host believes one input; reading siblings it was not given would widen both for a rare case. Info says "One part of an archive split into several files". `.7z.001` names no kind, so the menu does not offer it; renamed to `.7z`, it is "cut short".
+6. **Split archives are refused, not guessed at:** `.part1.rar`, `.r00` and every other part give `SplitArchive`, a code of its own, so the toast says so and no other refusal does. The job was given one file, and the host believes one input; reading siblings it was not given would widen both for a rare case. Info says "One part of an archive split into several files". `.7z.001` names no kind, so the menu does not offer it; renamed to `.7z`, it is "cut short".
 7. **Batch:** Extract is `PerFile`, so several archives get one request each and one folder each, with no change.
-8. **Text:** a failure reaches the user through its error code, so `UnsupportedContent` gets the module's own reason (`reason.archive.UnsupportedContent`). `LocalWords` now looks up `reason.<module>.<code>` before Batch rename's keys. New fact values are fixed sentences, because `UiText.Value` translates whole values only.
+8. **Text:** a failure reaches the user through its error code, so a split archive has its own (`reason.SplitArchive`). New fact values are fixed sentences, because `UiText.Value` translates whole values only.
 
 ## Licences
 - SharpCompress is MIT. Its source holds no GPL, AGPL or LGPL text (GitHub code search of the repository, 2026-11-07).
@@ -75,13 +76,18 @@ The stream is steady, as ADR-0023 expected. The library runs in the disposable w
   - a damaged protected RAR 5 file can extract with wrong bytes, under the "not checked" notice, when its size stays right;
   - a RAR 5 archive without a password check value, which WinRAR does not write, could extract garbage with a wrong password, under the same notice;
   - a 7z entry with no CRC stored fails as damaged, if not empty: safe, and rare (py7zr stores one, and so does 7-Zip by default);
+  - an encrypted 7z directory that stores no CRC-32 of its own, as py7zr's does, can pass Test with a changed byte: measured, a date changed. The files' own CRC-32s still hold, and every name still passes the name policy;
   - split archives are refused.
 - A skipped entry in a solid block is still decompressed, to reach the next one: time, not disk, bounded by the declared sizes and the job limit.
 - Anti-items in a 7z are not treated specially and were not tested; whatever they become stays inside the new folder.
 - The worker grows by `SharpCompress.dll` (2.4 MB), with no dependency of its own on .NET 10.
 
 ## Evaluator review
-None yet: this ADR goes to review with its PR.
+One round on PR #42 (2026-11-07), all fixed test-first:
+- **A RAR cut at a file boundary passed:** 20 of 353 cuts of `rar5.rar` and 46 of 382 of `rar4.rar`, and Extract committed 2 of 4 files as a success.
+- **A 7z's header checksums:** the worker now checks them itself. Measured afterwards: the library already refused a changed name in a plain directory, so this is a second fence. The real gap that remains is below (Consequences).
+- **The split-archive reason was shown for every unsupported archive**, TAR's included.
+- **Closing an entry could replace `DiskFull` or `LimitExceeded` with "damaged".**
 
 ## Evidence / experiments
 - `tests/WinTools.Worker.Tests/SevenZipRarWorkerTests.cs` on WinRAR 6.24's and py7zr 1.1.4's samples (`tests/samples/README.md`): RAR 4, RAR 5, solid and not, 7z; hostile names (7z from the library's writer, RAR by rewriting WinRAR's headers); links, junctions and hard links; a per-file bomb, a declared bomb, a declared 4 GB; truncation; damage only a CRC can see; every password case; Arabic and NFKC passwords; parts of split archives; a fake extension; no overwrite; the real worker process with three archives in a batch.

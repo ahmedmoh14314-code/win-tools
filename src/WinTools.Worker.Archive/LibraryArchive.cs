@@ -4,6 +4,8 @@ using SharpCompress.Archives.Rar;
 using SharpCompress.Archives.SevenZip;
 using SharpCompress.Common;
 using SharpCompress.Common.Rar;
+using SharpCompress.Common.Rar.Headers;
+using SharpCompress.IO;
 using SharpCompress.Readers;
 using WinTools.Core.Files;
 using WinTools.Core.Jobs;
@@ -12,6 +14,47 @@ namespace WinTools.Worker.Archive;
 
 internal static partial class ArchiveJobs
 {
+    /// <summary>A 7z or RAR entry's data, with what the library throws while reading it translated.</summary>
+    internal static Stream GuardedEntry(Stream inner, Func<Exception, Exception> translate) => new GuardedStream(inner, translate);
+
+    private sealed class GuardedStream(Stream inner, Func<Exception, Exception> translate) : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
+
+        public override int Read(Span<byte> buffer)
+        {
+            try { return inner.Read(buffer); }
+            catch (Exception ex) when (ex is not ArchiveFailure) { throw translate(ex); }
+        }
+
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        /// <summary>
+        /// Closing runs while a failure unwinds (a full disk, a limit), and what it threw would replace that failure. The
+        /// entry's bytes and check value were judged as they were read, so closing has nothing left to say.
+        /// </summary>
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) CloseQuietly(inner);
+            base.Dispose(disposing);
+        }
+    }
+
+    private static void CloseQuietly(IDisposable? library)
+    {
+        try { library?.Dispose(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { }
+    }
+
     /// <summary>Why the sizes a 7z or RAR declares are beyond the limits, or null when they are not.</summary>
     internal static string? DeclaredRefusal(long declared, long archiveBytes) =>
         declared > ArchiveLimits.MaxTotalBytes ? $"The archive declares more than {ArchiveLimits.MaxTotalBytes >> 30} GB."
@@ -32,6 +75,10 @@ internal static partial class ArchiveJobs
     /// <item>Every declared size, kept or not, is held to the size and whole-archive rules before anything is written,
     /// so a solid block that would have to be decompressed to skip a refused entry cannot run past them unseen.</item>
     /// <item>An archive in several parts is refused, never guessed at: only the dropped file is ever opened.</item>
+    /// <item>A RAR cut at a file boundary reads as a shorter, sound archive: the library stops without a word at the end
+    /// of the file. Its header walk must reach the end-of-archive header. RAR 5 always writes one; a RAR 4 without one
+    /// (very old archives) succeeds with a notice, never silently.</item>
+    /// <item>A 7z's start header and directory are checked against their CRC-32s before the library is asked.</item>
     /// <item>Whatever the library throws on a hostile file is a damaged archive (or a wrong password, or too much
     /// memory), never a crash.</item>
     /// </list>
@@ -44,6 +91,7 @@ internal static partial class ArchiveJobs
         public const string NamesProtected = "Names and contents protected with a password";
         public const string NoErrorsWhereChecked = "No errors in the files that could be checked";
         public static JobFact UncheckedNotice { get; } = new("Not checked", "Password-protected RAR 5 files cannot all be checked for damage", Notice: true);
+        public static JobFact EndNotConfirmedNotice { get; } = new("Not checked", "The end of this old RAR archive could not be confirmed; files may be missing", Notice: true);
 
         private static ReadOnlySpan<byte> SevenZipSignature => [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C];
         private static ReadOnlySpan<byte> Rar4Signature => [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00];
@@ -55,6 +103,8 @@ internal static partial class ArchiveJobs
         private readonly Kind _kind;
         private readonly bool _rar5, _hasPassword;
         private readonly long _fileLength;
+        private readonly FileStream _file;
+        private readonly ReaderOptions _options;
         private bool _prepared;
 
         /// <summary>The names are encrypted and no password was given: nothing can be listed (Info says so).</summary>
@@ -64,6 +114,10 @@ internal static partial class ArchiveJobs
         public bool IsMultiPart { get; }
 
         public bool IsSolid { get; }
+
+        /// <summary>A RAR 4 without an end-of-archive header: it may be whole, or cut at a file boundary (after <see cref="Prepare"/>).</summary>
+        public bool EndNotConfirmed { get; private set; }
+
         private bool AnyEncrypted { get; }
         private long DeclaredBytes { get; }
 
@@ -92,10 +146,10 @@ internal static partial class ArchiveJobs
 
         public LibraryArchive(FileStream file, Kind kind, bool rar5, string? password)
         {
-            (_kind, _rar5, _hasPassword, _fileLength) = (kind, rar5, password is not null, file.Length);
+            (_kind, _rar5, _hasPassword, _fileLength, _file) = (kind, rar5, password is not null, file.Length, file);
             if (kind == Kind.SevenZip) CheckSevenZipEnd(file);
             file.Position = 0;
-            var options = new ReaderOptions { Password = password, LeaveStreamOpen = true, LookForHeader = false };
+            var options = _options = new ReaderOptions { Password = password, LeaveStreamOpen = true, LookForHeader = false };
             try
             {
                 _archive = Guard(() => kind == Kind.SevenZip ? SevenZipArchive.OpenArchive(file, options) : (IArchive)RarArchive.OpenArchive(file, options), encrypted: true);
@@ -126,13 +180,13 @@ internal static partial class ArchiveJobs
             catch (ArchiveFailure ex) when (ex.Code == ErrorCode.PasswordRequired)
             {
                 // The names themselves are encrypted (7z's encrypted header, RAR's "-hp"): nothing to list without the password.
-                _archive?.Dispose();
+                CloseQuietly(_archive);
                 _archive = null;
                 NamesHidden = true;
             }
             catch
             {
-                _archive?.Dispose();
+                CloseQuietly(_archive);
                 throw;
             }
         }
@@ -140,7 +194,8 @@ internal static partial class ArchiveJobs
         /// <summary>
         /// A 7z names where its directory is in a 32-byte start header. One that points past the end of the file is cut
         /// short, or is the first file of an archive split into several (".7z.001"). Checked before the library reads it,
-        /// which also keeps its allocation of the directory to what the file holds (GHSA-7jcq-g98g-83v5).
+        /// which also keeps its allocation of the directory to what the file holds (GHSA-7jcq-g98g-83v5). The CRC-32s of
+        /// the start header and the directory are checked here as well, so a changed name or attribute never reaches it.
         /// </summary>
         private static void CheckSevenZipEnd(FileStream file)
         {
@@ -153,6 +208,20 @@ internal static partial class ArchiveJobs
             var room = (ulong)file.Length - 32;
             if (offset > room || size > room - offset)
                 throw new ArchiveFailure(ErrorCode.DecodeFailed, "The archive is cut short, or is the first part of an archive split into several files, which WinTools does not read.");
+            if (Crc32.Of(start[12..]) != BinaryPrimitives.ReadUInt32LittleEndian(start[8..]))
+                throw new ArchiveFailure(ErrorCode.DecodeFailed, "The archive is damaged (its start header's check value does not match).");
+            file.Position = 32 + (long)offset;
+            var directory = new Crc32();
+            var buffer = new byte[1 << 16];
+            for (var left = (long)size; left > 0;)
+            {
+                var n = file.Read(buffer, 0, (int)Math.Min(left, buffer.Length));
+                if (n == 0) throw new ArchiveFailure(ErrorCode.DecodeFailed, "The archive is cut short.");
+                directory.Append(buffer.AsSpan(0, n));
+                left -= n;
+            }
+            if (directory.Value != BinaryPrimitives.ReadUInt32LittleEndian(start[28..]))
+                throw new ArchiveFailure(ErrorCode.DecodeFailed, "The archive is damaged (its directory's check value does not match).");
         }
 
         /// <summary>For Info: one fact instead of a listing when there is nothing to list, or null.</summary>
@@ -169,15 +238,29 @@ internal static partial class ArchiveJobs
         {
             if (_prepared) return;
             if (NamesHidden) throw new ArchiveFailure(ErrorCode.PasswordRequired, "The archive's names and contents are protected with a password.");
-            if (IsMultiPart) throw new ArchiveFailure(ErrorCode.UnsupportedContent, "The archive is one part of an archive split into several files, which WinTools does not extract yet.");
+            if (IsMultiPart) throw new ArchiveFailure(ErrorCode.SplitArchive, "The archive is one part of an archive split into several files, which WinTools does not extract yet.");
+            if (_kind == Kind.Rar && !Guard(ReachesEndHeader, encrypted: AnyEncrypted))
+            {
+                if (_rar5) throw new ArchiveFailure(ErrorCode.DecodeFailed, "The archive is cut short: it has no end-of-archive header, so files may be missing.");
+                EndNotConfirmed = true;
+            }
             if (DeclaredRefusal(DeclaredBytes, _fileLength) is { } why) throw new ArchiveFailure(ErrorCode.LimitExceeded, why);
             _prepared = true;
+        }
+
+        /// <summary>Walks the RAR's headers with the library's own reader, encrypted ones included, to the end header.</summary>
+        private bool ReachesEndHeader()
+        {
+            var position = _file.Position;
+            _file.Position = 0;
+            try { return new RarHeaderFactory(StreamingMode.Seekable, _options).ReadHeaders(_file).Any(h => h.HeaderType == HeaderType.EndArchive); }
+            finally { _file.Position = position; }
         }
 
         public IEnumerable<Entry> Entries(bool listing)
         {
             if (_archive is null || IsMultiPart)
-                throw new ArchiveFailure(IsMultiPart ? ErrorCode.UnsupportedContent : ErrorCode.PasswordRequired, "The archive cannot be listed.");
+                throw new ArchiveFailure(IsMultiPart ? ErrorCode.SplitArchive : ErrorCode.PasswordRequired, "The archive cannot be listed.");
             if (listing) return _archive.Entries.Select(e => Map(e, () => throw new InvalidOperationException("A listing is not read.")));
             Prepare();
             // A non-solid RAR opens each file on its own; a 7z or a solid RAR is read once, in order, through one reader.
@@ -188,12 +271,16 @@ internal static partial class ArchiveJobs
 
         private IEnumerable<Entry> Sequential(IArchive archive)
         {
-            using var reader = Guard(archive.ExtractAllEntries, encrypted: AnyEncrypted);
-            while (Guard(reader.MoveToNextEntry, encrypted: AnyEncrypted))
+            var reader = Guard(archive.ExtractAllEntries, encrypted: AnyEncrypted);
+            try
             {
-                var e = reader.Entry;
-                yield return Map(e, () => Guard(reader.OpenEntryStream, e.IsEncrypted));
+                while (Guard(reader.MoveToNextEntry, encrypted: AnyEncrypted))
+                {
+                    var e = reader.Entry;
+                    yield return Map(e, () => Guard(reader.OpenEntryStream, e.IsEncrypted));
+                }
             }
+            finally { CloseQuietly(reader); }
         }
 
         private Entry Map(IEntry e, Func<Stream> open)
@@ -202,7 +289,7 @@ internal static partial class ArchiveJobs
             if (e.IsDirectory && !name.EndsWith('/') && !name.EndsWith('\\')) name += "/";
             var encrypted = e.IsEncrypted;
             return new Entry(name, e.IsDirectory, IsLink(e), IsSpecial(e), encrypted, encrypted && !_hasPassword,
-                () => new GuardedStream(open(), this, encrypted),
+                () => GuardedEntry(open(), ex => Translate(ex, encrypted)),
                 e.IsDirectory ? 0 : e.Size,
                 // 7z: the CRC-32, which the library does not check. RAR without a password: the library checks it (CRC-32
                 // or BLAKE2). RAR 4 with one: the plain CRC-32. RAR 5 with one: a keyed value, checked when it matches.
@@ -264,34 +351,6 @@ internal static partial class ArchiveJobs
             return new(ErrorCode.DecodeFailed, "The archive is damaged.");
         }
 
-        /// <summary>An entry's data as the library decompresses it, with its exceptions translated.</summary>
-        private sealed class GuardedStream(Stream inner, LibraryArchive owner, bool encrypted) : Stream
-        {
-            public override bool CanRead => true;
-            public override bool CanSeek => false;
-            public override bool CanWrite => false;
-            public override long Length => throw new NotSupportedException();
-            public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
-
-            public override int Read(byte[] buffer, int offset, int count) => owner.Guard(() => inner.Read(buffer, offset, count), encrypted);
-            public override int Read(Span<byte> buffer)
-            {
-                try { return inner.Read(buffer); }
-                catch (Exception ex) when (ex is not ArchiveFailure) { throw owner.Translate(ex, encrypted); }
-            }
-
-            public override void Flush() { }
-            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-            public override void SetLength(long value) => throw new NotSupportedException();
-            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-            protected override void Dispose(bool disposing)
-            {
-                if (disposing) owner.Guard(() => { inner.Dispose(); return 0; }, encrypted);
-                base.Dispose(disposing);
-            }
-        }
-
-        public void Dispose() => _archive?.Dispose();
+        public void Dispose() => CloseQuietly(_archive);
     }
 }

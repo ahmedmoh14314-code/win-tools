@@ -137,7 +137,7 @@ public static class FeedbackText
             or ErrorCode.UnsupportedContent or ErrorCode.UnsupportedOperation or ErrorCode.DecodeFailed or ErrorCode.EncodeFailed
             or ErrorCode.OutputDirectoryNotWritable or ErrorCode.OutputDirectoryIsLink or ErrorCode.NoFreeOutputName or ErrorCode.DiskFull
             or ErrorCode.WorkerTimeout or ErrorCode.WorkerCrashed or ErrorCode.Cancelled or ErrorCode.InvalidRequest or ErrorCode.IsAFolder
-            or ErrorCode.ClipboardUnavailable or ErrorCode.OnlineOnly => error.ToString(),
+            or ErrorCode.ClipboardUnavailable or ErrorCode.OnlineOnly or ErrorCode.SplitArchive => error.ToString(),
         ErrorCode.OutputValidationFailed => nameof(ErrorCode.EncodeFailed),
         ErrorCode.OutputNameInvalid => nameof(ErrorCode.NoFreeOutputName),
         ErrorCode.WorkerProtocolError => nameof(ErrorCode.WorkerCrashed),

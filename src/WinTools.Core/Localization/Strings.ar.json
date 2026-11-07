@@ -360,6 +360,7 @@
   "reason.IsAFolder": "هذا مجلد؛ وهذا الأمر يعمل على الملفات.",
   "reason.ClipboardUnavailable": "برنامج آخر يستخدم الحافظة. حاول مرة أخرى.",
   "reason.OnlineOnly": "الملف مخزّن على الإنترنت فقط. افتحه مرة ليُنزّله Windows ثم حاول مرة أخرى.",
+  "reason.SplitArchive": "هذا جزء من أرشيف مقسّم إلى عدة ملفات، ولا يستخرج WinTools هذا النوع بعد.",
   "reason.Other": "حدث خطأ. لم يتغيّر الملف الأصلي.",
   "reasonm.InputTooLarge": "{0} أكبر مما يقبله هذا الأمر.",
   "reasonm.ContentMismatch": "الملف ليس {0} مهما قال اسمه.",
@@ -439,6 +440,7 @@
   "value.7z archive": "أرشيف 7z",
   "value.RAR 5 archive": "أرشيف RAR 5",
   "value.RAR 4 archive": "أرشيف RAR 4",
+  "value.The end of this old RAR archive could not be confirmed; files may be missing": "تعذّر التأكد من نهاية أرشيف RAR القديم هذا؛ قد تكون بعض الملفات مفقودة",
   "value.solid": "مضغوط ككتلة واحدة",
   "value.Contents protected with a password": "المحتوى محمي بكلمة مرور",
   "value.Names and contents protected with a password": "الأسماء والمحتوى محمية بكلمة مرور",
@@ -523,7 +525,6 @@
   "reason.rename.SourceNotFound": "لم يعد أحد الملفات موجودًا. لم يُعَد تسمية أي شيء.",
   "reason.rename.OutputValidationFailed": "تعذّر فحص الملفات بعد إعادة تسميتها. انظر في المجلد لترى أسماءها.",
   "reason.rename.Incomplete": "تعذّرت إعادة تسمية ملف أو إرجاعه، فبقي باسم يبدأ بـ \"wintools-renaming\". أعِد تسميته يدويًا.",
-  "reason.archive.UnsupportedContent": "هذا الأرشيف جزء من أرشيف مقسّم إلى عدة ملفات، أو يستخدم طريقة لا يقرؤها WinTools بعد.",
   "toast.altText": "يستخدم Windows مفتاح Alt مع مفاتيح أخرى لاختصاراته، لذلك لا يُفتح WinTools أثناء الضغط على Alt.",
   "toast.titleOne": "{0}: {1}"
 }

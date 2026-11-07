@@ -200,6 +200,147 @@ public sealed class SevenZipRarWorkerTests : IDisposable
         Assert.Equal(["huge.rar", "rar4.rar"], Everything());
     }
 
+    /// <summary>
+    /// Shorter copies of a sample, so each file boundary is among them; each one fails, or says it is unsure. With
+    /// encrypted names everything after the first headers comes in 16-byte blocks counted from the end, so those cuts
+    /// reach every boundary, and each open derives a key, so only Test runs on them.
+    /// </summary>
+    private void AssertEveryCutIsCaught(string sample, string? password, bool mayLackItsEnd)
+    {
+        var bytes = File.ReadAllBytes(_dir.CopySample(sample));
+        var blocks = sample.Contains("-names", StringComparison.Ordinal);
+        for (var length = bytes.Length - (blocks ? 16 : 1); length >= 8; length -= blocks ? 16 : 1)
+        {
+            var cut = _dir.Write("cut.rar", bytes[..length]);
+            foreach (var capability in blocks ? [ArchiveCapabilities.TestId] : new[] { ArchiveCapabilities.TestId, ArchiveCapabilities.ExtractId })
+            {
+                var r = ArchiveJobs.Run(Request(capability, cut, password));
+                if (r.Success)
+                {
+                    Assert.True(mayLackItsEnd, $"{sample} cut to {length} bytes passed {capability}");
+                    Assert.Contains(r.Facts, f => f is { Label: "Not checked", Notice: true, Value: EndNotConfirmed });
+                    foreach (var o in r.Outputs) Directory.Delete(o.Path, recursive: true);
+                }
+                Assert.Equal(new[] { "cut.rar", sample }.Order(StringComparer.Ordinal), Everything());
+            }
+        }
+    }
+
+    private const string EndNotConfirmed = "The end of this old RAR archive could not be confirmed; files may be missing";
+
+    [Theory]
+    [InlineData("rar5.rar", null)]
+    [InlineData("rar5-solid.rar", null)]
+    [InlineData("rar5-locked.rar", Right)]
+    [InlineData("rar5-locked-names.rar", Right)]
+    public void A_rar5_cut_anywhere_fails(string sample, string? password) => AssertEveryCutIsCaught(sample, password, mayLackItsEnd: false);
+
+    [Theory]
+    [InlineData("rar4.rar", null)]
+    [InlineData("rar4-solid.rar", null)]
+    [InlineData("rar4-locked.rar", Right)]
+    [InlineData("rar4-locked-names.rar", Right)]
+    public void A_rar4_cut_anywhere_fails_or_says_its_end_is_not_confirmed(string sample, string? password) => AssertEveryCutIsCaught(sample, password, mayLackItsEnd: true);
+
+    [Fact]
+    public void Data_after_the_end_of_a_rar_is_ignored_as_rar_ignores_it()
+    {
+        // RAR reads nothing past its end header, so tools may append a signature there.
+        foreach (var sample in new[] { "rar5.rar", "rar4.rar" })
+        {
+            var archive = _dir.Write("signed-" + sample, [.. File.ReadAllBytes(_dir.CopySample(sample)), .. new byte[64]]);
+            var r = ArchiveJobs.Run(Request(ArchiveCapabilities.TestId, archive));
+            Assert.True(r.Success, r.Message);
+            Assert.DoesNotContain(r.Facts, f => f.Notice);
+        }
+    }
+
+    [Theory]
+    [InlineData("7z-solid.7z", null)]
+    [InlineData("7z-link.7z", null)]
+    public void A_changed_byte_of_a_7z_never_passes_with_other_names_dates_or_content(string sample, string? password)
+    {
+        // Some bytes change nothing a user could see (an LZMA2 size field past the data, a cipher's padding): those may
+        // pass. Anything that reaches a name, a date, an attribute or the content must fail.
+        var bytes = File.ReadAllBytes(_dir.CopySample(sample));
+        var sound = Extracted(_dir.Write("sound.7z", bytes), password);
+        var failed = 0;
+        for (var at = 8; at < bytes.Length; at++)
+        {
+            var changed = (byte[])bytes.Clone();
+            changed[at] ^= 0x01;
+            var archive = _dir.Write("changed.7z", changed);
+            if (!ArchiveJobs.Run(Request(ArchiveCapabilities.TestId, archive, password)).Success) { failed++; continue; }
+            Assert.True(sound.SequenceEqual(Extracted(archive, password)), $"{sample}: byte {at} changed what comes out, and the test passed");
+        }
+        Assert.True(failed > (bytes.Length - 8) * 3 / 4, $"{sample}: only {failed} changes failed");
+    }
+
+    [Fact]
+    public void A_changed_byte_in_an_encrypted_7z_directory_is_never_a_crash_and_the_content_stays_checked()
+    {
+        // py7zr's encrypted directory carries no CRC-32 of its own, so a change can reach a date (ADR-0030, a limit of the
+        // archive). The files' CRC-32s still hold: whatever passes, no entry's content changed.
+        var bytes = File.ReadAllBytes(_dir.CopySample("7z-locked-names.7z"));
+        var sound = Extracted(_dir.Write("sound.7z", bytes), Right).Select(line => line.Split(' ')[^1]).Order(StringComparer.Ordinal);
+        for (var at = bytes.Length - 112; at < bytes.Length; at += 8)
+        {
+            var changed = (byte[])bytes.Clone();
+            changed[at] ^= 0x01;
+            var archive = _dir.Write("changed.7z", changed);
+            if (ArchiveJobs.Run(Request(ArchiveCapabilities.TestId, archive, Right)).Success)
+                Assert.Equal(sound, Extracted(archive, Right).Select(line => line.Split(' ')[^1]).Order(StringComparer.Ordinal));
+        }
+    }
+
+    /// <summary>What an archive extracts to, as text: every path, date, attribute and content hash, the folder removed.</summary>
+    private static string[] Extracted(string archive, string? password)
+    {
+        var r = ArchiveJobs.Run(Request(ArchiveCapabilities.ExtractId, archive, password));
+        Assert.True(r.Success, r.Message);
+        var folder = r.Outputs.Single().Path;
+        string[] listing = [.. Tree(folder).Select(p =>
+        {
+            var path = Path.Combine(folder, p);
+            return File.Exists(path) ? $"{p} {File.GetAttributes(path)} {File.GetLastWriteTimeUtc(path):O} {Hash(path)}" : p; // a folder made on the way has no date of its own
+        })];
+        Directory.Delete(folder, recursive: true);
+        return listing;
+    }
+
+    [Fact]
+    public void A_changed_name_in_a_plain_7z_header_fails_the_test()
+    {
+        var archive = SevenZip("names.7z", ("report.txt", "one"u8.ToArray()));
+        var bytes = File.ReadAllBytes(archive);
+        var at = bytes.AsSpan().IndexOf(Encoding.Unicode.GetBytes("report.txt"));
+        Assert.True(at > 32);
+        bytes[at] ^= 0x01;
+        var r = ArchiveJobs.Run(Request(ArchiveCapabilities.TestId, _dir.Write("renamed.7z", bytes)));
+        Assert.Equal(ErrorCode.DecodeFailed, r.Error);
+    }
+
+    [Fact]
+    public void Closing_an_entry_never_replaces_the_failure_that_stopped_it()
+    {
+        // A full disk or a limit stops ReadAll mid-entry; closing the half-read entry must not turn that into "damaged".
+        var entry = ArchiveJobs.GuardedEntry(new ThrowsOnClose(), _ => new InvalidOperationException("translated"));
+        void Stopped()
+        {
+            using (entry) throw new IOException("disk full");
+        }
+        Assert.Equal("disk full", Assert.Throws<IOException>(Stopped).Message);
+    }
+
+    private sealed class ThrowsOnClose : MemoryStream
+    {
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            throw new InvalidDataException("the block ends badly");
+        }
+    }
+
     [Fact]
     public void Declared_sizes_meet_both_the_total_and_the_whole_archive_rule()
     {
@@ -348,7 +489,7 @@ public sealed class SevenZipRarWorkerTests : IDisposable
         foreach (var capability in new[] { ArchiveCapabilities.ExtractId, ArchiveCapabilities.TestId })
         {
             var r = ArchiveJobs.Run(Request(capability, part));
-            Assert.Equal(ErrorCode.UnsupportedContent, r.Error);
+            Assert.Equal(ErrorCode.SplitArchive, r.Error);
             Assert.True(ArchiveJobModule.Instance.IsBelievable(Request(capability, part), r));
         }
         Assert.Equal(["rar5-split.part1.rar", "rar5-split.part2.rar"], Everything());
@@ -357,7 +498,7 @@ public sealed class SevenZipRarWorkerTests : IDisposable
         Assert.Contains(info.Facts, f => f is { Label: "Parts", Notice: true });
         // The toast names the reason, in both languages.
         var extract = ArchiveCapabilities.Catalog.Single(c => c.Id == ArchiveCapabilities.ExtractId);
-        Assert.Contains("split into several files", Core.Feedback.FeedbackText.Reason(ErrorCode.UnsupportedContent, extract.Words), StringComparison.Ordinal);
+        Assert.Contains("split into several files", Core.Feedback.FeedbackText.Reason(ErrorCode.SplitArchive, extract.Words), StringComparison.Ordinal);
     }
 
     [Fact]

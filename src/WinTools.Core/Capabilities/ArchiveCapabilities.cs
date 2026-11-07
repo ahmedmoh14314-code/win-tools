@@ -1,6 +1,5 @@
 using WinTools.Core.Feedback;
 using WinTools.Core.Files;
-using WinTools.Core.Jobs;
 
 namespace WinTools.Core.Capabilities;
 
@@ -38,27 +37,18 @@ public static class ArchiveCapabilities
     /// <summary>Several archives that need a password cannot share one dialog that names none of them.</summary>
     private const string DropAlone = "The archive is protected with a password. Drop it on its own to type the password.";
 
-    /// <summary>
-    /// What "not supported" means for an archive (ADR-0030): most often one part of an archive split into several files,
-    /// which is refused rather than guessed at; otherwise a method no reader here knows.
-    /// </summary>
-    private static readonly IReadOnlyDictionary<ErrorCode, string> ArchiveReasons = new Dictionary<ErrorCode, string>
-    {
-        [ErrorCode.UnsupportedContent] = "The archive is one part of an archive split into several files, or uses a method WinTools cannot read yet.",
-    };
-
     public static IReadOnlyList<CapabilityDescriptor> Catalog { get; } =
     [
         new(ExtractId, "Extract to folder", "archive", Module, new InputRule(ZipOnly), CapabilityShape.PerFile, CapabilityOutput.Folder,
-            LongRunning: true, Feedback: new("Extracting", "extract", "Extracted", "Nothing to extract", "archive", "archives", PasswordRequired: DropAlone, Reasons: ArchiveReasons),
+            LongRunning: true, Feedback: new("Extracting", "extract", "Extracted", "Nothing to extract", "archive", "archives", PasswordRequired: DropAlone),
             Prompt: ArchivePassword),
         new(TestId, "Test", "archive", Module, new InputRule(ZipOnly), CapabilityShape.PerFile, CapabilityOutput.Facts,
-            LongRunning: true, Feedback: new("Testing", "test", "Tested", "Nothing to test", "archive", "archives", PasswordRequired: DropAlone, Reasons: ArchiveReasons),
+            LongRunning: true, Feedback: new("Testing", "test", "Tested", "Nothing to test", "archive", "archives", PasswordRequired: DropAlone),
             Prompt: ArchivePassword),
         new(DecompressId, "Decompress", "archive", Module, new InputRule(GzipOnly), CapabilityShape.PerFile, CapabilityOutput.File,
             LongRunning: true, Feedback: new("Decompressing", "decompress", "Decompressed", "Nothing to decompress", "file", "files")),
         new(InfoId, "Archive info", "archive", Module, new InputRule(ZipOnly), CapabilityShape.PerFile, CapabilityOutput.Facts,
-            LongRunning: false, Feedback: new("Reading", "read", "Read", "Nothing needed doing", "archive", "archives", Reasons: ArchiveReasons)),
+            LongRunning: false, Feedback: new("Reading", "read", "Read", "Nothing needed doing", "archive", "archives")),
         new(ZipId, "Add to ZIP", "actions", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.File,
             LongRunning: true, Feedback: new("Compressing", "compress", "ZIP created", "Nothing to add", "item", "items")),
     ];

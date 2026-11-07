@@ -360,6 +360,7 @@
   "reason.IsAFolder": "It is a folder; this command works on files.",
   "reason.ClipboardUnavailable": "Another program is using the clipboard. Try again.",
   "reason.OnlineOnly": "The file is stored online only. Open it once so Windows downloads it, then try again.",
+  "reason.SplitArchive": "This is one part of an archive split into several files, which WinTools does not extract yet.",
   "reason.Other": "Something went wrong. The original is unchanged.",
   "reasonm.InputTooLarge": "The {0} is larger than this command accepts.",
   "reasonm.ContentMismatch": "The file is not a {0}, whatever its name says.",
@@ -439,6 +440,7 @@
   "value.7z archive": "7z archive",
   "value.RAR 5 archive": "RAR 5 archive",
   "value.RAR 4 archive": "RAR 4 archive",
+  "value.The end of this old RAR archive could not be confirmed; files may be missing": "The end of this old RAR archive could not be confirmed; files may be missing",
   "value.solid": "solid",
   "value.Contents protected with a password": "Contents protected with a password",
   "value.Names and contents protected with a password": "Names and contents protected with a password",
@@ -523,7 +525,6 @@
   "reason.rename.SourceNotFound": "A file is no longer there. Nothing was renamed.",
   "reason.rename.OutputValidationFailed": "The renamed files could not be checked afterwards. Look at the folder to see their names.",
   "reason.rename.Incomplete": "A file could not be renamed or put back, and keeps a name starting with \"wintools-renaming\". Rename it back by hand.",
-  "reason.archive.UnsupportedContent": "The archive is one part of an archive split into several files, or uses a method WinTools cannot read yet.",
   "toast.altText": "Windows uses Alt with keys for its own shortcuts, so WinTools does not open while Alt is held.",
   "toast.titleOne": "{0} {1}"
 }

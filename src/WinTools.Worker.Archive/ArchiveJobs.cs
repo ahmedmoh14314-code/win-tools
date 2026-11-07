@@ -462,13 +462,14 @@ internal static partial class ArchiveJobs
             {
                 Kind.Tar => "No errors: every header checksum matches (TAR keeps no check values for the data)",
                 Kind.TarGz => "No errors: every header checksum and the GZIP check value match",
-                _ when pass.Unchecked > 0 => LibraryArchive.NoErrorsWhereChecked,
+                _ when pass.Unchecked > 0 || source.Library is { EndNotConfirmed: true } => LibraryArchive.NoErrorsWhereChecked,
                 _ => "No errors: every file's check value matches",
             }),
             new("Checked", $"{pass.Files:N0} files, {FeedbackText.Size(pass.Bytes)}"),
         };
         if (pass.Skipped > 0) facts.Add(new("Not checked", $"{pass.Skipped:N0} entries (links, devices or unsafe names)", Notice: true));
         if (pass.Unchecked > 0) facts.Add(LibraryArchive.UncheckedNotice);
+        if (source.Library is { EndNotConfirmed: true }) facts.Add(LibraryArchive.EndNotConfirmedNotice);
         return JobResult.WithFacts(id, facts);
     }
 
@@ -598,6 +599,7 @@ internal static partial class ArchiveJobs
                     if (pass.Skipped > 0) facts.Add(new("Skipped", $"{pass.Skipped:N0} entries not extracted (links, devices, unsafe or clashing names)", Notice: true));
                     if (pass.Renamed > 0) facts.Add(new("Renamed", $"{pass.Renamed:N0} names changed to be valid on Windows", Notice: true));
                     if (pass.Unchecked > 0) facts.Add(LibraryArchive.UncheckedNotice);
+                    if (source.Library is { EndNotConfirmed: true }) facts.Add(LibraryArchive.EndNotConfirmedNotice);
                     return new JobResult(request.Id, true, ErrorCode.None, null, [new JobOutput(candidate, shape)], facts);
                 }
             }
