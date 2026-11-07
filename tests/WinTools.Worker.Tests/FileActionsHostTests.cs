@@ -162,6 +162,98 @@ public sealed partial class FileActionsHostTests : IDisposable
     }
 
     [Fact]
+    public async Task A_write_just_before_the_original_is_removed_is_never_lost()
+    {
+        // Review, #41: the original was let go before its removal, so a write in that gap went with it.
+        var src = Write(Path.Combine(Dir("src"), "a.txt"), "first");
+        var dest = Dir("dest");
+        var wrote = false;
+        var r = await Run(Request(FilesCapabilities.MoveToId, src, dest), new TransferHooks(CrossVolume: true, BeforeSourceRemoved: s =>
+        {
+            try { File.WriteAllText(s, "a later edit"); wrote = true; }
+            catch (IOException) { } // refused: the original is still held
+        }));
+        Assert.False(wrote, "a writer must still be kept out when the original is removed");
+        Assert.True(r.Success, r.Message);
+        Assert.False(File.Exists(src));
+        Assert.Equal("first", File.ReadAllText(Path.Combine(dest, "a.txt")));
+    }
+
+    [Fact]
+    public async Task A_file_added_to_a_folder_during_its_move_keeps_the_original()
+    {
+        // Review, #41: the tree was listed once and the original deleted whole, so this file was lost behind a success.
+        var item = MakeTree(Path.Combine(Dir("src"), "photos"));
+        var expected = Tree(item);
+        var dest = Dir("dest");
+        var r = await Run(Request(FilesCapabilities.MoveToId, item, dest), new TransferHooks(CrossVolume: true,
+            AfterCopy: _ => File.WriteAllText(Path.Combine(item, "new.txt"), "made during the copy")));
+        Assert.Equal(ErrorCode.Incomplete, r.Error);
+        Assert.Equal("made during the copy", File.ReadAllText(Path.Combine(item, "new.txt")));
+        Assert.Equal(expected, Tree(Path.Combine(dest, "photos"))); // the checked copy stays
+        Assert.Empty(Directory.EnumerateDirectories(Path.Combine(_dir.Path, "src"), "~wintools-*"));
+    }
+
+    [Theory]
+    [InlineData("edit")]
+    [InlineData("add file")]
+    [InlineData("add folder")]
+    [InlineData("remove")]
+    public async Task A_folder_changed_after_its_check_keeps_the_original(string change)
+    {
+        var item = MakeTree(Path.Combine(Dir("src"), "photos"));
+        var expected = Tree(item);
+        var dest = Dir("dest");
+        var r = await Run(Request(FilesCapabilities.MoveToId, item, dest), new TransferHooks(CrossVolume: true, BeforeSourceRemoved: aside =>
+        {
+            if (change == "edit") File.WriteAllText(Path.Combine(aside, "a.txt"), "edited after the check");
+            else if (change == "add file") File.WriteAllText(Path.Combine(aside, "sub", "new.txt"), "new");
+            else if (change == "add folder") Directory.CreateDirectory(Path.Combine(aside, "sub", "new"));
+            else File.Delete(Path.Combine(aside, "a.txt"));
+        }));
+        Assert.Equal(ErrorCode.Incomplete, r.Error);
+        Assert.True(Directory.Exists(item)); // back under its own name, nothing deleted
+        Assert.Equal(expected, Tree(Path.Combine(dest, "photos")));
+        if (change == "edit") Assert.Equal("edited after the check", File.ReadAllText(Path.Combine(item, "a.txt")));
+        if (change == "add file") Assert.True(File.Exists(Path.Combine(item, "sub", "new.txt")));
+        if (change == "add folder") Assert.True(Directory.Exists(Path.Combine(item, "sub", "new")));
+    }
+
+    [Theory]
+    [InlineData(FilesCapabilities.MoveToId, true)]
+    [InlineData(FilesCapabilities.MoveToId, false)]
+    [InlineData(FilesCapabilities.CopyToId, true)]
+    [InlineData(FilesCapabilities.CopyToId, false)]
+    public async Task A_folder_into_itself_under_another_name_is_refused(string capability, bool aliasOnTheItem)
+    {
+        // Review, #41: the strings differ, so the copy landed inside the source, and a move then deleted both.
+        var root = Path.Combine(Dir("src"), "photos");
+        var item = MakeTree(root);
+        var expected = Tree(item);
+        var inside = Path.Combine(root, "sub");
+        var alias = (string path) => $@"\\localhost\{path[0]}${path[2..]}";
+        if (!Directory.Exists(alias(root))) return; // no administrative share on this machine
+        var r = await Run(Request(capability, aliasOnTheItem ? alias(root) + Path.DirectorySeparatorChar : item, aliasOnTheItem ? inside : alias(inside)));
+        Assert.Equal(ErrorCode.UnsupportedOperation, r.Error);
+        Assert.Equal(expected, Tree(item));
+        Assert.Empty(Directory.EnumerateDirectories(inside, "~wintools-*"));
+        Assert.Equal(["b.txt", "deeper", "ro.txt"], Names(inside));
+    }
+
+    [Fact]
+    public async Task A_folder_whose_identity_cannot_be_read_is_not_moved_but_may_be_copied()
+    {
+        var item = MakeTree(Path.Combine(Dir("src"), "photos"));
+        var expected = Tree(item);
+        var dest = Dir("dest");
+        var hooks = new TransferHooks(IdentityOf: _ => null);
+        Assert.Equal(ErrorCode.InvalidRequest, (await Run(Request(FilesCapabilities.MoveToId, item, dest), hooks)).Error);
+        Assert.Equal(expected, Tree(item));
+        Assert.Empty(Names(dest));
+        Assert.True((await Run(Request(FilesCapabilities.CopyToId, item, dest), hooks)).Success);
+    }
+
+    [Fact]
     public async Task A_copy_that_does_not_match_is_removed_and_the_original_kept()
     {
         var src = Write(Path.Combine(Dir("src"), "a.txt"), "original content");

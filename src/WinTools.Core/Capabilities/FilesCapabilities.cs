@@ -43,7 +43,8 @@ public static class FilesCapabilities
         [Jobs.ErrorCode.OutputValidationFailed] = "The copy did not match the original, so it was removed. The original is unchanged.",
         [Jobs.ErrorCode.UnsupportedOperation] = "A folder cannot go into itself. Nothing was changed.",
         [Jobs.ErrorCode.LimitExceeded] = "The folder holds links or junctions, which are not moved between drives. The original is unchanged.",
-        [Jobs.ErrorCode.Incomplete] = "Everything was copied to the destination, but part of the original could not be removed. Remove it by hand.",
+        [Jobs.ErrorCode.Incomplete] = "The copy is in the destination, but the original changed meanwhile or could not be fully removed. Check both.",
+        [Jobs.ErrorCode.InvalidRequest] = "Windows cannot tell whether this folder is inside the one you are moving. Nothing was changed.",
     };
 
     /// <summary>What a failed Show in folder or Open in Terminal tells the user (ADR-0032).</summary>
@@ -89,23 +90,23 @@ public static class FilesCapabilities
             Feedback: new("Hashing", "hash", "Hashed", "Nothing needed doing", "file", "files")),
         new(CopyPathId, "Copy path", "actions", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Clipboard, LongRunning: false,
             Feedback: new("Copying", "copy", "Path copied", "Nothing needed doing", "path", "paths")),
-        // Copy to and Move to: any file or folder, each item on its own (a failure is that item's, the others go on); the
+        // Move to and Copy to: any file or folder, each item on its own (a failure is that item's, the others go on); the
         // folder window is asked once for the whole drop (ADR-0032).
         new(MoveToId, "Move to…", "actions", Module, new InputRule(AnyFileOrFolder), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Moving", "move", "Moved", "Already in that folder", "item", "items", SuccessTitle: "{0} moved", Reasons: TransferReasons, ShowSizes: false),
             Dialog: Jobs.DialogKinds.Folder),
+        new(RenameId, "Rename files", "actions", Module, new InputRule(AnyFile), CapabilityShape.Selection, CapabilityOutput.Files, LongRunning: false,
+            Feedback: new("Renaming", "rename", "Renamed", "No name changed", "file", "files", SuccessTitle: "Files renamed", Reasons: RenameReasons),
+            Dialog: Jobs.DialogKinds.Rename),
         new(CopyToId, "Copy to…", "actions", Module, new InputRule(AnyFileOrFolder), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Copying", "copy", "Copied", "Nothing needed doing", "item", "items", SuccessTitle: "{0} copied", Reasons: TransferReasons, ShowSizes: false),
             Dialog: Jobs.DialogKinds.Folder),
         new(CopyNameId, "Copy name", "actions", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Clipboard, LongRunning: false,
             Feedback: new("Copying", "copy", "Name copied", "Nothing needed doing", "name", "names")),
-        new(RenameId, "Rename files", "actions", Module, new InputRule(AnyFile), CapabilityShape.Selection, CapabilityOutput.Files, LongRunning: false,
-            Feedback: new("Renaming", "rename", "Renamed", "No name changed", "file", "files", SuccessTitle: "Files renamed", Reasons: RenameReasons),
-            Dialog: Jobs.DialogKinds.Rename),
         new(CopyFolderId, "Folder path", "tools", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Clipboard, LongRunning: false,
             Feedback: new("Copying", "copy", "Folder path copied", "Nothing needed doing", "path", "paths")),
-        // Where the item is: Explorer with the items selected, or a terminal in the folder. Under "More…" with Copy name,
-        // Rename files and Add to ZIP: Actions shows three, and no Tools ring has room left (ADR-0032).
+        // Where the item is: Explorer with the items selected, or a terminal in the folder. Under "More…" with Copy to, Copy
+        // name and Add to ZIP: Actions shows three, and no Tools ring has room left (ADR-0032).
         new(ShowId, "Show in folder", "actions", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Window, LongRunning: false,
             Feedback: new("Opening", "show", "Shown", "Nothing needed doing", "item", "items", Reasons: WindowReasons)),
         new(TerminalId, "Open in Terminal", "actions", Module, new InputRule(AnyFileOrFolder), CapabilityShape.Selection, CapabilityOutput.Window, LongRunning: false,

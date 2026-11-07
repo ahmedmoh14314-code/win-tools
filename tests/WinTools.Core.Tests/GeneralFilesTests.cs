@@ -16,7 +16,7 @@ public sealed class GeneralFilesTests
     // Add to ZIP (V2 PR 5.1) accepts any file or folder too and comes last in Tools.
     // Tools: the file's information and location; Actions: what to do with it (Convert / Tools / Actions, Tangerine parity).
     // ADR-0032 adds Move to, Copy to, Show in folder and Open in Terminal.
-    private static readonly string[] General = ["files.info", "files.sha256", "files.copy-path", "files.move-to", "files.copy-to", "files.copy-name", "files.rename",
+    private static readonly string[] General = ["files.info", "files.sha256", "files.copy-path", "files.move-to", "files.rename", "files.copy-to", "files.copy-name",
         "files.copy-folder", "files.show-in-folder", "files.terminal", "archive.zip"];
     private static readonly string[] Folder = ["files.info", "files.copy-path", "files.move-to", "files.copy-to", "files.copy-name", "files.copy-folder",
         "files.show-in-folder", "files.terminal", "archive.zip"];
@@ -52,8 +52,8 @@ public sealed class GeneralFilesTests
         // File info only where no module has its own: an image has Image info.
         Assert.Equal(["Remove metadata", "Image info", "SHA-256", "Folder path"], menu[1].Commands.Select(c => c.Label));
         // Actions holds long labels: three on the ring and "More…" (ADR-0032), so every label fits at every DPI (UiSurfaceTests).
-        Assert.Equal(["Copy path", "Move to…", "Copy to…", "More…"], menu[^1].Commands.Select(c => c.Label));
-        Assert.Equal(["Copy name", "Rename files", "Show in folder", "Open in Terminal", "Add to ZIP"], RadialMenu.Overflow(menu[^1].Commands[^1]).Select(c => c.Label));
+        Assert.Equal(["Copy path", "Move to…", "Rename files", "More…"], menu[^1].Commands.Select(c => c.Label));
+        Assert.Equal(["Copy to…", "Copy name", "Show in folder", "Open in Terminal", "Add to ZIP"], RadialMenu.Overflow(menu[^1].Commands[^1]).Select(c => c.Label));
     }
 
     [Fact]

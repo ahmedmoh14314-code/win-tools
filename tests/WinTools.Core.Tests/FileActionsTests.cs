@@ -170,6 +170,8 @@ public sealed class FileActionsTests
             Assert.Equal("لا يمكن وضع مجلد داخل نفسه. لم يتغيّر شيء.", words.Reasons![ErrorCode.UnsupportedOperation]);
             Assert.Equal("عناصر", words.Nouns);
             Assert.Equal("نقل إلى…", RadialMenu.Build(Resolver, [@"C:\p\notes.xyz"])[^1].Commands[1].Label);
+            foreach (var reason in FilesCapabilities.Catalog.Where(c => c.Feedback?.Reasons is not null && c.Id != FilesCapabilities.RenameId).SelectMany(c => c.Feedback!.Reasons!.Values))
+                Assert.NotNull(UiText.Get(UiText.Arabic, "say." + reason)); // every sentence of these commands is translated
             // Batch rename keeps its own translations.
             Assert.Equal("تمت إعادة التسمية", LocalWords.For(Command(FilesCapabilities.RenameId)).SuccessTitle);
         }

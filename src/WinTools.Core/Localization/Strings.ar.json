@@ -39,7 +39,7 @@
   "howto.tools": "أدوات",
   "howto.tools.text": "الملف نفسه: معلوماته وبصمة SHA-256، والضغط وتغيير الحجم والتدوير والحماية والإصلاح والفحص.",
   "howto.actions": "إجراءات",
-  "howto.actions.text": "فعل شيء بالملف: نسخ مساره، نقله أو نسخه إلى مجلد؛ وتحت «المزيد»: نسخ اسمه، إعادة تسمية مجموعة، إظهاره في مجلده، فتح طرفية هناك، إضافته إلى ZIP.",
+  "howto.actions.text": "فعل شيء بالملف: نسخ مساره، نقله إلى مجلد، إعادة تسمية مجموعة؛ وتحت «المزيد»: نسخه إلى مجلد، نسخ اسمه، إظهاره في مجلده، فتح طرفية هناك، إضافته إلى ZIP.",
   "howto.keys": "لوحة المفاتيح",
   "howto.keys.text": "يغلق مفتاح Esc العجلة دون تنفيذ أي شيء. والإفلات خارج العجلة لا ينفّذ شيئًا أيضًا.",
   "howto.only": "تعرض العجلة ما يناسب الملفات التي تسحبها فقط: للصورة أوامر الصور، ولملف PDF أوامر PDF.",
@@ -548,7 +548,8 @@
   "say.The copy did not match the original, so it was removed. The original is unchanged.": "لم تطابق النسخة الأصل، فحُذفت. الأصل لم يتغيّر.",
   "say.A folder cannot go into itself. Nothing was changed.": "لا يمكن وضع مجلد داخل نفسه. لم يتغيّر شيء.",
   "say.The folder holds links or junctions, which are not moved between drives. The original is unchanged.": "يحتوي المجلد على روابط أو نقاط توصيل لا تُنقل بين الأقراص. الأصل لم يتغيّر.",
-  "say.Everything was copied to the destination, but part of the original could not be removed. Remove it by hand.": "نُسخ كل شيء إلى الوجهة، لكن تعذّر حذف جزء من الأصل. احذفه يدويًا.",
+  "say.The copy is in the destination, but the original changed meanwhile or could not be fully removed. Check both.": "النسخة في الوجهة، لكن الأصل تغيّر أثناء النقل أو تعذّر حذفه بالكامل. افحص الاثنين.",
+  "say.Windows cannot tell whether this folder is inside the one you are moving. Nothing was changed.": "لا يستطيع Windows معرفة ما إذا كان هذا المجلد داخل المجلد الذي تنقله. لم يتغيّر شيء.",
   "say.It is no longer there.": "لم يعد موجودًا.",
   "say.The items are in more than 5 folders. Drop fewer at a time.": "العناصر في أكثر من 5 مجلدات. أفلت عددًا أقل في كل مرة.",
   "say.Windows did not open it. The path may be too long.": "لم يفتحه Windows. ربما المسار طويل جدًا."
