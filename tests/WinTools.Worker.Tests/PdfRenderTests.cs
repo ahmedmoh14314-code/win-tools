@@ -58,6 +58,26 @@ public sealed class PdfRenderTests : IDisposable
 
     private string[] Names() => [.. Directory.EnumerateFileSystemEntries(_dir.Path).Select(p => Path.GetFileName(p)!).Order(StringComparer.Ordinal)];
 
+    [Fact]
+    public void Thumbnails_draw_every_page_small_into_the_hosts_empty_folder()
+    {
+        var pdf = _dir.Write("three.pdf", PdfSamples.Pages(3));
+        var folder = Directory.CreateDirectory(Path.Combine(_dir.Path, "thumbs")).FullName;
+        var request = new JobRequest(Guid.NewGuid().ToString("N"), PdfRenderCapabilities.ThumbnailsId, [pdf], OutputDirectory: folder);
+        var r = PdfRenderJobs.Run(request);
+        Assert.True(r.Success, r.Message);
+        Assert.True(PdfRenderJobModule.Instance.IsBelievable(request, r));
+        Assert.Equal(["page 001.png", "page 002.png", "page 003.png"], Directory.GetFiles(folder).Select(f => Path.GetFileName(f)).Order(StringComparer.Ordinal));
+        var first = ImagePipeline.Decode(File.ReadAllBytes(Path.Combine(folder, "page 001.png")), WinTools.Core.Files.ImageFormat.Png);
+        Assert.Equal(PdfRenderCapabilities.ThumbnailSide, Math.Max(first.Image.Width, first.Image.Height));
+        Assert.Equal(["three.pdf", "thumbs"], Directory.GetFileSystemEntries(_dir.Path).Select(f => Path.GetFileName(f)).Order(StringComparer.Ordinal));
+        // A folder that is not empty is not the host's fresh one: nothing is drawn into it.
+        Assert.Equal(ErrorCode.InvalidRequest, PdfRenderJobs.Run(request with { Id = Guid.NewGuid().ToString("N") }).Error);
+        // A picture missing: the host does not believe the count.
+        File.Delete(Path.Combine(folder, "page 003.png"));
+        Assert.False(PdfRenderJobModule.Instance.IsBelievable(request, r));
+    }
+
     private static JobResult RunBelieved(JobRequest request)
     {
         var r = PdfRenderJobs.Run(request);
@@ -253,7 +273,7 @@ public sealed class PdfRenderTests : IDisposable
         var menu = RadialMenu.Build(resolver, [@"C:\p\a.pdf"]);
         Assert.Equal(["Convert", "Tools", "Organize", "Optimize", "Protect", "Actions"], menu.Select(g => g.Label));
         Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD"], menu[0].Commands.Select(c => c.Label));
-        Assert.Equal(["Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], menu.Single(g => g.Label == "Organize").Commands.Select(c => c.Label));
+        Assert.Equal(["Edit pages…", "Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], menu.Single(g => g.Label == "Organize").Commands.Select(c => c.Label));
         Assert.Contains("To PDF", RadialMenu.Build(resolver, [@"C:\p\a.jpg", @"C:\p\b.png"])[0].Commands.Select(c => c.Label));
     }
 

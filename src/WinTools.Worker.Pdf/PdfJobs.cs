@@ -102,6 +102,12 @@ internal static class PdfJobs
             }
             candidates = [.. tries];
         }
+        else if (request.CapabilityId == PdfCapabilities.OrganizeId)
+        {
+            // Edit pages takes the window's plan and nothing else; it is read against the page count once qpdf has opened the file.
+            if (request.Parameters is not { Count: 1 } p || !p.ContainsKey(DialogParameters.Name))
+                return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command needs its page plan and nothing else.");
+        }
         else if (request.Parameters is { Count: > 0 }) return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters.");
         if (request.Inputs.Count == 0 || !request.Inputs.All(PathPolicy.IsSupported) || request.Inputs.Any(Path.EndsInDirectorySeparator))
             return JobResult.Fail(id, ErrorCode.InvalidRequest, "Every input must be a supported file path.");
@@ -132,6 +138,7 @@ internal static class PdfJobs
                 PdfCapabilities.RepairId => Repair(request, work),
                 PdfCapabilities.ProtectId => Protect(request, password!, work),
                 PdfCapabilities.UnprotectId => Unprotect(request, candidates, work),
+                PdfCapabilities.OrganizeId => Organize(request, request.Parameters![DialogParameters.Name], work),
                 _ when PdfCapabilities.RotationOf(request.CapabilityId) is { } angle => Rotate(request, angle, work),
                 _ => JobResult.Fail(id, ErrorCode.UnsupportedOperation, "This worker does not run that command."),
             };
@@ -442,6 +449,24 @@ internal static class PdfJobs
         return WriteOne(request, source, work, [$"--rotate={angle}:1-z", source.Copy], pages, request.Inputs[0]);
     }
 
+    /// <summary>
+    /// Edit pages (ADR-0029): the window's plan, read again against the page count qpdf finds, becomes a new PDF of the
+    /// planned pages in order (a page may repeat), each turned as planned. The source is the starting point, so its
+    /// document information stays. A plan that keeps everything as it is writes nothing.
+    /// </summary>
+    private static JobResult Organize(JobRequest request, string answer, string work)
+    {
+        var source = Stage(request.Inputs[0], work, "in-001.pdf");
+        var (pages, _) = Open(source, work);
+        if (PagePlan.Read(answer, pages) is not { } plan) return JobResult.Fail(request.Id, ErrorCode.InvalidRequest, "The page plan does not fit this PDF.");
+        if (plan.KeepsEverything(pages)) return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "No page was moved, turned or removed.");
+        List<string> args = [source.Copy, "--pages", ".", string.Join(',', plan.Pages.Select(p => p.Page.ToString(CultureInfo.InvariantCulture))), "--"];
+        // Turns name pages of the new file (verified with qpdf 12.4.2), one argument per angle.
+        foreach (var turn in plan.Pages.Select((p, i) => (p.Turn, Index: i + 1)).Where(t => t.Turn != 0).GroupBy(t => t.Turn))
+            args.Add($"--rotate=+{turn.Key}:{string.Join(',', turn.Select(t => t.Index.ToString(CultureInfo.InvariantCulture)))}");
+        return WriteOne(request, source, work, args, plan.Pages.Count, request.Inputs[0]);
+    }
+
     private static JobResult Merge(JobRequest request, string work)
     {
         if (request.Inputs.Count is < 2 or > PdfCapabilities.MaxMergeInputs)
@@ -534,7 +559,7 @@ internal static class PdfJobs
             if (zone is { } z) MarkOfTheWeb.Apply(temp, z);
             File.SetAttributes(temp, FileAttributes.Normal);
             var hash = Sha256Of(temp);
-            foreach (var candidate in OutputNaming.CandidatesWithExtension(nameSource, ".pdf", PdfCapabilities.NameSuffix(request.CapabilityId), request.OutputDirectory))
+            foreach (var candidate in OutputNaming.CandidatesWithExtension(nameSource, ".pdf", PdfCapabilities.NameSuffix(request.CapabilityId, DialogAnswer(request)), request.OutputDirectory))
             {
                 try
                 {
@@ -551,6 +576,8 @@ internal static class PdfJobs
             if (!committed) DeleteFile(temp);
         }
     }
+
+    private static string? DialogAnswer(JobRequest request) => request.Parameters is { } p && p.TryGetValue(DialogParameters.Name, out var a) ? a : null;
 
     private static JobResult Split(JobRequest request, string work)
     {

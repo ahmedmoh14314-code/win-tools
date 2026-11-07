@@ -18,6 +18,20 @@ public partial class App : Application
         // The host's language ("--lang en|ar"): every window speaks it, Arabic right to left.
         for (var i = 0; i + 1 < e.Args.Length; i++) if (e.Args[i] == "--lang") UiText.Use(e.Args[i + 1]);
         var line = ReadRequestLine();
+        if (WorkerProtocol.Deserialize<DialogEnvelope>(line)?.Kind == DialogKinds.Organize)
+        {
+            var organize = WorkerProtocol.Deserialize<OrganizeRequest>(line);
+            if (organize is not { Title.Length: > 0, Thumbnails.Length: > 0, Pages: > 0 and <= Core.Capabilities.PdfRenderCapabilities.MaxPages }
+                || !Path.IsPathFullyQualified(organize.Thumbnails))
+            {
+                Answer(new OrganizeResult(null));
+                return;
+            }
+            var window = new OrganizeWindow(organize);
+            window.Closed += (_, _) => Answer(new OrganizeResult(window.Answer));
+            Present(window);
+            return;
+        }
         if (WorkerProtocol.Deserialize<DialogEnvelope>(line)?.Kind == DialogKinds.Form)
         {
             var form = WorkerProtocol.Deserialize<FormRequest>(line);

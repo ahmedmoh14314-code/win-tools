@@ -1,0 +1,72 @@
+<Window x:Class="WinTools.Dialogs.OrganizeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:WinTools.Dialogs"
+        Width="900" Height="640" MinWidth="560" MinHeight="420" ResizeMode="CanResize" WindowStyle="ToolWindow"
+        ShowInTaskbar="False" Topmost="True" WindowStartupLocation="Manual" Background="{StaticResource Base}"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
+  <Window.Resources>
+    <Style x:Key="Tool" TargetType="Button">
+      <Setter Property="MinWidth" Value="84" />
+      <Setter Property="Padding" Value="10,4" />
+      <Setter Property="Margin" Value="0,0,6,0" />
+    </Style>
+  </Window.Resources>
+  <Border Padding="14" Background="{StaticResource Surface}" BorderBrush="{StaticResource Edge}" BorderThickness="1">
+    <DockPanel>
+      <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+        <TextBlock x:Name="Heading" Foreground="{StaticResource Text}" FontFamily="Segoe UI" FontSize="15" />
+        <TextBlock x:Name="Hint" Text="{l:T organize.hint}" Foreground="{StaticResource TextSecondary}" FontFamily="Segoe UI" FontSize="12"
+                   Margin="0,4,0,0" TextWrapping="Wrap" />
+      </StackPanel>
+      <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+        <Button x:Name="TurnLeft" Style="{StaticResource Tool}" Content="{l:T organize.turnLeft}" Click="OnTurnLeft" />
+        <Button x:Name="TurnRight" Style="{StaticResource Tool}" Content="{l:T organize.turnRight}" Click="OnTurnRight" />
+        <Button x:Name="Earlier" Style="{StaticResource Tool}" Content="{l:T organize.earlier}" Click="OnEarlier" />
+        <Button x:Name="Later" Style="{StaticResource Tool}" Content="{l:T organize.later}" Click="OnLater" />
+        <Button x:Name="Repeat" Style="{StaticResource Tool}" Content="{l:T organize.duplicate}" Click="OnDuplicate" />
+        <Button x:Name="Remove" Style="{StaticResource Tool}" Content="{l:T organize.delete}" Click="OnDelete" />
+      </WrapPanel>
+      <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0" LastChildFill="False">
+        <TextBlock x:Name="Status" DockPanel.Dock="Left" VerticalAlignment="Center" Foreground="{StaticResource TextSecondary}"
+                   FontFamily="Segoe UI" FontSize="12" AutomationProperties.LiveSetting="Polite" />
+        <Button DockPanel.Dock="Right" Content="{l:T dialog.cancel}" IsCancel="True" MinWidth="80" Padding="10,4" />
+        <Button x:Name="Save" DockPanel.Dock="Right" Content="{l:T organize.save}" IsDefault="True" MinWidth="96" Padding="10,4" Margin="0,0,8,0" Click="OnSave" />
+        <Button x:Name="Extract" DockPanel.Dock="Right" Content="{l:T organize.extract}" MinWidth="96" Padding="10,4" Margin="0,0,8,0" Click="OnExtract" />
+      </DockPanel>
+      <ListBox x:Name="Pages" SelectionMode="Extended" Background="{StaticResource Base}" BorderBrush="{StaticResource Edge}"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled" AllowDrop="True" KeyboardNavigation.TabNavigation="Once"
+               SelectionChanged="OnSelectionChanged" PreviewKeyDown="OnPagesKeyDown"
+               PreviewMouseLeftButtonDown="OnPagesMouseDown" PreviewMouseMove="OnPagesMouseMove" Drop="OnPagesDrop" DragOver="OnPagesDragOver">
+        <ListBox.ItemsPanel>
+          <ItemsPanelTemplate>
+            <WrapPanel />
+          </ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+        <ListBox.ItemContainerStyle>
+          <Style TargetType="ListBoxItem">
+            <Setter Property="Margin" Value="4" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding Caption}" />
+          </Style>
+        </ListBox.ItemContainerStyle>
+        <ListBox.ItemTemplate>
+          <DataTemplate>
+            <StackPanel Width="150">
+              <Border Width="150" Height="150" Background="{StaticResource Raised}">
+                <!-- A page is never mirrored, in either language. -->
+                <Image Source="{Binding Image}" Stretch="Uniform" Margin="6" RenderOptions.BitmapScalingMode="HighQuality" FlowDirection="LeftToRight">
+                  <Image.LayoutTransform>
+                    <RotateTransform Angle="{Binding Turn}" />
+                  </Image.LayoutTransform>
+                </Image>
+              </Border>
+              <TextBlock Text="{Binding Caption}" Foreground="{StaticResource Text}" FontFamily="Segoe UI" FontSize="12"
+                         HorizontalAlignment="Center" Margin="0,4,0,0" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+  </Border>
+</Window>

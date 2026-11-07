@@ -532,5 +532,20 @@
   "reason.rename.OutputValidationFailed": "تعذّر فحص الملفات بعد إعادة تسميتها. انظر في المجلد لترى أسماءها.",
   "reason.rename.Incomplete": "تعذّرت إعادة تسمية ملف أو إرجاعه، فبقي باسم يبدأ بـ \"wintools-renaming\". أعِد تسميته يدويًا.",
   "toast.altText": "يستخدم Windows مفتاح Alt مع مفاتيح أخرى لاختصاراته، لذلك لا يُفتح WinTools أثناء الضغط على Alt.",
-  "toast.titleOne": "{0}: {1}"
+  "toast.titleOne": "{0}: {1}",
+  "cmd.pdf.organize": "تحرير الصفحات…",
+  "dialog.organize": "صفحات {0}",
+  "toast.organizeWindow": "نافذة الصفحات",
+  "organize.hint": "حدّد صفحات ثم دوّرها أو انقلها أو كرّرها أو احذفها. اسحب صفحة لنقلها. الحفظ يكتب ملف PDF جديدًا ويبقى الأصل كما هو.",
+  "organize.turnLeft": "تدوير لليسار",
+  "organize.turnRight": "تدوير لليمين",
+  "organize.earlier": "تقديم",
+  "organize.later": "تأخير",
+  "organize.duplicate": "تكرار",
+  "organize.delete": "حذف",
+  "organize.save": "حفظ كملف PDF جديد",
+  "organize.extract": "استخراج المحدد",
+  "organize.page": "صفحة {0}",
+  "organize.pageTurned": "صفحة {0}، {1}°",
+  "organize.status": "الصفحات: {0}، المحددة: {1}"
 }
