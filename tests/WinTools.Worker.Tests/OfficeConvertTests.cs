@@ -342,19 +342,31 @@ public sealed class OfficeConvertTests : IDisposable
     [Fact]
     public void A_program_past_its_time_is_killed_with_the_processes_it_started()
     {
-        // PowerShell starts a second PowerShell that sleeps and writes down its id: both must be gone when the limit passes
-        // (LibreOffice's soffice.exe starts soffice.bin the same way).
-        var powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
+        // cmd starts ping and waits for it: both must be gone when the limit passes (LibreOffice's soffice.exe starts
+        // soffice.bin the same way). The child is seen by a watcher, since it is the one new ping of this test.
+        var cmd = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
         var env = new Dictionary<string, string> { ["SystemRoot"] = Environment.GetEnvironmentVariable("SystemRoot")!, ["PATH"] = Environment.GetEnvironmentVariable("PATH")! };
+        var before = Process.GetProcessesByName("PING").Select(p => p.Id).ToHashSet();
+        var children = new System.Collections.Concurrent.ConcurrentDictionary<int, bool>();
+        var done = false;
+        var watcher = new Thread(() =>
+        {
+            while (!Volatile.Read(ref done))
+            {
+                foreach (var p in Process.GetProcessesByName("PING")) if (!before.Contains(p.Id)) children[p.Id] = true;
+                Thread.Sleep(100);
+            }
+        });
+        watcher.Start();
         var watch = Stopwatch.StartNew();
-        var run = ChildProcess.Run(powershell, ["-NoProfile", "-NonInteractive", "-Command",
-            $"$c = Start-Process -NoNewWindow -PassThru -FilePath '{powershell}' -ArgumentList '-NoProfile','-Command','Start-Sleep 60'; Set-Content -Path child.txt -Value $c.Id; Start-Sleep 60"],
-            _dir.Path, env, TimeSpan.FromSeconds(25));
+        var run = ChildProcess.Run(cmd, ["/c", "ping -n 120 127.0.0.1"], _dir.Path, env, TimeSpan.FromSeconds(8));
+        Volatile.Write(ref done, true);
+        watcher.Join();
         Assert.True(run.TimedOut);
-        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(50));
-        var child = int.Parse(File.ReadAllText(Path.Combine(_dir.Path, "child.txt")).Trim(), System.Globalization.CultureInfo.InvariantCulture);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(30));
+        var child = Assert.Single(children.Keys);
         Assert.True(Gone(child), "the child process outlived the limit");
-        Assert.Throws<ArgumentException>(() => ChildProcess.Run(powershell, ["a\nb"], _dir.Path, env, TimeSpan.FromSeconds(1)));
+        Assert.Throws<ArgumentException>(() => ChildProcess.Run(cmd, ["a\nb"], _dir.Path, env, TimeSpan.FromSeconds(1)));
     }
 
     private static bool Gone(int pid)
