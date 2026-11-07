@@ -75,7 +75,7 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 - **General Files:** MD5; Copy/Move to a folder, Terminal here, Share, a shelf.
 - **Settings V2 extras:** module defaults and conflict detection beyond the trigger policy.
 - **Subtitles:** ASS/SSA; TXT export.
-- **Images:** HEIC/AVIF, SVG, crop, edit, annotate, redact, collage, Images→PDF.
+- **Images:** SVG, annotate, redact, background removal; Compress and Remove metadata for HEIC and AVIF (ADR-0031 says why).
 - **Wheel:** keyboard navigation; letter triggers (only after the typing-interference test).
 - **Stage 8 hardening:**
   - fuzzing per parser;
