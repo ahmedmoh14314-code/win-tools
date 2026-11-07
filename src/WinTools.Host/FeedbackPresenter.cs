@@ -81,6 +81,13 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
         }), TaskScheduler.Default);
     });
 
+    /// <summary>A command's preparation ended and its window takes over (Edit pages): the progress toast goes, nothing is said. Any thread.</summary>
+    public void HandedOver() => ui.Post(() =>
+    {
+        _done = _total;
+        if (toast.Content is { Progress: not null }) toast.Hide();
+    });
+
     public void Progress(CapabilityDescriptor capability, int done, int total) => ui.Post(() =>
     {
         _done = Math.Max(_done, done);

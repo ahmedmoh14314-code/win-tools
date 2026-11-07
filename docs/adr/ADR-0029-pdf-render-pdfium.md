@@ -35,3 +35,8 @@
 
 ## Evidence / experiments
 - `PdfRenderTests` (Worker.Tests): rendering, text, Markdown escaping, Images → PDF round trip, password-protected and malformed PDFs refused, limits, no overwrite, host believability.
+
+## Amendment: Edit pages (2026-11-07)
+- The image worker draws every page small (220 px on its longer side) into an empty folder of the host's own under `%LOCALAPPDATA%\WinTools\Pages`, deleted once the window closes. The dialogs process only reads those pictures: it never opens the PDF, and PDFium stays in the worker.
+- The window answers a page plan in one spelling ("organize:3,1@90,1" or "extract:2"). The host and the PDF worker read it again against the page count; the worker writes a new PDF with qpdf `--pages` and `--rotate`, whose numbers are pages of the new file (checked with qpdf 12.4.2).
+- This request is the one dialog request that names a folder: the host's own, never a file of the user's. At most 500 pages; a plan that changes nothing writes nothing; the original is never touched.

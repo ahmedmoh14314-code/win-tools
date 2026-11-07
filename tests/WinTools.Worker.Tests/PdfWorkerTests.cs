@@ -65,6 +65,69 @@ public sealed class PdfWorkerTests : IDisposable
 
     private string Pdf(string name, int pages) => _dir.Write(name, PdfSamples.Pages(pages));
 
+    // ---- Edit pages (ADR-0029): the window's plan is the one parameter ----
+
+    private static JobRequest Plan(string answer, string input) => new(Guid.NewGuid().ToString("N"), PdfCapabilities.OrganizeId, [input],
+        Parameters: new Dictionary<string, string> { [DialogParameters.Name] = answer });
+
+    /// <summary>A PDF whose pages have the given widths, so their order can be read back.</summary>
+    private string Widths(string name, params int[] widths)
+    {
+        var parts = widths.Select((w, i) => _dir.Write($"w{i}.pdf", PdfSamples.Pages(1, w))).ToArray();
+        var path = Path.Combine(_dir.Path, name);
+        Assert.True(Qpdf.Run(["--empty", "--pages", .. parts, "--", path], TimeSpan.FromSeconds(30)).Usable);
+        foreach (var p in parts) File.Delete(p);
+        return path;
+    }
+
+    [Fact]
+    public void Edit_pages_writes_the_planned_order_turns_and_repeats_into_a_new_pdf()
+    {
+        var pdf = Widths("report.pdf", 300, 400, 500);
+        var before = Hash(pdf);
+        var request = Plan("organize:3,1@90,1", pdf);
+        var r = PdfJobs.Run(request);
+        Assert.True(r.Success, r.Message);
+        Assert.True(PdfJobModule.Instance.IsBelievable(request, r));
+        Assert.Equal("report (edited).pdf", Path.GetFileName(r.OutputPath));
+        Assert.Equal([(500, 0), (300, 90), (300, 0)], PageShapes(r.OutputPath!));
+        Assert.Equal(before, Hash(pdf));
+        // The same file claimed as an extract has the other name: the host does not believe it.
+        Assert.False(PdfJobModule.Instance.IsBelievable(Plan("extract:3,1@90,1", pdf), r));
+    }
+
+    [Fact]
+    public void Edit_pages_turns_add_to_a_page_that_already_has_a_rotation()
+    {
+        var pdf = _dir.Write("scan.pdf", PdfSamples.Pages(2, rotate: 90));
+        var r = PdfJobs.Run(Plan("organize:2@270,1", pdf));
+        Assert.True(r.Success, r.Message);
+        Assert.Equal([(612, 0), (612, 90)], PageShapes(r.OutputPath!));
+    }
+
+    [Fact]
+    public void Extract_writes_only_the_selected_pages_under_its_own_name()
+    {
+        var pdf = Widths("report.pdf", 300, 400, 500);
+        var request = Plan("extract:2@180", pdf);
+        var r = PdfJobs.Run(request);
+        Assert.True(r.Success, r.Message);
+        Assert.True(PdfJobModule.Instance.IsBelievable(request, r));
+        Assert.Equal("report (selected pages).pdf", Path.GetFileName(r.OutputPath));
+        Assert.Equal([(400, 180)], PageShapes(r.OutputPath!));
+    }
+
+    [Fact]
+    public void An_edit_plan_that_does_not_fit_or_changes_nothing_writes_nothing()
+    {
+        var pdf = Widths("report.pdf", 300, 400, 500);
+        Assert.Equal(ErrorCode.InvalidRequest, PdfJobs.Run(Plan("organize:4", pdf)).Error);
+        Assert.Equal(ErrorCode.InvalidRequest, PdfJobs.Run(Plan("organize:01,2", pdf)).Error);
+        Assert.Equal(ErrorCode.InvalidRequest, PdfJobs.Run(Request(PdfCapabilities.OrganizeId, pdf)).Error);
+        Assert.Equal(ErrorCode.NothingToDo, PdfJobs.Run(Plan("organize:1,2,3", pdf)).Error);
+        Assert.Equal(["report.pdf"], Directory.GetFiles(_dir.Path).Select(f => Path.GetFileName(f)));
+    }
+
     /// <summary>Each page's width and /Rotate, in page order, read from qpdf's JSON.</summary>
     private static (int Width, int Rotate)[] PageShapes(string path)
     {
