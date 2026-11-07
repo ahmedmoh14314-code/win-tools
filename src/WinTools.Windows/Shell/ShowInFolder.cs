@@ -6,9 +6,9 @@ namespace WinTools.Windows.Shell;
 /// Show in folder (ADR-0032): an Explorer window on the folder with the items selected, through
 /// <c>SHOpenFolderAndSelectItems</c> as Microsoft documents it (the folder's and the items' ID lists from
 /// <c>SHParseDisplayName</c>; Chromium's "show in folder" does the same). No command line is built: explorer.exe's
-/// <c>/select,</c> needs its own quoting, which an argument list cannot express (a path with a space opened Documents
-/// instead), and a comma in a path splits it. The call runs on a thread of its own with COM initialised, so a busy
-/// Explorer never blocks the host; the host stops waiting after a timeout.
+/// <c>/select,</c> takes its quote after the comma, which an argument list cannot express: a path with a space would quote
+/// the whole argument, the form reported to open Documents instead. The call runs on a thread of its own with COM
+/// initialised, so a busy Explorer never blocks the host; the host stops waiting after a timeout.
 /// </summary>
 public static unsafe partial class ShowInFolder
 {

@@ -83,8 +83,8 @@ internal static class FileWindows
     }
 
     /// <summary>
-    /// How a terminal starts in <paramref name="folder"/>: Windows Terminal's app alias with "-d ." (the documented way to
-    /// open in the current folder), or Windows PowerShell; either with the folder as its working directory, its own
+    /// How a terminal starts in <paramref name="folder"/>: Windows Terminal's app alias with "-d ." (the starting directory,
+    /// relative to its working directory), or Windows PowerShell; either with the folder as its working directory, its own
     /// console, and no shell between.
     /// </summary>
     public static ProcessStartInfo TerminalStart(string folder, string? windowsTerminal, string powerShell)

@@ -139,6 +139,29 @@ public sealed partial class FileActionsHostTests : IDisposable
     }
 
     [Fact]
+    public async Task A_move_to_another_device_is_refused_as_a_rename_and_takes_the_checked_copy()
+    {
+        // No hook: \\localhost\C$ is another device to Windows, so MoveFileExW really answers ERROR_NOT_SAME_DEVICE, as for
+        // a second drive. A machine without the administrative share runs the simulated tests only.
+        var dest = Dir("dest");
+        var share = $@"\\localhost\{dest[0]}${dest[2..]}";
+        if (!Directory.Exists(share)) return;
+        var src = Write(Path.Combine(Dir("src"), "video.bin"), new string('v', 100_000));
+        var hash = Hash(src);
+        var file = await Run(Request(FilesCapabilities.MoveToId, src, share));
+        Assert.True(file.Success, file.Message);
+        Assert.Equal(hash, file.Outputs[0].Sha256); // a rename has no hash: this was the copy, the check and the removal
+        Assert.False(File.Exists(src));
+        Assert.Equal(hash, Hash(Path.Combine(dest, "video.bin")));
+        var folder = MakeTree(Path.Combine(Dir("src"), "photos"));
+        var expected = Tree(folder);
+        var moved = await Run(Request(FilesCapabilities.MoveToId, folder, share));
+        Assert.True(moved.Success, moved.Message);
+        Assert.False(Directory.Exists(folder));
+        Assert.Equal(expected, Tree(Path.Combine(dest, "photos")));
+    }
+
+    [Fact]
     public async Task A_copy_that_does_not_match_is_removed_and_the_original_kept()
     {
         var src = Write(Path.Combine(Dir("src"), "a.txt"), "original content");

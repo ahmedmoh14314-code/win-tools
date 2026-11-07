@@ -7,7 +7,7 @@ namespace WinTools.Windows.Shell;
 /// <list type="bullet">
 /// <item><c>CopyFileExW</c> with <c>COPY_FILE_FAIL_IF_EXISTS</c>: never over an existing file; it copies the alternate data
 /// streams (the Mark of the Web stays with a downloaded file), the attributes and the times, and stops when the cancel flag
-/// is set, deleting what it wrote (<c>ERROR_REQUEST_ABORTED</c>).</item>
+/// is set (<c>ERROR_REQUEST_ABORTED</c>); the caller removes whatever is left of the copy.</item>
 /// <item><c>MoveFileExW</c> with no flags: a rename on one volume, for a file or a folder, failing with
 /// <c>ERROR_ALREADY_EXISTS</c> when the name is taken and with <c>ERROR_NOT_SAME_DEVICE</c> across volumes. .NET's
 /// <c>File.Move</c> passes <c>MOVEFILE_COPY_ALLOWED</c>, which would copy and delete without our verification.</item>
