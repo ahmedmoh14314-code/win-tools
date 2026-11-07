@@ -16,6 +16,10 @@ internal static class Program
 {
     private static readonly TimeSpan JobTimeout = TimeSpan.FromSeconds(60);
 
+    /// <summary>Per-request limit of the image worker: HEIC and AVIF go through the engine, whose own limit is 40 s a run,
+    /// and a collage decodes up to 16 images in one request (ADR-0031).</summary>
+    private static readonly TimeSpan ImageTimeout = TimeSpan.FromSeconds(120);
+
     /// <summary>Per-file limits of the General Files worker: File info reads 4 KB; a hash of a large file on a slow disk or
     /// a share takes minutes.</summary>
     private static readonly TimeSpan FilesInfoTimeout = TimeSpan.FromSeconds(30), FilesHashTimeout = TimeSpan.FromMinutes(30);
@@ -90,7 +94,7 @@ internal static class Program
             var feedback = new FeedbackPresenter(window, toast, info, sounds, log);
             var current = settings;
             toast.ReducedMotionSource = () => Volatile.Read(ref current).ReducedMotion(SystemPreferences.ReducedMotion());
-            var images = new JobModuleRunner(ImageJobModule.Instance, new WorkerClient(workerPath, JobTimeout, ImageJobModule.Instance), ImageJobModule.Parameters);
+            var images = new JobModuleRunner(ImageJobModule.Instance, new WorkerClient(workerPath, ImageTimeout, ImageJobModule.Instance), ImageJobModule.Parameters);
             var files = new JobModuleRunner(FilesJobModule.Instance,
                 new FilesExecutor(new WorkerClient(textWorkerPath, FilesInfoTimeout, FilesJobModule.Instance),
                     new WorkerClient(textWorkerPath, FilesHashTimeout, FilesJobModule.Instance, parallelism: 1), // one disk read at a time

@@ -3,8 +3,8 @@ namespace WinTools.Core.Files;
 /// <summary>Content-based format detection from the first bytes of a file (magic numbers).</summary>
 public static class FileSignature
 {
-    /// <summary>Bytes needed to recognise every supported format.</summary>
-    public const int HeaderLength = 18;
+    /// <summary>Bytes needed to recognise every supported format (HEIF and AVIF: the ftyp box's brands).</summary>
+    public const int HeaderLength = 64;
 
     private static ReadOnlySpan<byte> Png => [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
     private static ReadOnlySpan<byte> Jpeg => [0xFF, 0xD8, 0xFF];
@@ -17,6 +17,7 @@ public static class FileSignature
         if (header.StartsWith(Jpeg)) return ImageFormat.Jpeg;
         if (header.Length >= 12 && header.StartsWith("RIFF"u8) && header[8..12].SequenceEqual("WEBP"u8)) return ImageFormat.WebP;
         if (header.StartsWith(TiffLittle) || header.StartsWith(TiffBig)) return ImageFormat.Tiff;
+        if (Heif.Detect(header) is var iso and not ImageFormat.Unknown) return iso;
         if (header.Length >= 18 && header.StartsWith("BM"u8))
         {
             // BITMAPFILEHEADER is 14 bytes; the DIB header that follows starts with its own size.

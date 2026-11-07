@@ -17,7 +17,9 @@ public static class ImageCapabilities
         new("convert", "Convert", "convert", 10),
         new("compress", "Compress", "compress", 20),
         new("resize", "Resize", "resize", 30),
-        new("rotate", "Rotate", "rotate", 40),
+        new("crop", "Crop", "crop", 35),        // ADR-0031
+        new("rotate", "Rotate", "rotate", 40),  // the rotations and, since ADR-0031, the flips
+        new("adjust", "Adjust", "adjust", 45),  // ADR-0031
         new("tools", "Tools", "tools", 11), // Convert, then Tools, then the module's own groups, Actions last (Tangerine's order)
     ];
 
@@ -40,8 +42,10 @@ public static class ImageCapabilities
 
     public static CapabilityDescriptor Describe(Operation op) => new(
         op.Id, op.Label, CategoryOf(op.Kind), Module,
-        new InputRule(FileKinds.All.Where(kind => op.AppliesTo(FormatHint.Of(kind))).Select(kind => kind.Id).ToHashSet(StringComparer.Ordinal)),
-        CapabilityShape.PerFile,
+        new InputRule(FileKinds.All.Where(kind => op.AppliesTo(FormatHint.Of(kind))).Select(kind => kind.Id).ToHashSet(StringComparer.Ordinal),
+            MinCount: op.Kind == OperationKind.Collage ? 2 : 1,
+            MaxCount: op.Kind == OperationKind.Collage ? OperationCatalog.MaxCollageInputs : CapabilityResolver.MaxFiles),
+        op.Kind == OperationKind.Collage ? CapabilityShape.Selection : CapabilityShape.PerFile,
         op.WritesFile ? CapabilityOutput.File : CapabilityOutput.Facts,
         LongRunning: op.Kind != OperationKind.Info,
         Payload: op,
@@ -63,7 +67,9 @@ public static class ImageCapabilities
         OperationKind.Convert => "convert",
         OperationKind.Compress => "compress",
         OperationKind.Resize => "resize",
-        OperationKind.Rotate => "rotate",
+        OperationKind.Rotate or OperationKind.Flip => "rotate",
+        OperationKind.Crop => "crop",
+        OperationKind.Adjust => "adjust",
         _ => "tools",
     };
 }

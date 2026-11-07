@@ -1,10 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- On-demand conversion process. Decodes, encodes and validates with Windows Imaging Component; one JSON line per job. -->
+  <!-- On-demand conversion process. Decodes, encodes and validates with Windows Imaging Component; one JSON line per job.
+       HEIC and AVIF go through the bundled FFmpeg as a child process (ADR-0031), the same files the media worker uses. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <FfmpegDir>$(MSBuildThisFileDirectory)..\..\artifacts\engines\ffmpeg-8.1.3\</FfmpegDir>
   </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(FfmpegDir)*.exe;$(FfmpegDir)*.dll;$(FfmpegDir)LICENSE.txt" Link="ffmpeg\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+  <Target Name="RequireFfmpeg" BeforeTargets="Build" Condition="!Exists('$(FfmpegDir)ffmpeg.exe')">
+    <Error Text="The image and media engine is missing: run scripts\Get-Engines.ps1 (it fetches FFmpeg 8.1.3, LGPL build, and checks its hashes, ADR-0028, ADR-0031)." />
+  </Target>
   <ItemGroup>
     <ProjectReference Include="..\WinTools.Core\WinTools.Core.csproj" />
     <ProjectReference Include="..\WinTools.Worker.Common\WinTools.Worker.Common.csproj" />

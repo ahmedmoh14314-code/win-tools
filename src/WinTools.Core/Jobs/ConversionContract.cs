@@ -10,9 +10,11 @@ namespace WinTools.Core.Jobs;
 public sealed record ConversionRequest(string Id, string OperationId, string SourcePath,
     string? OutputDirectory = null, int? JpegQuality = null, int? WebPQuality = null);
 
-/// <summary>What "Image info" reports. Facts read from the file; nothing is written.</summary>
+/// <summary>What "Image info" reports. Facts read from the file; nothing is written. <paramref name="BitsPerChannel"/>: the
+/// depth when the format states it (HEIF, AVIF: 10 or 12), else 0 (a deeper PNG or TIFF is 16-bit).</summary>
 public sealed record ImageInfo(string Format, int Width, int Height, long FileBytes, double DpiX, double DpiY, bool HasTransparency,
-    int Orientation, bool HasExif, bool HasGps, bool HasXmp, bool HasIccProfile, bool HasTextOrComments, bool DeeperThan8Bits, bool HasOtherMetadata = false);
+    int Orientation, bool HasExif, bool HasGps, bool HasXmp, bool HasIccProfile, bool HasTextOrComments, bool DeeperThan8Bits, bool HasOtherMetadata = false,
+    int BitsPerChannel = 0);
 
 /// <summary>
 /// Why a job did not produce an output. Stable names: they cross the process boundary and appear in logs.
@@ -62,8 +64,9 @@ public enum ErrorCode
 
 /// <summary>The worker's answer. Success carries the final output path; failure carries a code and a short message.</summary>
 /// <param name="OutputSha256">Hex SHA-256 of the output the worker validated, so the host can check the file it finds is that one.</param>
+/// <param name="Notice">Something the user must know about a success (a collage whose images had different colour profiles).</param>
 public sealed record ConversionResult(string Id, bool Success, ErrorCode Error, string? Message, string? OutputPath, string? OutputSha256 = null,
-    ImageInfo? Info = null)
+    ImageInfo? Info = null, string? Notice = null)
 {
     /// <summary>Success without a file: "Image info" reports facts only.</summary>
     public static ConversionResult Facts(string id, ImageInfo info) => new(id, true, ErrorCode.None, null, null, null, info);
