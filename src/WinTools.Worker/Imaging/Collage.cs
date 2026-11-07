@@ -1,3 +1,4 @@
+using SkiaSharp;
 using WinTools.Core.Jobs;
 
 namespace WinTools.Worker.Imaging;
@@ -49,6 +50,38 @@ internal static class Collage
     {
         var (columns, rows) = Grid(count);
         return (MaxSide / columns, MaxSide / rows);
+    }
+
+    /// <summary>
+    /// The image's pixels converted from its ICC profile to sRGB (a colour-managed copy through Skia, profile dropped), or
+    /// null when the profile cannot be applied: Skia reads matrix-and-curve profiles, not table-based ones. An image with
+    /// no profile is taken as sRGB already.
+    /// </summary>
+    public static unsafe RasterImage? ToSrgb(RasterImage image)
+    {
+        var plain = new RasterImage(image.Width, image.Height, image.Bgra, image.DpiX, image.DpiY);
+        if (image.IccProfile is not { } icc) return plain;
+        using var space = ReadProfile(icc);
+        if (space is null) return null;
+        if (space.IsSrgb) return plain;
+        using var srgb = SKColorSpace.CreateSrgb();
+        var source = new SKImageInfo(image.Width, image.Height, SKColorType.Bgra8888, SKAlphaType.Unpremul, space);
+        var target = source.WithColorSpace(srgb);
+        var output = new byte[image.Bgra.Length];
+        fixed (byte* s = image.Bgra)
+        fixed (byte* d = output)
+        {
+            using var pixmap = new SKPixmap(source, (nint)s, image.Width * 4);
+            if (!pixmap.ReadPixels(target, (nint)d, image.Width * 4)) return null;
+        }
+        return new RasterImage(image.Width, image.Height, output, image.DpiX, image.DpiY);
+    }
+
+    /// <summary>Skia's reading of a profile, or null when it has none (it throws for bytes it cannot parse).</summary>
+    private static SKColorSpace? ReadProfile(byte[] icc)
+    {
+        try { return SKColorSpace.CreateIcc(icc); }
+        catch (ArgumentException) { return null; }
     }
 
     /// <summary>The image, reduced to fit within a box when it is larger (never enlarged).</summary>

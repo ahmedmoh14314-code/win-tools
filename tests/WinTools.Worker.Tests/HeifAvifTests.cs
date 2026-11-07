@@ -290,7 +290,7 @@ public sealed class HeifAvifTests : IDisposable
     }
 
     /// <summary>The same file with every ispe box claiming another size.</summary>
-    private static byte[] WithIspe(byte[] file, int width, int height)
+    private static byte[] WithIspe(byte[] file, int width, int height, bool onlyFirst = false)
     {
         var copy = (byte[])file.Clone();
         for (var i = 0; i + 20 <= copy.Length; i++)
@@ -298,6 +298,7 @@ public sealed class HeifAvifTests : IDisposable
             {
                 System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(copy.AsSpan(i + 8), (uint)width);
                 System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(copy.AsSpan(i + 12), (uint)height);
+                if (onlyFirst) break;
             }
         return copy;
     }
@@ -311,6 +312,80 @@ public sealed class HeifAvifTests : IDisposable
         var r = Run("convert.to-png", src);
 
         Assert.Equal(ErrorCode.ImageTooLarge, r.Error);
+    }
+
+    [Fact]
+    public void Tiles_larger_than_they_state_are_refused_and_nothing_is_written()
+    {
+        // The bomb of the review of PR #43: small ispe boxes, large pictures in the bitstream.
+        var reference = ReferencePng(256, 256);
+        var large = Enumerable.Range(0, 4).Select(_ => HeifSamples.Encode(_dir.Path, reference, "format=yuv420p")).ToArray();
+        var src = _dir.Write("bomb.heic", WithIspe(new HeifBuilder().Build(large, 2, 2, 120, 100), 64, 64, onlyFirst: true));
+
+        var r = Run("convert.to-png", src);
+
+        Assert.False(r.Success, "a grid whose tiles lie about their size must not be composed");
+        Assert.Equal(ErrorCode.DecodeFailed, r.Error);
+        Assert.DoesNotContain("bomb.png", _dir.Names());
+    }
+
+    [Fact]
+    public void A_picture_larger_than_it_states_is_refused_before_the_engine_decodes_it()
+    {
+        var reference = ReferencePng(256, 256);
+        var bytes = WithIspe(new HeifBuilder().Build([HeifSamples.Encode(_dir.Path, reference, "format=yuv420p")], 1, 1, 256, 256), 64, 64);
+        var png = Path.Combine(_dir.Path, "direct.png");
+
+        // The arguments alone stop the engine: the cap holds even if the check before it were wrong.
+        var args = HeifCodec.DecodeArguments(Heif.Read(bytes, out _)!, _dir.Write("direct.heic", bytes), png);
+        Assert.Contains("-max_pixels", args);
+        Assert.Contains("-max_alloc", args);
+        Assert.False(Ffmpeg.Convert(args, TimeSpan.FromSeconds(30)).Ok);
+        Assert.False(File.Exists(png));
+
+        // The check before the decode stops it alone too, the engine's run never reached.
+        var e = Assert.Throws<ImagingException>(() => HeifCodec.CheckBitstreamSize(Heif.Read(bytes, out _)!, Path.Combine(_dir.Path, "direct.heic")));
+        Assert.Equal(ErrorCode.DecodeFailed, e.Code);
+
+        // Within the cap, it says what the bitstream holds: the size comes from the coded picture, not from ispe.
+        var slight = WithIspe(bytes, 240, 240);
+        e = Assert.Throws<ImagingException>(() => HeifCodec.CheckBitstreamSize(Heif.Read(slight, out _)!, _dir.Write("slight.heic", slight)));
+        Assert.Contains("256x256", e.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_gain_map_larger_than_the_tiles_does_not_trip_the_cap()
+    {
+        var reference = ReferencePng();
+        var builder = new HeifBuilder
+        {
+            Auxiliary = HeifSamples.Encode(_dir.Path, reference, "scale=120:96,format=gray,format=yuv420p"),
+            AuxiliaryType = "urn:com:apple:photo:2020:aux:hdrgainmap",
+        };
+        var src = _dir.Write("gain.heic", builder.Build(HeifSamples.Tiles(_dir.Path, reference, 64, 64, 2, 2), 2, 2, 120, 100));
+
+        var r = Run("convert.to-png", src);
+
+        Assert.True(r.Success, r.Message);
+    }
+
+    [Fact]
+    public void A_job_out_of_time_says_so_and_leaves_no_scratch_folder()
+    {
+        var bytes = File.ReadAllBytes(IphoneLike("slow.heic", ReferencePng()));
+        using (JobDeadline.Start(TimeSpan.Zero))
+        {
+            var e = Assert.Throws<ImagingException>(() => ImagePipeline.Decode(bytes, ImageFormat.Heif));
+            Assert.Equal(ErrorCode.WorkerTimeout, e.Code);
+        }
+        // Killed in the middle of the engine's work: the folder goes too.
+        using (JobDeadline.Start(TimeSpan.FromMilliseconds(5)))
+        {
+            HeifCodec.LastScratch = null;
+            var e = Assert.Throws<ImagingException>(() => ImagePipeline.Decode(bytes, ImageFormat.Heif));
+            Assert.Equal(ErrorCode.WorkerTimeout, e.Code);
+            if (HeifCodec.LastScratch is { } folder) Assert.False(Directory.Exists(folder), folder);
+        }
     }
 
     [Fact]

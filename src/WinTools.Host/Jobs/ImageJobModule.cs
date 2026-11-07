@@ -83,6 +83,13 @@ internal sealed class ImageJobModule : IJobModule
         yield return temp;
     }
 
+    /// <summary>This request's limit (ADR-0031): the rule both ends share, on the sources' real formats.</summary>
+    public static TimeSpan TimeoutFor(JobRequest request)
+    {
+        var op = OperationCatalog.Find(request.CapabilityId);
+        return ImageTimeLimits.For(op?.Kind == OperationKind.Collage, op?.Target ?? ImageFormat.Unknown, request.Inputs.Select(SourceFormat));
+    }
+
     /// <summary>The source's real format from its header (the hint from its name if it can no longer be read).</summary>
     private static ImageFormat SourceFormat(string path)
     {

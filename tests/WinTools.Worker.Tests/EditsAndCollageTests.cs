@@ -277,20 +277,128 @@ public sealed class EditsAndCollageTests : IDisposable
         Assert.Equal(["a.png", "b.png", "notes.png"], _dir.Names());
     }
 
-    [Fact]
-    public void A_collage_of_images_with_different_colour_profiles_says_so()
+    /// <summary>A PNG of one colour tagged with an ICC profile, in an iCCP chunk of its own.</summary>
+    private string TaggedPng(string name, (byte R, byte G, byte B) c, byte[] icc)
     {
-        var plain = Solid("a.jpg", 200, 150, HeifSamples.Red, ImageFormat.Jpeg);
-        var photo = CompressionCorpus.Photo(seed: 1, width: 200, height: 150);
-        var tagged = _dir.Write("b.jpg", WicCodec.Encode(new RasterImage(200, 150, photo.Bgra, 96, 96, HeifSamples.SrgbProfile()), ImageFormat.Jpeg, 0.9f));
-        var request = Collage(plain, tagged);
+        var png = PngWriter.Rgba(60, 40, (_, _) => (c.R, c.G, c.B, 255));
+        var z = new MemoryStream();
+        using (var zs = new System.IO.Compression.ZLibStream(z, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true)) zs.Write(icc);
+        return _dir.Write(name, PngWriter.InsertChunkAfterIhdr(png, "iCCP", [.. "test\0\0"u8, .. z.ToArray()]));
+    }
+
+    /// <summary>A small matrix profile with the Adobe RGB (1998) primaries, adapted to D50, and gamma 2.2.</summary>
+    private static byte[] AdobeRgbLikeProfile()
+    {
+        static byte[] Xyz(double x, double y, double z) => [.. "XYZ "u8, 0, 0, 0, 0, .. Fixed(x), .. Fixed(y), .. Fixed(z)];
+        static byte[] Fixed(double v) { var i = (int)Math.Round(v * 65536); return [(byte)(i >> 24), (byte)(i >> 16), (byte)(i >> 8), (byte)i]; }
+        byte[] curve = [.. "curv"u8, 0, 0, 0, 0, 0, 0, 0, 1, 0x02, 0x33, 0, 0];
+        var tags = new (string Name, byte[] Data)[]
+        {
+            ("rXYZ", Xyz(0.6097, 0.3111, 0.0195)), ("gXYZ", Xyz(0.2053, 0.6257, 0.0609)), ("bXYZ", Xyz(0.1492, 0.0632, 0.7446)),
+            ("rTRC", curve), ("gTRC", curve), ("bTRC", curve),
+        };
+        var at = 128 + 4 + 12 * tags.Length;
+        var table = new List<byte> { 0, 0, 0, (byte)tags.Length };
+        var data = new List<byte>();
+        foreach (var (name, bytes) in tags)
+        {
+            table.AddRange(System.Text.Encoding.ASCII.GetBytes(name));
+            table.AddRange([(byte)(at >> 24), (byte)(at >> 16), (byte)(at >> 8), (byte)at, 0, 0, 0, (byte)bytes.Length]);
+            data.AddRange(bytes);
+            at += bytes.Length;
+        }
+        var p = new byte[at];
+        (p[0], p[1], p[2], p[3]) = ((byte)(at >> 24), (byte)(at >> 16), (byte)(at >> 8), (byte)at);
+        p[8] = 4; // version
+        "mntrRGB XYZ "u8.CopyTo(p.AsSpan(12));
+        "acsp"u8.CopyTo(p.AsSpan(36));
+        Fixed(0.9642).CopyTo(p, 68); Fixed(1).CopyTo(p, 72); Fixed(0.8249).CopyTo(p, 76); // the D50 illuminant
+        table.CopyTo(p, 128);
+        data.CopyTo(p, 128 + table.Count);
+        return p;
+    }
+
+    [Fact]
+    public void A_collage_of_different_colour_profiles_converts_each_image_to_srgb()
+    {
+        (byte, byte, byte) colour = (100, 200, 100);
+        var plain = TaggedPngless("a.png", colour);
+        var wide = TaggedPng("b.png", colour, AdobeRgbLikeProfile());
+        var request = Collage(plain, wide);
 
         var result = ImageJobs.Run(request);
 
         Assert.True(result.Success, result.Message);
-        Assert.Contains(result.Facts, f => f.Notice && f.Value.Contains("colour profiles", StringComparison.Ordinal));
+        Assert.Empty(result.Facts); // nothing to warn about: the colours are right
+        var c = Load(result.Outputs[0].Path);
+        Assert.Null(c.IccProfile);
+        var (x, y) = (c.Width / 4, c.Height / 2);
+        Assert.True(HeifSamples.Near(At(c, x, y), colour, 2), $"{At(c, x, y)}");
+        var converted = At(c, c.Width * 3 / 4, y);
+        // The same numbers mean a stronger green in the wider space, as sRGB says it.
+        Assert.True(converted.R < 80 && converted.G is > 190 and < 212, $"{converted}");
+    }
+
+    private string TaggedPngless(string name, (byte R, byte G, byte B) c) => _dir.Write(name, PngWriter.Rgba(60, 40, (_, _) => (c.R, c.G, c.B, 255)));
+
+    [Fact]
+    public void A_profile_that_cannot_be_applied_is_stated_without_claiming_a_conversion()
+    {
+        var plain = Solid("a.jpg", 200, 150, HeifSamples.Red, ImageFormat.Jpeg);
+        // A sound profile but for one tag: it can be carried, not computed with.
+        var broken = AdobeRgbLikeProfile();
+        "xTRC"u8.CopyTo(broken.AsSpan(128 + 4 + 12 * 4));
+        var unusable = TaggedPng("b.png", (100, 200, 100), broken);
+        var request = Collage(plain, unusable);
+
+        var result = ImageJobs.Run(request);
+
+        Assert.True(result.Success, result.Message);
+        var notice = Assert.Single(result.Facts);
+        Assert.True(notice.Notice);
+        Assert.Contains("could not be applied", notice.Value, StringComparison.Ordinal);
+        Assert.DoesNotContain("sRGB", notice.Value, StringComparison.Ordinal);
         Assert.True(ImageJobModule.Instance.IsBelievable(request, result));
         Assert.False(ImageJobModule.Instance.IsBelievable(request, result with { Facts = [new("Safe", "Verified")] })); // a fact that is not a notice
+    }
+
+    [Fact]
+    public void A_collage_of_images_sharing_a_profile_keeps_it()
+    {
+        var icc = AdobeRgbLikeProfile();
+        var result = ImageJobs.Run(Collage(TaggedPng("a.png", (90, 180, 90), icc), TaggedPng("b.png", (180, 90, 90), icc)));
+
+        Assert.True(result.Success, result.Message);
+        Assert.Empty(result.Facts);
+        Assert.Equal(icc, Load(result.Outputs[0].Path).IccProfile);
+    }
+
+    [Fact]
+    public void A_collage_out_of_time_says_so_and_writes_nothing()
+    {
+        var a = Solid("a.png", 40, 30, HeifSamples.Red, ImageFormat.Png);
+        var b = Solid("b.png", 40, 30, HeifSamples.Green, ImageFormat.Png);
+        Assert.Equal(ErrorCode.WorkerTimeout, ConversionJob.RunCollage("late1", [a, b], null, null, deadline: TimeSpan.Zero).Error);
+        Assert.Equal(["a.png", "b.png"], _dir.Names());
+    }
+
+    [Theory]
+    [InlineData("a.jpg", "resize.percent-50", 60)]
+    [InlineData("a.png", "convert.to-webp", 60)]
+    [InlineData("a.png", "convert.to-avif", 120)]
+    public void The_host_gives_engine_work_the_longer_limit_and_everything_else_sixty_seconds(string name, string op, int seconds)
+    {
+        var path = _dir.Write(name, name.EndsWith(".png", StringComparison.Ordinal) ? HeifSamples.Picture(16, 16) : WicCodec.Encode(new RasterImage(8, 8, new byte[256]), ImageFormat.Jpeg));
+        Assert.Equal(TimeSpan.FromSeconds(seconds), ImageJobModule.TimeoutFor(new JobRequest("t", op, [path])));
+    }
+
+    [Fact]
+    public void The_limit_follows_the_content_not_the_name_and_a_collage_gets_the_longer_one()
+    {
+        var hidden = _dir.Write("really a heic.jpg", new HeifBuilder().Build([new CodedTile([], "hvc1", 8, 8, [1])], 1, 1, 8, 8));
+        Assert.Equal(TimeSpan.FromSeconds(120), ImageJobModule.TimeoutFor(new JobRequest("t", "rotate.right", [hidden])));
+        var png = _dir.Write("a.png", HeifSamples.Picture(16, 16));
+        Assert.Equal(TimeSpan.FromSeconds(120), ImageJobModule.TimeoutFor(new JobRequest("t", OperationCatalog.CollageId, [png, hidden])));
     }
 
     [Fact]

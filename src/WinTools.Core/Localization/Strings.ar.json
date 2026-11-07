@@ -448,7 +448,7 @@
   "value.Not set": "غير محدد",
   "value.Normal": "عادي",
   "fact.Colour": "الألوان",
-  "value.The images have different colour profiles; the collage uses standard colours (sRGB)": "للصور ملفات تعريف ألوان مختلفة؛ يستخدم الكولاج الألوان القياسية (sRGB)",
+  "value.A colour profile could not be applied, so an image may look slightly different": "تعذّر تطبيق ملف تعريف ألوان، فقد تبدو إحدى الصور مختلفة قليلًا",
   "value.XMP": "XMP",
   "value.text or comments": "نص أو تعليقات",
   "value.other": "أخرى",

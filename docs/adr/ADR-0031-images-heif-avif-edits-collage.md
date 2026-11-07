@@ -39,9 +39,11 @@
 **Collage.** 2–16 images under Tools (the whole selection, name order), in a grid as square as possible, on white, at most 6000 px on the longer side.
 - JPEG when every input is one, otherwise PNG.
 - Images are reduced as soon as they are decoded, so only one full image is in memory.
-- A profile shared by all inputs is kept. Different profiles give sRGB and a notice in the toast: pixels are not converted, because the product has no colour management.
+- A profile shared by all inputs is kept. With different profiles, each tagged image is converted to sRGB through Skia. A profile Skia cannot apply (table-based, or damaged) leaves that image's numbers as they are, and the toast says so.
 
-**Time.** The image worker's request limit grows from 60 s to 120 s; each engine run has 40 s.
+**Time.** Ordinary image work keeps the host's 60 s. HEIC, AVIF (source or target) and Collage get 120 s, on the file's real format, by one rule both ends share (`ImageTimeLimits`). The worker stops 15 s earlier: each engine run has at most 40 s and never more than the job has left, so a late job fails cleanly and its scratch folder goes with it.
+
+**Size in the bitstream.** The limits in step 1 use the sizes a file states, which a hostile file can understate. So ffprobe reads each coded picture's real size (HEVC SPS, AV1 sequence header) before the decode, and it must equal the stated size; and FFmpeg runs with `-max_pixels` (the stated size plus coding-unit rounding) and `-max_alloc` (1 GiB).
 
 ## Alternatives considered
 - **libheif + libde265:** a second LGPL engine for what FFmpeg already does.
@@ -69,7 +71,7 @@ Test files are made on the spot: FFmpeg encodes tiles (HEVC with kvazaar, AV1 wi
 | The same file through the job (`Phone_size_heic_and_avif`) | To JPEG 2.5 s, 50 % resize 1.7 s, To AVIF 7.7 s, from a 455 KB HEIC to a 1,037 KB JPEG or a 221 KB AVIF |
 | 3840 × 2400 wallpaper, 4:4:4 CRF 18 AVIF against FFmpeg JPEG `-q:v 2` | 134 KB at 45.8 dB against 709 KB at 46.5 dB; source JPEG 1.6 MB |
 
-One real file from outside the product was checked by hand: `image1.heic` of github.com/tigranbs/test-heic-images (2.9 MB, 3992 x 2992, 48 HEVC tiles, ICC profile, Exif item, no rotation). To PNG took 4.3 s and the picture was complete, with no seams, looking at it. It is not committed because its licence is unknown, and whether it came straight from an iPhone camera is not known: a rotated camera original has only been tested on the built files above.
+One real file from outside the product was checked by hand: `image1.heic` of github.com/tigranbs/test-heic-images (2.9 MB, 3992 x 2992, 48 HEVC tiles, ICC profile, Exif item, no rotation). To PNG took 4.3 s and the picture was complete, with no seams, looking at it. That check came before the bitstream size check, and the file, whose licence is unknown, is no longer kept, so no real file has passed the current check. Whether it came straight from an iPhone camera is not known: a rotated camera original has only been tested on the built files above.
 
 ## Evaluator review
 Pending: the pull request's review.

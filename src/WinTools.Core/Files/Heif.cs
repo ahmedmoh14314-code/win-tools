@@ -17,8 +17,11 @@ namespace WinTools.Core.Files;
 /// <param name="BitDepth">Bits per channel of the coded pictures.</param>
 /// <param name="Exif">The Exif item's TIFF block, or null.</param>
 /// <param name="CodedPixels">The pixels the engine decodes: a grid's whole canvas of tiles, which may exceed the output.</param>
+/// <param name="CodedItems">The items holding coded pictures of the primary image (its tiles, or itself).</param>
+/// <param name="CodedWidth">The size each of them states (a tile's ispe, or the image's); a bitstream may claim another.</param>
 public sealed record HeifImage(int PrimaryItem, bool Av1, int Width, int Height, int Tiles, int Orientation, byte[]? Icc, int Transfer, int AlphaItem,
-    int BitDepth, byte[]? Exif, bool Xmp, bool OtherMetadata, long CodedPixels)
+    int BitDepth, byte[]? Exif, bool Xmp, bool OtherMetadata, long CodedPixels,
+    IReadOnlyList<int> CodedItems, int CodedWidth, int CodedHeight)
 {
     public bool IsGrid => Tiles > 1;
 
@@ -167,6 +170,8 @@ public static class Heif
 
         int width, height, tiles;
         long codedPixels = 0;
+        int codedWidth, codedHeight;
+        uint[] codedItems;
         Item coded;
         if (main.Type == "grid")
         {
@@ -192,6 +197,7 @@ public static class Heif
             // The tiles must cover the output, and the canvas the engine composes them on stays bounded.
             if ((long)tileSize.W * columns < width || (long)tileSize.H * rows < height) return Fail("the grid's tiles do not cover the image", out reason);
             codedPixels = (long)tileSize.W * columns * tileSize.H * rows;
+            (codedWidth, codedHeight, codedItems) = (tileSize.W, tileSize.H, dimg);
         }
         else
         {
@@ -200,6 +206,7 @@ public static class Heif
             if (main.Extents is null) return Fail("the image has no data", out reason);
             if (Size(d, Prop(main, "ispe")) is not { } size) return Fail("the image does not state its size", out reason);
             (width, height) = (size.W, size.H);
+            (codedWidth, codedHeight, codedItems) = (size.W, size.H, [main.Id]);
         }
         if (coded.Type is not ("hvc1" or "av01")) return Fail($"an image coded as {coded.Type.Trim()}, which WinTools does not read", out reason);
         var config = Prop(coded, coded.Type == "hvc1" ? "hvcC" : "av1C");
@@ -261,9 +268,9 @@ public static class Heif
             else if (item.Type == "mime" && item.ContentType == "application/rdf+xml") xmp = true;
             else other = true;
         }
-        if (main.Id > int.MaxValue) return Fail("an item id out of range", out reason);
+        if (main.Id > int.MaxValue || codedItems.Any(i => i > int.MaxValue)) return Fail("an item id out of range", out reason);
         return new HeifImage((int)main.Id, coded.Type == "av01", width, height, tiles, orientation, icc, transfer, (int)alpha, depth, exif, xmp, other,
-            Math.Max(codedPixels, (long)width * height));
+            Math.Max(codedPixels, (long)width * height), [.. codedItems.Select(i => (int)i)], codedWidth, codedHeight);
     }
 
     private static HeifImage? Fail(string why, out string reason) { reason = why; return null; }

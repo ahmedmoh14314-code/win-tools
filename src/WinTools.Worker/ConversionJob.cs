@@ -38,6 +38,7 @@ internal static class ConversionJob
             return ConversionResult.Fail(id, ErrorCode.InvalidRequest, "The output folder must be a canonical, fully qualified path.");
         if (op.Kind == OperationKind.Collage) return ConversionResult.Fail(id, ErrorCode.InvalidRequest, "A collage takes 2 to 16 images.");
         DecoderDiagnostics.Reset();
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
 
         return Guarded(id, pending =>
         {
@@ -54,6 +55,9 @@ internal static class ConversionJob
                     ? "The file is not a supported image."
                     : $"The file content is {ImageFormats.DisplayName(actual)}; \"{op.Label}\" does not apply to it.");
 
+            // The time left counts from the start of the job, in the limit the host set for this file (ADR-0031).
+            using var deadline = JobDeadline.Start(ImageTimeLimits.For(false, op.Target, [actual]) - ImageTimeLimits.WorkerMargin - System.Diagnostics.Stopwatch.GetElapsedTime(started));
+
             if (op.Kind == OperationKind.Info) return ConversionResult.Facts(id, ImagePipeline.Describe(input, actual));
 
             var encoded = ImagePipeline.Run(input, actual, op, request.JpegQuality, request.WebPQuality);
@@ -67,7 +71,7 @@ internal static class ConversionJob
     /// decoded like any other; the result carries the strictest Mark of the Web of its sources and their colour profile
     /// when they all share one (otherwise none, and the user is told).
     /// </summary>
-    public static ConversionResult RunCollage(string id, IReadOnlyList<string> sources, string? outputDir, int? jpegQuality, JobHooks? hooks = null)
+    public static ConversionResult RunCollage(string id, IReadOnlyList<string> sources, string? outputDir, int? jpegQuality, JobHooks? hooks = null, TimeSpan? deadline = null)
     {
         if (id is not { Length: > 0 and <= 64 } || id.Any(c => !char.IsAsciiLetterOrDigit(c)))
             return ConversionResult.Fail("invalid", ErrorCode.InvalidRequest, "Request id must be 1-64 ASCII letters or digits.");
@@ -82,6 +86,7 @@ internal static class ConversionJob
 
         return Guarded(id, pending =>
         {
+            using var time = JobDeadline.Start(deadline ?? ImageTimeLimits.Engine - ImageTimeLimits.WorkerMargin);
             var (boundW, boundH) = Collage.CellBound(ordered.Count);
             var images = new List<RasterImage>();
             var sizes = new List<(int, int)>();
@@ -90,6 +95,7 @@ internal static class ConversionJob
             int? zone = null;
             foreach (var source in ordered)
             {
+                JobDeadline.Check();
                 if (Directory.Exists(source)) return ConversionResult.Fail(id, ErrorCode.IsAFolder, "One of the sources is a folder, not a file.");
                 var input = ReadSource(source);
                 zone = MarkOfTheWeb.ZoneToCarry(source) is { } z ? Math.Max(z, zone ?? z) : zone;
@@ -104,14 +110,21 @@ internal static class ConversionJob
                 images.Add(Collage.FitWithin(image, boundW, boundH));
             }
             hooks?.AfterSourceRead?.Invoke();
-            // One colour profile for the whole picture: the sources' own when they share it, otherwise none (sRGB).
+            // One colour profile for the whole picture: the sources' own when they share it, otherwise each is converted to sRGB.
             var shared = profiles.All(p => p is not null && p.AsSpan().SequenceEqual(profiles[0])) ? profiles[0] : null;
-            var mixed = shared is null && profiles.Any(p => p is not null);
+            var unconverted = false;
+            if (shared is null)
+                for (var i = 0; i < images.Count; i++)
+                {
+                    var converted = Collage.ToSrgb(images[i]);
+                    unconverted |= converted is null;
+                    images[i] = converted ?? images[i];
+                }
             var canvas = Collage.Compose(images, sizes, shared);
             var format = Operation.CollageFormat(formats);
             var bytes = format == ImageFormat.Jpeg ? WicCodec.Encode(canvas, format, Math.Clamp(jpegQuality ?? 90, 1, 100) / 100f) : WicCodec.Encode(canvas, format);
             var result = Commit(id, ordered[0], new ImagePipeline.Encoded(bytes, canvas.Width, canvas.Height, format), op.NameSuffix, outputDir, zone, hooks, pending);
-            return result.Success && mixed ? result with { Notice = "The images have different colour profiles; the collage uses standard colours (sRGB)" } : result;
+            return result.Success && unconverted ? result with { Notice = "A colour profile could not be applied, so an image may look slightly different" } : result;
         });
     }
 

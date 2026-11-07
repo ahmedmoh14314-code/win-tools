@@ -448,7 +448,7 @@
   "value.Not set": "Not set",
   "value.Normal": "Normal",
   "fact.Colour": "Colour",
-  "value.The images have different colour profiles; the collage uses standard colours (sRGB)": "The images have different colour profiles; the collage uses standard colours (sRGB)",
+  "value.A colour profile could not be applied, so an image may look slightly different": "A colour profile could not be applied, so an image may look slightly different",
   "value.XMP": "XMP",
   "value.text or comments": "text or comments",
   "value.other": "other",

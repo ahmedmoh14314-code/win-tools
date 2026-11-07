@@ -64,7 +64,7 @@ public enum ErrorCode
 
 /// <summary>The worker's answer. Success carries the final output path; failure carries a code and a short message.</summary>
 /// <param name="OutputSha256">Hex SHA-256 of the output the worker validated, so the host can check the file it finds is that one.</param>
-/// <param name="Notice">Something the user must know about a success (a collage whose images had different colour profiles).</param>
+/// <param name="Notice">Something the user must know about a success (a collage with a colour profile it could not apply).</param>
 public sealed record ConversionResult(string Id, bool Success, ErrorCode Error, string? Message, string? OutputPath, string? OutputSha256 = null,
     ImageInfo? Info = null, string? Notice = null)
 {
