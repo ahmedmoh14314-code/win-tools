@@ -200,6 +200,16 @@ public sealed class SevenZipRarWorkerTests : IDisposable
         Assert.Equal(["huge.rar", "rar4.rar"], Everything());
     }
 
+    [Fact]
+    public void Declared_sizes_meet_both_the_total_and_the_whole_archive_rule()
+    {
+        // 21 GB from a 1 GB archive is only 21:1: the 20 GB cap alone refuses it. No sample that small can declare that much.
+        Assert.Contains("20 GB", ArchiveJobs.DeclaredRefusal(21L << 30, 1L << 30), StringComparison.Ordinal);
+        Assert.Null(ArchiveJobs.DeclaredRefusal(19L << 30, 1L << 30));
+        Assert.Contains("bomb", ArchiveJobs.DeclaredRefusal(300L << 20, 1L << 20), StringComparison.Ordinal);
+        Assert.Null(ArchiveJobs.DeclaredRefusal(200L << 20, 1L << 10)); // under the whole-archive rule's 256 MB floor
+    }
+
     [Theory]
     [InlineData("rar5-solid.rar")]
     [InlineData("rar4.rar")]

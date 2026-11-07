@@ -12,6 +12,12 @@ namespace WinTools.Worker.Archive;
 
 internal static partial class ArchiveJobs
 {
+    /// <summary>Why the sizes a 7z or RAR declares are beyond the limits, or null when they are not.</summary>
+    internal static string? DeclaredRefusal(long declared, long archiveBytes) =>
+        declared > ArchiveLimits.MaxTotalBytes ? $"The archive declares more than {ArchiveLimits.MaxTotalBytes >> 30} GB."
+        : ArchiveLimits.IsArchiveBomb(declared, archiveBytes) ? "The archive declares far more than its own size; it looks like an archive bomb."
+        : null;
+
     /// <summary>
     /// A 7z or RAR (RAR 4 or RAR 5) archive, read with SharpCompress (ADR-0030). The library only parses and
     /// decompresses: every entry still goes through <see cref="ReadAll"/> (names, links, the one budget, sizes counted as
@@ -164,8 +170,7 @@ internal static partial class ArchiveJobs
             if (_prepared) return;
             if (NamesHidden) throw new ArchiveFailure(ErrorCode.PasswordRequired, "The archive's names and contents are protected with a password.");
             if (IsMultiPart) throw new ArchiveFailure(ErrorCode.UnsupportedContent, "The archive is one part of an archive split into several files, which WinTools does not extract yet.");
-            if (DeclaredBytes > ArchiveLimits.MaxTotalBytes) throw new ArchiveFailure(ErrorCode.LimitExceeded, $"The archive declares more than {ArchiveLimits.MaxTotalBytes >> 30} GB.");
-            if (ArchiveLimits.IsArchiveBomb(DeclaredBytes, _fileLength)) throw new ArchiveFailure(ErrorCode.LimitExceeded, "The archive declares far more than its own size; it looks like an archive bomb.");
+            if (DeclaredRefusal(DeclaredBytes, _fileLength) is { } why) throw new ArchiveFailure(ErrorCode.LimitExceeded, why);
             _prepared = true;
         }
 
