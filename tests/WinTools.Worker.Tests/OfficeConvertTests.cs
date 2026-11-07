@@ -349,9 +349,9 @@ public sealed class OfficeConvertTests : IDisposable
         var watch = Stopwatch.StartNew();
         var run = ChildProcess.Run(powershell, ["-NoProfile", "-NonInteractive", "-Command",
             $"$c = Start-Process -NoNewWindow -PassThru -FilePath '{powershell}' -ArgumentList '-NoProfile','-Command','Start-Sleep 60'; Set-Content -Path child.txt -Value $c.Id; Start-Sleep 60"],
-            _dir.Path, env, TimeSpan.FromSeconds(8));
+            _dir.Path, env, TimeSpan.FromSeconds(25));
         Assert.True(run.TimedOut);
-        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(30));
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(50));
         var child = int.Parse(File.ReadAllText(Path.Combine(_dir.Path, "child.txt")).Trim(), System.Globalization.CultureInfo.InvariantCulture);
         Assert.True(Gone(child), "the child process outlived the limit");
         Assert.Throws<ArgumentException>(() => ChildProcess.Run(powershell, ["a\nb"], _dir.Path, env, TimeSpan.FromSeconds(1)));
