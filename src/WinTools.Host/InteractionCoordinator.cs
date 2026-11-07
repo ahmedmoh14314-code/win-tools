@@ -86,7 +86,11 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     /// <summary>The message window this coordinator runs on (owned by the composition root).</summary>
     public MessageWindow Window => _window;
 
-    public void Start() => _hooks.Start();
+    public void Start()
+    {
+        _hooks.Start();
+        _ = Task.Run(SweepPageThumbnails);
+    }
 
     public void RequestClose() => _window.RequestClose();
 
@@ -499,6 +503,18 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     /// and answers a plan, and the PDF worker writes the new PDF from it. The folder is deleted once the window has closed.
     /// A PDF the thumbnails job refuses (a password, too many pages, damage) ends with that job's toast.
     /// </summary>
+    private static string PagesFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WinTools", "Pages");
+
+    /// <summary>
+    /// Deletes thumbnails a killed or crashed host left behind (review, #40): they are pictures of the user's pages. Only one
+    /// host runs, so at start nothing here is in use.
+    /// </summary>
+    private void SweepPageThumbnails()
+    {
+        try { if (Directory.Exists(PagesFolder)) Directory.Delete(PagesFolder, recursive: true); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _log.Event("organize.cleanup", new { type = ex.GetType().Name }); }
+    }
+
     private async Task AskOrganizeAndRunAsync(CapabilityDescriptor capability, IReadOnlyList<string> paths, int x, int y)
     {
         // Fire and forget from Drop: nothing here may throw unobserved.
@@ -507,7 +523,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             _feedback.DialogUnavailable(UiText.T("toast.organizeWindow"));
             return;
         }
-        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WinTools", "Pages", Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(PagesFolder, Guid.NewGuid().ToString("N"));
         try
         {
             Directory.CreateDirectory(folder);
