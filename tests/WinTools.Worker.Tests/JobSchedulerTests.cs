@@ -92,15 +92,17 @@ public sealed class JobSchedulerTests : IDisposable
         await Task.WhenAll(first.Completion, second.Completion).WaitAsync(TimeSpan.FromSeconds(10));
     }
 
-    [Fact]
-    public async Task A_clipboard_command_never_waits_behind_its_modules_queue()
+    [Theory]
+    [InlineData(CapabilityOutput.Clipboard)]
+    [InlineData(CapabilityOutput.Window)] // Show in folder and Open in Terminal open their window at once (ADR-0032)
+    public async Task A_clipboard_command_never_waits_behind_its_modules_queue(CapabilityOutput produces)
     {
         // Copy path behind a long hash would overwrite the clipboard minutes later (evaluator, PR #18).
         var gate = new Gate();
         var scheduler = Scheduler(new Recorder(), ("a", gate));
         var slow = scheduler.Enqueue(Capability("a.hash", "a"), [@"C:\x\big.iso"])!;
         await Entered(gate);
-        var copy = scheduler.Enqueue(Capability("a.copy", "a", CapabilityShape.Selection) with { Produces = CapabilityOutput.Clipboard, LongRunning = false }, [@"C:\x\a.png"])!;
+        var copy = scheduler.Enqueue(Capability("a.copy", "a", CapabilityShape.Selection) with { Produces = produces, LongRunning = false }, [@"C:\x\a.png"])!;
         await Entered(gate);                     // it started while the hash still runs
         gate.Release(1);
         await copy.Completion.WaitAsync(TimeSpan.FromSeconds(10));

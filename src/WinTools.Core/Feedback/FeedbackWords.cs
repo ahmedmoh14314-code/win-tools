@@ -8,11 +8,13 @@ namespace WinTools.Core.Feedback;
 /// file that needs a password, when the module has its own way (an archive: drop it on its own, V2 PR 5.3).
 /// </summary>
 /// <remarks><c>SuccessTitle</c>: the title of a success that created nothing ("Files renamed"), instead of
-/// "<i>name</i> created" (V2 PR 7.2).</remarks>
+/// "<i>name</i> created" (V2 PR 7.2); "{0}" in it is the item's name ("report.pdf moved", ADR-0032).</remarks>
+/// <remarks><c>ShowSizes</c>: whether a success shows the sizes before and after; a copy or a move keeps the size, so it
+/// would only say "2.4 MB → 2.4 MB" (ADR-0032).</remarks>
 /// <remarks><c>Reasons</c>: the module's own words for some failures (Batch rename: a name already used means nothing was
 /// renamed, not that no output name was free).</remarks>
 public sealed record FeedbackWords(string Working, string Verb, string Done, string NothingReason, string Noun, string Nouns, bool Savings = false,
-    string? PasswordRequired = null, string? SuccessTitle = null, IReadOnlyDictionary<Jobs.ErrorCode, string>? Reasons = null)
+    string? PasswordRequired = null, string? SuccessTitle = null, IReadOnlyDictionary<Jobs.ErrorCode, string>? Reasons = null, bool ShowSizes = true)
 {
     /// <summary>Plain words from a command's label, for a module that gives none.</summary>
     public static FeedbackWords From(string label) =>

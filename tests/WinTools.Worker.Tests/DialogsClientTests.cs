@@ -27,6 +27,14 @@ public sealed class DialogsClientTests
         Assert.Equal(new PickOutcome(PickEnd.Unavailable), await client.PickAsync(Request).WaitAsync(TimeSpan.FromSeconds(30)));
     }
 
+    [Fact]
+    public async Task A_missing_dialogs_program_is_unavailable_for_the_folder_window_too()
+    {
+        // ADR-0032: Copy to and Move to then say the folder window could not open; nothing is copied or moved.
+        var client = new DialogsClient(Path.Combine(AppContext.BaseDirectory, "no-such-dir", "WinTools.Dialogs.exe"));
+        Assert.Equal(new FolderOutcome(PickEnd.Unavailable), await client.AskFolderAsync(new FolderRequest("Choose where to copy", 0, 0)));
+    }
+
     [Theory]
     [InlineData("{\"chosen\":\"a.one\"}", true)]
     [InlineData("{\"chosen\":\"a.two\"}", false)]   // not offered
