@@ -10,4 +10,8 @@
     <ProjectReference Include="..\WinTools.Worker.Common\WinTools.Worker.Common.csproj" />
     <InternalsVisibleTo Include="WinTools.Worker.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Markdown to HTML (ADR-0033): BSD-2-Clause, no dependencies, used with raw HTML disabled. -->
+    <PackageReference Include="Markdig" />
+  </ItemGroup>
 </Project>
