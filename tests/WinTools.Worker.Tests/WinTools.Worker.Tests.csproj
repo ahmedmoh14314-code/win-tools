@@ -19,7 +19,7 @@
     <ProjectReference Include="..\..\src\WinTools.Host\WinTools.Host.csproj" />
     <!-- The dialogs process, started by its own tests as the host starts it. -->
     <ProjectReference Include="..\..\src\WinTools.Dialogs\WinTools.Dialogs.csproj" ReferenceOutputAssembly="false" Private="false" />
-    <None Include="..\samples\*.png;..\samples\*.jpg;..\samples\*.bmp;..\samples\*.tif;..\samples\*.webp;..\samples\locked-*.zip" Link="samples\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\samples\*.png;..\samples\*.jpg;..\samples\*.bmp;..\samples\*.tif;..\samples\*.webp;..\samples\locked-*.zip;..\samples\pages-3.pdf" Link="samples\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="CopyDialogsApp" AfterTargets="Build">
     <MSBuild Projects="..\..\src\WinTools.Dialogs\WinTools.Dialogs.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">

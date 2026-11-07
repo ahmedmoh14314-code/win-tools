@@ -29,6 +29,9 @@ internal static class Program
     /// <summary>Per-request limit of the media worker: encoding a long video takes a while (the engine's own limit is 55 min).</summary>
     private static readonly TimeSpan MediaTimeout = TimeSpan.FromMinutes(60);
 
+    /// <summary>Per-document limit of Office to PDF: LibreOffice's own limit in the worker is 3 min, plus the copy and the checks.</summary>
+    private static readonly TimeSpan OfficeTimeout = TimeSpan.FromMinutes(5);
+
     /// <summary>How long the exit waits for cancelled jobs: the workers' 1 s grace plus temp cleanup.</summary>
     private static readonly TimeSpan ExitGrace = TimeSpan.FromSeconds(3);
 
@@ -102,9 +105,11 @@ internal static class Program
             // Subtitle jobs: the text worker, which also runs File info and SHA-256 (a separate runner, its own module rules).
             var subtitles = new JobModuleRunner(SubtitleJobModule.Instance, new WorkerClient(textWorkerPath, JobTimeout, SubtitleJobModule.Instance), SubtitleJobModule.Parameters);
             var documents = new JobModuleRunner(DocumentJobModule.Instance, new WorkerClient(textWorkerPath, JobTimeout, DocumentJobModule.Instance), DocumentJobModule.Parameters);
+            // Office to PDF (ADR-0033): one document at a time (LibreOffice is heavy), in the text worker, which runs it.
+            var office = new JobModuleRunner(OfficeJobModule.Instance, new WorkerClient(textWorkerPath, OfficeTimeout, OfficeJobModule.Instance, parallelism: 1), OfficeJobModule.Parameters);
             // Media jobs: one worker at a time (an encode already uses every core; ADR-0028).
             var media = new JobModuleRunner(MediaJobModule.Instance, new WorkerClient(mediaWorkerPath, MediaTimeout, MediaJobModule.Instance, parallelism: 1), MediaJobModule.Parameters);
-            var jobs = new JobScheduler([images, files, pdf, archives, subtitles, documents, media], log, () => Volatile.Read(ref current), feedback);
+            var jobs = new JobScheduler([images, files, pdf, archives, subtitles, documents, office, media], log, () => Volatile.Read(ref current), feedback);
             coordinator = new InteractionCoordinator(log, window, jobs, feedback, sounds, settings);
             using (coordinator)
             {
