@@ -9,13 +9,18 @@ namespace WinTools.Worker.Text;
 /// Writes a one-sheet Excel workbook from a table (ADR-0033): the few parts Excel needs, written with an XmlWriter, so
 /// every cell's text is escaped by the writer, never pasted into markup. A cell is a number only when
 /// <see cref="Csv.IsPlainNumber"/> says so; anything else is inline text, so "=SUM(...)" in a CSV is text in the workbook,
-/// never a formula. A sheet whose text is mostly right-to-left (Arabic, Hebrew) opens right to left.
+/// never a formula. A sheet whose text is mostly right-to-left (Arabic, Hebrew) opens right to left. Columns are as wide
+/// as their longest line, up to <see cref="MaxColumnWidth"/>, and a longer cell wraps: at the default width, text would be
+/// cut at the next cell and a long number shown as ### in Excel and in a PDF made from the sheet.
 /// </summary>
 internal static class XlsxWriter
 {
     private const string Main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
     private const string Rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
     private const string PackageRel = "http://schemas.openxmlformats.org/package/2006/relationships";
+
+    /// <summary>The widest column, in characters.</summary>
+    private const int MaxColumnWidth = 60;
 
     /// <summary>The workbook's bytes, and how many characters XML cannot hold were replaced (U+FFFD).</summary>
     public static (byte[] Bytes, int Replaced) Build(IReadOnlyList<string[]> rows, string sheetName)
@@ -64,7 +69,7 @@ internal static class XlsxWriter
             Part(zip, "xl/styles.xml", w =>
             {
                 w.WriteStartElement("styleSheet", Main);
-                w.WriteRaw("""<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>""");
+                w.WriteRaw("""<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>""");
                 w.WriteEndElement();
             });
             Part(zip, "xl/worksheets/sheet1.xml", w =>
@@ -77,6 +82,21 @@ internal static class XlsxWriter
                     w.WriteAttributeString("rightToLeft", "1");
                     w.WriteAttributeString("workbookViewId", "0");
                     w.WriteEndElement();
+                    w.WriteEndElement();
+                }
+                if (ColumnWidths(rows) is { Length: > 0 } widths)
+                {
+                    w.WriteStartElement("cols", Main);
+                    for (var k = 0; k < widths.Length; k++)
+                    {
+                        w.WriteStartElement("col", Main);
+                        var column = (k + 1).ToString(CultureInfo.InvariantCulture);
+                        w.WriteAttributeString("min", column);
+                        w.WriteAttributeString("max", column);
+                        w.WriteAttributeString("width", widths[k].ToString(CultureInfo.InvariantCulture));
+                        w.WriteAttributeString("customWidth", "1");
+                        w.WriteEndElement();
+                    }
                     w.WriteEndElement();
                 }
                 w.WriteStartElement("sheetData", Main);
@@ -97,6 +117,7 @@ internal static class XlsxWriter
                         }
                         else
                         {
+                            if (LongestLine(row[k]) > MaxColumnWidth || row[k].Contains('\n', StringComparison.Ordinal)) w.WriteAttributeString("s", "1");
                             w.WriteAttributeString("t", "inlineStr");
                             w.WriteStartElement("is", Main);
                             w.WriteStartElement("t", Main);
@@ -114,6 +135,22 @@ internal static class XlsxWriter
             });
         }
         return (buffer.ToArray(), replaced);
+    }
+
+    /// <summary>Each column's width: its longest line and a little air, at least Excel's usual width, at most the cap.</summary>
+    private static int[] ColumnWidths(IReadOnlyList<string[]> rows)
+    {
+        var longest = new int[rows.Count == 0 ? 0 : rows.Max(r => r.Length)];
+        foreach (var row in rows)
+            for (var k = 0; k < row.Length; k++) longest[k] = Math.Max(longest[k], LongestLine(row[k]));
+        return [.. longest.Select(n => Math.Clamp(n + 2, 9, MaxColumnWidth))];
+    }
+
+    private static int LongestLine(string cell)
+    {
+        var longest = 0;
+        foreach (var line in cell.AsSpan().EnumerateLines()) longest = Math.Max(longest, line.Length);
+        return longest;
     }
 
     /// <summary>The cell text the workbook holds: characters XML cannot carry (most C0 controls) become U+FFFD.</summary>
@@ -245,7 +282,8 @@ internal static class WorkbookReader
     /// <summary>The worksheets in the workbook's order, or the numbered parts ("Sheet 1"...) when it lists none.</summary>
     public static IReadOnlyList<Sheet> Sheets(ZipArchive zip)
     {
-        var rels = Relationships(zip).Where(r => r.Type == "worksheet").ToDictionary(r => r.Id, r => r.Part, StringComparer.Ordinal);
+        var rels = new Dictionary<string, (string Type, string Part)>(StringComparer.Ordinal);
+        foreach (var (id, type, part) in Relationships(zip)) rels.TryAdd(id, (type, part)); // the first of a repeated id
         var sheets = new List<Sheet>();
         if (DocumentJobs.ReadPart(zip, "xl/workbook.xml") is { } wb)
         {
@@ -260,9 +298,11 @@ internal static class WorkbookReader
                     if (r.LocalName == "id" && r.NamespaceURI.EndsWith("/relationships", StringComparison.Ordinal)) rid = r.Value;
                 }
                 r.MoveToElement();
-                if (rid is null || !rels.TryGetValue(rid, out var part)) continue; // a chart sheet: no cells
-                // A sheet the workbook lists and the package lacks is damage: leaving it out would lose it without a word.
-                var entry = DocumentJobs.Find(zip, part) ?? throw new Csv.Problem("The workbook lists a sheet its package does not hold.");
+                // A sheet the workbook lists and cannot reach is damage: leaving it out would lose it without a word.
+                if (rid is null || !rels.TryGetValue(rid, out var target)) throw new Csv.Problem("The workbook lists a sheet its package does not hold.");
+                if (target.Type is "chartsheet" or "dialogsheet" or "xlMacrosheet" or "xlIntlMacrosheet") continue; // no cells
+                if (target.Type != "worksheet") throw new Csv.Problem("The workbook lists a sheet of a kind WinTools does not read.");
+                var entry = DocumentJobs.Find(zip, target.Part) ?? throw new Csv.Problem("The workbook lists a sheet its package does not hold.");
                 sheets.Add(new(r.GetAttribute("name") is { Length: > 0 } n ? n : $"Sheet {sheets.Count + 1}", entry.FullName, r.GetAttribute("state") is "hidden" or "veryHidden"));
             }
         }

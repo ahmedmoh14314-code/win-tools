@@ -159,6 +159,15 @@ public sealed class OfficeConvertTests : IDisposable
     }
 
     [Fact]
+    public void A_character_a_workbook_cannot_hold_is_said_in_to_pdf_too()
+    {
+        var csv = _dir.Write("ctl.csv", "a\u0001b,c\r\n"u8.ToArray());
+        var r = Run(Request(csv), new FakeOffice(WritesPdf));
+        Assert.True(r.Success, r.Message);
+        Assert.Contains(r.Facts, f => f is { Notice: true, Value: ConvertJobs.ReplacedNotice });
+    }
+
+    [Fact]
     public void A_text_read_as_a_legacy_code_page_says_so()
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);

@@ -121,12 +121,15 @@ internal static class OfficeJobs
             var extension = kind == FileKinds.Csv ? ".xlsx" : kind.Extensions[0];
             var inputName = Soffice.InputName(extension);
             var input = Path.Combine(work, Soffice.InputFolder, inputName);
+            var replaced = 0;
             if (kind == FileKinds.Csv)
             {
                 var separator = Csv.DetectSeparator(text!.Text, out var sepLine);
                 var table = Csv.Parse(text.Text, separator, sepLine);
                 if (!table.HasData) return JobResult.Fail(id, ErrorCode.NothingToDo, "The table is empty.");
-                File.WriteAllBytes(input, ConvertJobs.Workbook(table, path).Bytes);
+                var workbook = ConvertJobs.Workbook(table, path);
+                replaced = workbook.Replaced;
+                File.WriteAllBytes(input, workbook.Bytes);
             }
             else if (text is not null) File.WriteAllBytes(input, [0xEF, 0xBB, 0xBF, .. new UTF8Encoding(false).GetBytes(text.Text)]);
             else CopyNew(source.FullName, input);
@@ -145,6 +148,7 @@ internal static class OfficeJobs
             List<JobFact> facts = [new JobFact("Pages", pages.ToString("N0", CultureInfo.InvariantCulture))];
             // A legacy code page is a judgement, not a fact the file states: said, as the subtitles and To Excel say it.
             if (text is { } read && read.EncodingName.StartsWith("Windows-", StringComparison.Ordinal)) facts.Add(new("Read as", $"Read as {read.EncodingName}", Notice: true));
+            if (replaced > 0) facts.Add(new("Changed", ConvertJobs.ReplacedNotice, Notice: true));
             return DocumentJobs.Commit(request, path, OfficeCapabilities.Candidates(path, request.OutputDirectory),
                 s => { using var from = new FileStream(pdf, FileMode.Open, FileAccess.Read, FileShare.Read); from.CopyTo(s); },
                 temp => string.Equals(Sha256Of(temp), hash, StringComparison.Ordinal),

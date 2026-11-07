@@ -42,7 +42,8 @@ internal sealed class OfficeJobModule : IJobModule
 
     /// <summary>
     /// Removes conversions' work folders a crash left: each holds a copy of a user's document. Called once, when the host
-    /// starts: it is the only host, so no job of it is running, and a folder still in use is left for the next start.
+    /// starts: it is the only host of this session, so no job of it is running. A file another session of the same user holds
+    /// open stays, and the next start tries again.
     /// </summary>
     public static void SweepLeftovers(string? tempFolder = null)
     {

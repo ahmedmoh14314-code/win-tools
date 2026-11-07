@@ -204,6 +204,46 @@ public sealed class DocumentConvertTests : IDisposable
     }
 
     [Fact]
+    public void A_listed_sheet_with_no_way_to_reach_it_is_damage_and_a_chart_sheet_is_not()
+    {
+        (string, string)[] parts = Workbook(("Data", """<row r="1"><c r="A1"><v>1</v></c></row>"""), ("Lost", """<row r="1"><c r="A1"><v>2</v></c></row>"""));
+        (string, string) Rels((string, string) p, string from, string to) => p.Item1 == "xl/_rels/workbook.xml.rels" ? (p.Item1, p.Item2.Replace(from, to, StringComparison.Ordinal)) : p;
+        var gone = Path.Combine(_dir.Path, "gone.xlsx");
+        OoxmlSamples.Write(gone, [.. parts.Select(p => Rels(p, "Id=\"rId2\"", "Id=\"rId9\""))]);
+        Assert.Equal(ErrorCode.DecodeFailed, Run(Request(DocumentCapabilities.ToCsvId, gone)).Error);
+        var external = Path.Combine(_dir.Path, "external.xlsx");
+        OoxmlSamples.Write(external, [.. parts.Select(p => Rels(p, "Id=\"rId2\"", "TargetMode=\"External\" Id=\"rId2\""))]);
+        Assert.Equal(ErrorCode.DecodeFailed, Run(Request(DocumentCapabilities.ToCsvId, external)).Error);
+        var chart = Path.Combine(_dir.Path, "chart.xlsx");
+        OoxmlSamples.Write(chart, [.. parts.Select(p => Rels(p, "Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\"", "Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartsheet\""))]);
+        var r = Run(Request(DocumentCapabilities.ToCsvId, chart));
+        Assert.True(r.Success, r.Message);
+        Assert.Equal("chart.csv", Path.GetFileName(r.OutputPath));
+    }
+
+    [Fact]
+    public void A_repeated_relationship_id_is_no_crash()
+    {
+        var parts = Workbook(("Data", """<row r="1"><c r="A1"><v>1</v></c></row>"""));
+        var book = Path.Combine(_dir.Path, "dup.xlsx");
+        OoxmlSamples.Write(book, [.. parts.Select(p => p.Item1 == "xl/_rels/workbook.xml.rels" ? (p.Item1, p.Item2.Replace("</Relationships>", "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/></Relationships>", StringComparison.Ordinal)) : p)]);
+        Assert.True(Run(Request(DocumentCapabilities.ToCsvId, book)).Success);
+    }
+
+    [Fact]
+    public void Columns_are_as_wide_as_their_text_and_longer_cells_wrap()
+    {
+        var csv = Text("wide.csv", $"name,id,long\r\nAhmed Mohamed Ali,123456789012345,{new string('x', 200)}\r\nShort,1,\"two\nlines\"\r\n");
+        Cells(Run(Request(DocumentCapabilities.ToXlsxId, csv)).OutputPath!, out var xml);
+        Assert.Contains("<col min=\"1\" max=\"1\" width=\"19\" customWidth=\"1\"", xml, StringComparison.Ordinal);
+        Assert.Contains("<col min=\"2\" max=\"2\" width=\"17\" customWidth=\"1\"", xml, StringComparison.Ordinal);
+        Assert.Contains("<col min=\"3\" max=\"3\" width=\"60\" customWidth=\"1\"", xml, StringComparison.Ordinal);
+        Assert.Contains("<c r=\"C2\" s=\"1\" t=\"inlineStr\">", xml, StringComparison.Ordinal); // too long for the column
+        Assert.Contains("<c r=\"C3\" s=\"1\" t=\"inlineStr\">", xml, StringComparison.Ordinal); // a line break shows only when wrapped
+        Assert.True(xml.IndexOf("<cols>", StringComparison.Ordinal) < xml.IndexOf("<sheetData>", StringComparison.Ordinal)); // the schema's order
+    }
+
+    [Fact]
     public void A_field_with_a_semicolon_or_tab_is_quoted_so_no_locale_splits_a_formula_free()
     {
         Assert.Equal(Encoding.UTF8.GetBytes("\uFEFF\"x;=cmd|' /C calc'!A0\",\"a\tb\"\r\n"), Csv.Write([["x;=cmd|' /C calc'!A0", "a\tb"]]));

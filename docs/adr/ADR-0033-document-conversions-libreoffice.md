@@ -21,10 +21,11 @@
    - Excel's limits are refused, never cut: 1,048,576 rows, 16,384 columns, 32,767 characters a cell.
    - A line break in a cell becomes LF; a character XML cannot hold becomes U+FFFD, and the toast says so.
    - A sheet whose text is mostly right to left opens right to left.
+   - Columns are as wide as their longest line, up to 60 characters, and a longer or multi-line cell wraps. At the default width, text would be cut at the next cell and long numbers shown as `###`, in Excel and in a PDF made from the sheet.
 3. **To CSV (XLSX): every sheet with data, one CSV each.**
    - One such sheet gives `book.csv`; several give a folder `book (CSV)` with one file per sheet, named after the sheet (made safe, unique). Writing only the first sheet would lose data without a word.
    - Sheets come in the workbook's order, through its relationships, on ADR-0025's package rules. Shared strings and styles are found through the relationships too, in any case.
-   - **Damage is not a blank:** a cell pointing at text the workbook does not hold, a listed sheet the package lacks, or a named part that is missing fails the job.
+   - **Damage is not a blank:** a cell pointing at text the workbook does not hold, a listed sheet that cannot be reached, or a named part that is missing fails the job. Chart and dialog sheets hold no cells and are skipped.
    - Hidden sheets are exported, and the toast says so.
    - UTF-8 with a BOM, comma, CRLF, RFC 4180 quoting, every row as wide as the widest.
    - Values, not display: `0.25`, not `25%`. Dates as ISO 8601, a formula as its cached value. Formulas are never evaluated.
@@ -99,7 +100,9 @@
 - **The end-to-end run with real LibreOffice has not been done.** It is not installed on the build machine and must not be installed by the work. Read from its sources, but unproven until the owner runs it:
   - that `soffice.exe` waits for `soffice.bin` (its loader does, with no time limit);
   - that a successful run exits 0, since any other code now fails the job;
-  - each `--infilter` name against a real document of each kind, the macro-enabled variants included;
+  - each `--infilter` name against a real document of each kind, a macro-enabled type under a plain extension included;
+  - a Word 6/95 `.doc` and an Excel 5/95 `.xls`, which the forced filters may now refuse, cleanly, where detection would have read them;
+  - that CSV to PDF prints every column unclipped, from a workbook with widths;
   - fresh-profile start time against the 3-minute limit;
   - that a password-protected document fails rather than waits (convert loads are silent, with no interaction handler).
 - **A canary for the network claim:** a `\\host\x.png` and an `http://` image linked from a docx, odt and pptx, under a process or network monitor.
@@ -118,7 +121,11 @@ One round (2026-11-07), with the reviewer's own runs of Markdig and qpdf, and Li
   - a killed job could leave a copy of a document in the temp folder.
 - **Minors, fixed:** table bombs as a limit; archive limits for To PDF; the legacy code page notice in To PDF; wrong reasons (LibreOffice present but not starting, a full temp disk); format 46 and `[Magenta]`; exact long integers; hidden sheets said; `$` in the temp path; tests that proved less than their names.
 - **Found by the reviewer to hold:** the 16 profile keys and their value meanings, argument and path handling, the environment allow-list, the output steps and the host's checks.
-- **Not done:** a focused re-review (the cadence is one round; re-review only on a blocker, so one is due before merge).
+- **Focused re-review** (the blocker called for one): no blocker left, two majors, both fixed.
+  - The CSV-as-workbook fix wrote no column widths, so a PDF would clip text (now widths and wrapping).
+  - A listed sheet whose relationship was missing or marked External still vanished (now a failure; only chart and dialog sheets are skipped).
+  - Also fixed: a repeated relationship id crashed the worker; To PDF did not say characters were replaced.
+  - **Left as it is:** long shared strings repeated across many sheets can still end in a worker crash under the memory cap, with nothing written.
 
 ## Evidence / experiments
 - Key names and value meanings read from LibreOffice's sources (2026-10-28): `officecfg` `Common.xcs`, `Writer.xcs`, `Calc.xcs`, `Inet.xcs`. Filter names from `filter/source/config/fragments/filters` (2026-11-07). These are `master`, not a pinned release.
