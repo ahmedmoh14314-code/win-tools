@@ -6,8 +6,9 @@ namespace WinTools.Core.Capabilities;
 /// <summary>Whether a command runs once per file (each file its own job item) or once for the whole selection.</summary>
 public enum CapabilityShape { PerFile, Selection }
 
-/// <summary>What a command leaves behind.</summary>
-public enum CapabilityOutput { File, Files, Folder, Facts, Clipboard }
+/// <summary>What a command leaves behind. <see cref="Window"/>: it opens another program's window (Explorer, a terminal)
+/// at the user's request and leaves nothing (ADR-0032).</summary>
+public enum CapabilityOutput { File, Files, Folder, Facts, Clipboard, Window }
 
 /// <summary>
 /// Which selections a command accepts: every file's kind must be one of <paramref name="Kinds"/> (kind ids), and the
@@ -50,7 +51,7 @@ public sealed record SecretPrompt(string Title, bool Confirm, bool WhenRequired 
 /// <param name="Feedback">What the user is told about it; null gives words made from the label.</param>
 /// <param name="Prompt">A secret the host asks for before it queues the job (a password); null for none.</param>
 /// <param name="Dialog">A dialog the host shows before it queues the job (<see cref="Jobs.DialogKinds"/>: Batch rename's
-/// rule); its answer is the job's one parameter, <see cref="Jobs.DialogParameters.Name"/>. Null for none.</param>
+/// rule, Copy to's folder); its answer is the job's one parameter, <see cref="Jobs.DialogParameters.Name"/>. Null for none.</param>
 /// <param name="Fallback">Offered only when no other module offers facts about the same files (File info: an image has
 /// Image info, so it needs no second one; a .gz file or a mixed selection has no other, so it gets this one).</param>
 /// <param name="Requires">A program the user installs and WinTools never ships (<see cref="ExternalPrograms"/>, ADR-0033): the

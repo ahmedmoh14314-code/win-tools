@@ -40,7 +40,8 @@ public static class FeedbackText
             var item = items[0];
             if (item.Result.Success)
                 // A believed success may carry a notice the user must see (entries skipped or renamed in an archive).
-                return new(FeedbackKind.Success, words.SuccessTitle ?? UiText.F("toast.created", OutputName(item)), Join(Join(words.Done, Sizes(words, item)), Notices(item)));
+                return new(FeedbackKind.Success, words.SuccessTitle is { } title ? string.Format(CultureInfo.InvariantCulture, title, item.SourceName) : UiText.F("toast.created", OutputName(item)),
+                    Join(Join(words.Done, words.ShowSizes ? Sizes(words, item) : null), Notices(item)));
             if (item.Result.Error == ErrorCode.NothingToDo)
                 return new(FeedbackKind.Nothing, UiText.T("toast.nothing"), words.NothingReason);
             return new(FeedbackKind.Failure, UiText.F("toast.couldNot", words.Verb, item.SourceName), Reason(item.Result.Error, words));
@@ -48,7 +49,8 @@ public static class FeedbackText
 
         var n = items.Count;
         if (failed.Length == 0 && unchanged.Length == 0)
-            return new(FeedbackKind.Success, UiText.F("toast.completed", Images(n)), Join(words.Done, TotalSizes(words, ok)));
+            // A notice every item carries is said once ("to Documents", ADR-0032); one that differs belongs to its item.
+            return new(FeedbackKind.Success, UiText.F("toast.completed", Images(n)), Join(Join(words.Done, words.ShowSizes ? TotalSizes(words, ok) : null), CommonNotices(ok)));
         if (ok.Length == 0 && failed.Length == 0)
             return new(FeedbackKind.Nothing, UiText.T("toast.nothing"), $"{words.NothingReason} ({Images(n)})");
         if (ok.Length == 0 && unchanged.Length == 0)
@@ -174,6 +176,15 @@ public static class FeedbackText
     /// <summary>Every notice a believed success carries (skipped and renamed entries), or null.</summary>
     private static string? Notices(JobItem item) =>
         item.Result.Facts.Where(f => f.Notice).Select(f => UiText.Say(f.Value)).ToArray() is { Length: > 0 } n ? string.Join(" · ", n) : null; // a fixed notice has its translation
+
+    /// <summary>The notices every item carries, in the first item's order, or null.</summary>
+    private static string? CommonNotices(JobItem[] items)
+    {
+        if (items.Length == 0) return null;
+        var common = items[0].Result.Facts.Where(f => f.Notice).Select(f => f.Value)
+            .Where(v => items.All(i => i.Result.Facts.Any(f => f.Notice && f.Value == v))).Distinct().ToArray();
+        return common.Length > 0 ? string.Join(" · ", common) : null;
+    }
 
     public static string Size(long bytes) => bytes switch
     {

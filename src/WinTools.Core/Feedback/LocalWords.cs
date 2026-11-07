@@ -21,13 +21,14 @@ public static class LocalWords
             Working = UiText.F("words.working", label),
             Verb = UiText.F("words.verb", label),
             Done = UiText.F("words.done", label),
-            NothingReason = UiText.T("words.nothing"),
+            NothingReason = UiText.Get(UiText.Language, "say." + words.NothingReason) ?? UiText.T("words.nothing"),
             // The command's own noun where the module's does not fit it ("Add to ZIP" counts files, not archives).
             Noun = UiText.Get(UiText.Language, "noun." + capability.Id) ?? UiText.TOr("noun." + capability.Module, words.Noun),
             Nouns = UiText.Get(UiText.Language, "nouns." + capability.Id) ?? UiText.TOr("nouns." + capability.Module, words.Nouns),
             PasswordRequired = words.PasswordRequired is null ? null : UiText.T("toast.dropAlone"),
-            SuccessTitle = words.SuccessTitle is null ? null : UiText.T("words.renamed"),
-            Reasons = words.Reasons?.ToDictionary(r => r.Key, r => UiText.Get(UiText.Language, $"reason.{capability.Id}.{r.Key}") ?? UiText.TOr($"reason.rename.{r.Key}", r.Value)),
+            // A module's own sentence has a "say." translation (ADR-0032); Batch rename's keep their keys.
+            SuccessTitle = words.SuccessTitle is null ? null : UiText.Get(UiText.Language, "say." + words.SuccessTitle) ?? UiText.T("words.renamed"),
+            Reasons = words.Reasons?.ToDictionary(r => r.Key, r => UiText.Get(UiText.Language, "say." + r.Value) ?? UiText.TOr($"reason.rename.{r.Key}", r.Value)),
         };
     }
 }
