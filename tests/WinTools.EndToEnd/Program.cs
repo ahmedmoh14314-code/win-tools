@@ -88,7 +88,7 @@ for (var i = 1; i < args.Length; i++)
         case "--hold": holdKey = args[++i] is "none" or "ctrl" or "shift" ? args[i] : throw new ArgumentException($"--hold {args[i]}"); break;
         case "--settle-ms": settleMs = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
         case "--key": probeKey = args[++i]; break;                   // keyprobe: F2..F12, A..Z or 0..9
-        case "--trigger": triggerKey = args[++i]; break;
+        case "--trigger": triggerKey = args[++i]; break; // a letter works only during a file drag (ADR-0021 amendment)
         case "--expect": expectNothing = args[++i] switch { "copy" => false, "already-optimized" => true, var x => throw new ArgumentException($"--expect {x}") }; break;
         case "--form": formCancel = args[++i] switch { "answer" => false, "cancel" => true, var x => throw new ArgumentException($"--form {x}") }; break;
         case "--password": wrongPassword = args[++i] switch { "right" => false, "wrong" => true, var x => throw new ArgumentException($"--password {x}") }; break;

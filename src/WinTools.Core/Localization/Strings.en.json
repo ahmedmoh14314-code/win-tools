@@ -96,7 +96,7 @@
   "settings.language.hint": "The language of the window, the wheel and the messages.",
   "settings.trigger": "Trigger key",
   "settings.trigger.hint": "While dragging files, press this key to open the wheel.",
-  "settings.trigger.why": "Only keys that are harmless if they reach Explorer after the drop are offered.",
+  "settings.trigger.why": "A letter opens the wheel only while you drag files from Explorer or the Desktop; at any other time it types as usual. Space works with every program.",
   "settings.sounds": "Sounds",
   "settings.sounds.hint": "Soft ticks while you move through the wheel, and a sound when a job ends.",
   "settings.startup": "Start with Windows",

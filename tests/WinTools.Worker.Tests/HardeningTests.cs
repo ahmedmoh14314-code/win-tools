@@ -149,7 +149,7 @@ public sealed class SettingsHardeningTests : IDisposable
 
     [Theory]
     [InlineData("{\"schema\":2,\"trigger\":{\"key\":\"F5\"}}", "F5")]
-    [InlineData("{\"triggerKey\":\"A\"}", "A")]
+    [InlineData("{\"triggerKey\":\"1\"}", "1")]
     // V1 offered F8, F10 and F11; a V1 file with one of them now loads as Space and says why (second review).
     [InlineData("{\"triggerKey\":\"F8\"}", "F8")]
     [InlineData("{\"schema\":1,\"triggerKey\":\"F10\"}", "F10")]
