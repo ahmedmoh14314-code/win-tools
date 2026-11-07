@@ -26,7 +26,7 @@ public sealed class CapabilityDescriptorTests
 
     [Theory]
     [InlineData(@"C:\p\notes.txt")]
-    [InlineData(@"C:\p\archive.png.rar")] // .zip is an archive kind since V2 PR 5.1; RAR is not (yet)
+    [InlineData(@"C:\p\archive.png.cab")] // .zip is an archive kind since V2 PR 5.1, .rar and .7z since ADR-0030; .cab is not
     [InlineData(@"C:\p\no-extension")]
     [InlineData(@"C:\p\trailing.")]
     [InlineData(@"C:\p\.png.folder\file")]

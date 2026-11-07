@@ -60,6 +60,8 @@ public enum ErrorCode
     PasswordIncorrect,
     /// <summary>Part of the work was done and could not be undone (Batch rename: a file kept its temporary name).</summary>
     Incomplete,
+    /// <summary>The file is one part of an archive split into several files, which is refused (ADR-0030).</summary>
+    SplitArchive,
 }
 
 /// <summary>The worker's answer. Success carries the final output path; failure carries a code and a short message.</summary>
