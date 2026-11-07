@@ -114,6 +114,11 @@ internal static class Program
             var jobs = new JobScheduler([images, files, pdf, archives, subtitles, documents, office, media, pdfRender], log, () => Volatile.Read(ref current), feedback);
             _ = Task.Run(() => OfficeJobModule.SweepLeftovers()); // copies of documents a crash left behind (ADR-0033)
             // Edit pages' thumbnails: the image worker with PDFium, one at a time, outside the scheduler (no toast of their own).
+            var thumbnails = new WorkerClient(workerPath, PdfTimeout, PdfRenderJobModule.Instance, parallelism: 1);
+            coordinator = new InteractionCoordinator(log, window, jobs, feedback, sounds, settings)
+            {
+                Thumbnails = async (request, token) => (await thumbnails.RunAsync([request], token).ConfigureAwait(false))[0],
+            };
             using (coordinator)
             {
                 coordinator.Start();
