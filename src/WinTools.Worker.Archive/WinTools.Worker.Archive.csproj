@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- On-demand worker of the Archives module (V2 PR 5.1, ADR-0023): ZIP extract, test, info and create with .NET's own
-       System.IO.Compression. No third-party code. One JSON line per job, like the other workers. -->
+       System.IO.Compression. 7z and RAR are read with SharpCompress (ADR-0030), the module's only third-party code.
+       One JSON line per job, like the other workers. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -9,5 +10,8 @@
     <ProjectReference Include="..\WinTools.Core\WinTools.Core.csproj" />
     <ProjectReference Include="..\WinTools.Worker.Common\WinTools.Worker.Common.csproj" />
     <InternalsVisibleTo Include="WinTools.Worker.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="SharpCompress" />
   </ItemGroup>
 </Project>

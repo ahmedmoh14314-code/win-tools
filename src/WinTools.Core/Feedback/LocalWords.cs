@@ -6,8 +6,8 @@ namespace WinTools.Core.Feedback;
 /// <summary>
 /// A command's toast words in the language in use. English keeps each module's own words ("Converting", "convert",
 /// "Converted to WebP"); Arabic builds them from the command's translated name ("جارٍ: إلى WebP", "تعذّر تنفيذ «إلى
-/// WebP»"), so no English verb or noun reaches an Arabic toast. The module's nouns, the archive's password hint and Batch
-/// rename's own reasons come from the tables too.
+/// WebP»"), so no English verb or noun reaches an Arabic toast. The module's nouns, the archive's password hint and the
+/// modules' own reasons (Batch rename, archives) come from the tables too.
 /// </summary>
 public static class LocalWords
 {
@@ -27,7 +27,8 @@ public static class LocalWords
             Nouns = UiText.Get(UiText.Language, "nouns." + capability.Id) ?? UiText.TOr("nouns." + capability.Module, words.Nouns),
             PasswordRequired = words.PasswordRequired is null ? null : UiText.T("toast.dropAlone"),
             SuccessTitle = words.SuccessTitle is null ? null : UiText.T("words.renamed"),
-            Reasons = words.Reasons?.ToDictionary(r => r.Key, r => UiText.TOr($"reason.rename.{r.Key}", r.Value)),
+            // A module's own reasons: "reason.<module>.<code>" (archives, ADR-0030), or Batch rename's "reason.rename.<code>".
+            Reasons = words.Reasons?.ToDictionary(r => r.Key, r => UiText.Get(UiText.Language, $"reason.{capability.Module}.{r.Key}") ?? UiText.TOr($"reason.rename.{r.Key}", r.Value)),
         };
     }
 }
