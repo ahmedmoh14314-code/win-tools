@@ -107,6 +107,12 @@ internal sealed class FeedbackPresenter(MessageWindow ui, ToastWindow toast, Inf
             log.Event("toast", new { kind = copied.Kind.ToString(), copied = items[0].Inputs, shown = !progressShowing });
             return;
         }
+        if (capability.Produces == CapabilityOutput.Window && items.All(i => i.Result.Success))
+        {
+            // The window that opened is the answer (Show in folder, Open in Terminal, ADR-0032); only a failure is said.
+            log.Event("toast", new { kind = "window", shown = false });
+            return;
+        }
         var facts = items.Where(i => i.Result.Success && i.Result.Facts.Count > 0).ToArray(); // only a believed success shows facts
         if (capability.Produces == CapabilityOutput.Facts && facts.Length > 0)
         {

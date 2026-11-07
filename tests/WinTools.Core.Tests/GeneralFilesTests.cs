@@ -15,7 +15,11 @@ public sealed class GeneralFilesTests
     private static string[] Ids(params string[] paths) => [.. Resolver.Resolve(paths).Select(c => c.Id)];
     // Add to ZIP (V2 PR 5.1) accepts any file or folder too and comes last in Tools.
     // Tools: the file's information and location; Actions: what to do with it (Convert / Tools / Actions, Tangerine parity).
-    private static readonly string[] General = ["files.info", "files.sha256", "files.copy-path", "files.copy-name", "files.rename", "files.copy-folder", "archive.zip"];
+    // ADR-0032 adds Move to, Copy to, Show in folder and Open in Terminal.
+    private static readonly string[] General = ["files.info", "files.sha256", "files.copy-path", "files.move-to", "files.rename", "files.copy-to", "files.copy-name",
+        "files.copy-folder", "files.show-in-folder", "files.terminal", "archive.zip"];
+    private static readonly string[] Folder = ["files.info", "files.copy-path", "files.move-to", "files.copy-to", "files.copy-name", "files.copy-folder",
+        "files.show-in-folder", "files.terminal", "archive.zip"];
 
     [Theory]
     [InlineData(@"C:\p\notes.xyz")]
@@ -34,7 +38,7 @@ public sealed class GeneralFilesTests
     }
 
     [Fact]
-    public void A_folder_gets_info_and_copy_path_but_no_hash() => Assert.Equal(["files.info", "files.copy-path", "files.copy-name", "files.copy-folder", "archive.zip"], Ids(@"C:\p\holiday\"));
+    public void A_folder_gets_info_and_copy_path_but_no_hash() => Assert.Equal(Folder, Ids(@"C:\p\holiday\"));
 
     [Fact]
     public void An_image_keeps_v1s_five_categories_and_gets_the_general_commands_under_tools()
@@ -47,14 +51,16 @@ public sealed class GeneralFilesTests
         // V2 PR 7.2: seven do not fit; the commands a normal user needs first stay on the ring, the rest go under "More…".
         // File info only where no module has its own: an image has Image info.
         Assert.Equal(["Remove metadata", "Image info", "SHA-256", "Folder path"], menu[1].Commands.Select(c => c.Label));
-        Assert.Equal(["Copy path", "Copy name", "Rename files", "Add to ZIP"], menu[^1].Commands.Select(c => c.Label));
+        // Actions holds long labels: three on the ring and "More…" (ADR-0032), so every label fits at every DPI (UiSurfaceTests).
+        Assert.Equal(["Copy path", "Move to…", "Rename files", "More…"], menu[^1].Commands.Select(c => c.Label));
+        Assert.Equal(["Copy to…", "Copy name", "Show in folder", "Open in Terminal", "Add to ZIP"], RadialMenu.Overflow(menu[^1].Commands[^1]).Select(c => c.Label));
     }
 
     [Fact]
     public void A_mixed_selection_gets_only_what_every_item_allows()
     {
         // No module's info covers a mixed selection, so File info does (a fallback, PR #37 review).
-        Assert.Equal(["files.info", "files.copy-path", "files.copy-name", "files.copy-folder", "archive.zip"], Ids(@"C:\p\a.png", @"C:\p\holiday\"));
+        Assert.Equal(Folder, Ids(@"C:\p\a.png", @"C:\p\holiday\"));
         Assert.Equal(General, Ids(@"C:\p\a.png", @"C:\p\notes.txt"));
     }
 
