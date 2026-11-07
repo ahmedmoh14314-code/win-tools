@@ -27,7 +27,7 @@ public static class LocalWords
             Nouns = UiText.Get(UiText.Language, "nouns." + capability.Id) ?? UiText.TOr("nouns." + capability.Module, words.Nouns),
             PasswordRequired = words.PasswordRequired is null ? null : UiText.T("toast.dropAlone"),
             SuccessTitle = words.SuccessTitle is null ? null : UiText.T("words.renamed"),
-            Reasons = words.Reasons?.ToDictionary(r => r.Key, r => UiText.TOr($"reason.rename.{r.Key}", r.Value)),
+            Reasons = words.Reasons?.ToDictionary(r => r.Key, r => UiText.Get(UiText.Language, $"reason.{capability.Id}.{r.Key}") ?? UiText.TOr($"reason.rename.{r.Key}", r.Value)),
         };
     }
 }

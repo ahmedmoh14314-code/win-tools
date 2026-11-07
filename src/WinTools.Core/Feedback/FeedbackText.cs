@@ -173,7 +173,7 @@ public static class FeedbackText
 
     /// <summary>Every notice a believed success carries (skipped and renamed entries), or null.</summary>
     private static string? Notices(JobItem item) =>
-        item.Result.Facts.Where(f => f.Notice).Select(f => f.Value).ToArray() is { Length: > 0 } n ? string.Join(" · ", n) : null;
+        item.Result.Facts.Where(f => f.Notice).Select(f => UiText.Say(f.Value)).ToArray() is { Length: > 0 } n ? string.Join(" · ", n) : null; // a fixed notice has its translation
 
     public static string Size(long bytes) => bytes switch
     {

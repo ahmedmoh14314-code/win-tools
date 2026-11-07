@@ -15,10 +15,15 @@ public sealed class CapabilityResolver(IReadOnlyList<CapabilityDescriptor> catal
 
     public static CapabilityResolver Default { get; } = For(customResizeId: null);
 
-    /// <summary>The resolver over every module's catalog, with the settings' exact resize.</summary>
-    public static CapabilityResolver For(string? customResizeId) =>
-        new([.. ImageCapabilities.Catalog(customResizeId), .. PdfCapabilities.Catalog, .. SubtitleCapabilities.Catalog, .. DocumentCapabilities.Catalog, .. MediaCapabilities.Catalog, .. FilesCapabilities.Catalog, .. ArchiveCapabilities.Catalog],
-            [.. ImageCapabilities.Categories, .. PdfCapabilities.Categories, .. ArchiveCapabilities.Categories, .. SubtitleCapabilities.Categories, .. DocumentCapabilities.Categories, .. MediaCapabilities.Categories, .. FilesCapabilities.Categories]);
+    /// <summary>
+    /// The resolver over every module's catalog, with the settings' exact resize. A command that needs a program the user
+    /// installs (<see cref="CapabilityDescriptor.Requires"/>) is in it only when <paramref name="installed"/> names that
+    /// program (ADR-0033): without LibreOffice, To PDF is not a button on the wheel.
+    /// </summary>
+    public static CapabilityResolver For(string? customResizeId, IReadOnlySet<string>? installed = null) =>
+        new([.. ((IEnumerable<CapabilityDescriptor>)[.. ImageCapabilities.Catalog(customResizeId), .. PdfCapabilities.Catalog, .. SubtitleCapabilities.Catalog, .. DocumentCapabilities.Catalog, .. OfficeCapabilities.Catalog, .. MediaCapabilities.Catalog, .. FilesCapabilities.Catalog, .. ArchiveCapabilities.Catalog])
+                .Where(c => c.Requires is null || installed?.Contains(c.Requires) == true)],
+            [.. ImageCapabilities.Categories, .. PdfCapabilities.Categories, .. ArchiveCapabilities.Categories, .. SubtitleCapabilities.Categories, .. DocumentCapabilities.Categories, .. OfficeCapabilities.Categories, .. MediaCapabilities.Categories, .. FilesCapabilities.Categories]);
 
     /// <summary>The image module alone (V1's menu, which MenuGoldenTests pins).</summary>
     public static CapabilityResolver Images(string? customResizeId) => new(ImageCapabilities.Catalog(customResizeId), ImageCapabilities.Categories);

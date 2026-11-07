@@ -52,7 +52,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         _sounds = sounds;
         _settings = settings;
         _navigationSounds = new NavigationSounds(settings.UiSounds);
-        _resolver = CapabilityResolver.For(settings.CustomResizeId());
+        _resolver = CapabilityResolver.For(settings.CustomResizeId(), Programs());
         _sessionResolver = _resolver;
         _window = window;
         _overlay = new RadialOverlay(this);
@@ -73,7 +73,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     {
         _settings = settings;
         _hooks.SetTriggerKey(settings.TriggerVirtualKey);
-        _resolver = CapabilityResolver.For(settings.CustomResizeId());
+        _resolver = CapabilityResolver.For(settings.CustomResizeId(), Programs());
         _navigationSounds.Enabled = settings.UiSounds;
     }
 
@@ -81,6 +81,17 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     public MessageWindow Window => _window;
 
     public void Start() => _hooks.Start();
+
+    /// <summary>
+    /// The programs the user installed that some commands need (ADR-0033): looked for when the host starts and when the
+    /// settings change (a few registry reads), so LibreOffice installed later appears after a settings change or a restart.
+    /// </summary>
+    private IReadOnlySet<string> Programs()
+    {
+        var found = WinTools.Windows.Shell.InstalledPrograms.Found();
+        _log.Event("programs", new { libreOffice = found.Contains(ExternalPrograms.LibreOffice) });
+        return found;
+    }
 
     public void RequestClose() => _window.RequestClose();
 

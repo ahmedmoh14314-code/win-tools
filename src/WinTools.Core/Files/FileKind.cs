@@ -46,6 +46,30 @@ public static class FileKinds
     public static FileKind Xlsx { get; } = new("xlsx", FileFamily.Document, "Excel workbook", [".xlsx"]);
     public static FileKind Pptx { get; } = new("pptx", FileFamily.Document, "PowerPoint presentation", [".pptx"]);
 
+    /// <summary>
+    /// Tables and text the documents module converts in house (ADR-0033): CSV and TSV to Excel, Markdown to HTML. The
+    /// worker decodes the text, bounded; nothing in it is run.
+    /// </summary>
+    public static FileKind Csv { get; } = new("csv", FileFamily.Document, "CSV table", [".csv"]);
+    public static FileKind Tsv { get; } = new("tsv", FileFamily.Document, "TSV table", [".tsv"]);
+    public static FileKind Markdown { get; } = new("md", FileFamily.Document, "Markdown", [".md", ".markdown"]);
+    public static FileKind Text { get; } = new("txt", FileFamily.Document, "Text file", [".txt"]);
+
+    /// <summary>
+    /// Office formats only the user's own LibreOffice opens (To PDF, ADR-0033). The worker checks each one's signature
+    /// (a compound file, a ZIP package, an RTF header) before LibreOffice sees it.
+    /// </summary>
+    public static FileKind Doc { get; } = new("doc", FileFamily.Document, "Word 97–2003 document", [".doc"]);
+    public static FileKind Rtf { get; } = new("rtf", FileFamily.Document, "Rich Text document", [".rtf"]);
+    public static FileKind Odt { get; } = new("odt", FileFamily.Document, "OpenDocument text", [".odt"]);
+    public static FileKind Xls { get; } = new("xls", FileFamily.Document, "Excel 97–2003 workbook", [".xls"]);
+    public static FileKind Ods { get; } = new("ods", FileFamily.Document, "OpenDocument spreadsheet", [".ods"]);
+    public static FileKind Ppt { get; } = new("ppt", FileFamily.Document, "PowerPoint 97–2003 presentation", [".ppt"]);
+    public static FileKind Odp { get; } = new("odp", FileFamily.Document, "OpenDocument presentation", [".odp"]);
+
+    /// <summary>Every document kind, in the order above.</summary>
+    public static IReadOnlyList<FileKind> Documents { get; } = [Docx, Xlsx, Pptx, Csv, Tsv, Markdown, Text, Doc, Rtf, Odt, Xls, Ods, Ppt, Odp];
+
     /// <summary>Video (V2 media sprint, ADR-0028): the media worker probes the content with ffprobe before any work.</summary>
     public static FileKind Mp4 { get; } = new("mp4", FileFamily.Video, "MP4 video", [".mp4", ".m4v"]);
     public static FileKind Mov { get; } = new("mov", FileFamily.Video, "QuickTime video", [".mov"]);
@@ -75,10 +99,10 @@ public static class FileKinds
     public static FileKind AnyFile { get; } = new("file", FileFamily.Other, "File", []);
 
     /// <summary>Every kind a capability's input rule may name.</summary>
-    public static IReadOnlyList<FileKind> Declared { get; } = [.. All, Pdf, Zip, Tar, TarGz, Gzip, Srt, Vtt, Docx, Xlsx, Pptx, .. Video, .. Audio, Folder, AnyFile];
+    public static IReadOnlyList<FileKind> Declared { get; } = [.. All, Pdf, Zip, Tar, TarGz, Gzip, Srt, Vtt, .. Documents, .. Video, .. Audio, Folder, AnyFile];
 
     private static readonly Dictionary<string, FileKind> ByExtension =
-        ((IEnumerable<FileKind>)[.. All, Pdf, Zip, Tar, TarGz, Gzip, Srt, Vtt, Docx, Xlsx, Pptx, .. Video, .. Audio]).SelectMany(k => k.Extensions.Select(e => (e, k))).ToDictionary(p => p.e, p => p.k, StringComparer.OrdinalIgnoreCase);
+        ((IEnumerable<FileKind>)[.. All, Pdf, Zip, Tar, TarGz, Gzip, Srt, Vtt, .. Documents, .. Video, .. Audio]).SelectMany(k => k.Extensions.Select(e => (e, k))).ToDictionary(p => p.e, p => p.k, StringComparer.OrdinalIgnoreCase);
 
     private static readonly Dictionary<string, FileKind>.AlternateLookup<ReadOnlySpan<char>> BySpan = ByExtension.GetAlternateLookup<ReadOnlySpan<char>>();
 
