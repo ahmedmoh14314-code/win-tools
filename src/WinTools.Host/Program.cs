@@ -107,7 +107,12 @@ internal static class Program
             // PDF to images and text, images to PDF: the image worker with PDFium, two at a time (a page can take a few hundred MB; ADR-0029).
             var pdfRender = new JobModuleRunner(PdfRenderJobModule.Instance, new WorkerClient(workerPath, PdfTimeout, PdfRenderJobModule.Instance, parallelism: 2), PdfRenderJobModule.Parameters);
             var jobs = new JobScheduler([images, files, pdf, archives, subtitles, documents, media, pdfRender], log, () => Volatile.Read(ref current), feedback);
-            coordinator = new InteractionCoordinator(log, window, jobs, feedback, sounds, settings);
+            // Edit pages' thumbnails: the image worker with PDFium, one at a time, outside the scheduler (no toast of their own).
+            var thumbnails = new WorkerClient(workerPath, PdfTimeout, PdfRenderJobModule.Instance, parallelism: 1);
+            coordinator = new InteractionCoordinator(log, window, jobs, feedback, sounds, settings)
+            {
+                Thumbnails = async (request, token) => (await thumbnails.RunAsync([request], token).ConfigureAwait(false))[0],
+            };
             using (coordinator)
             {
                 coordinator.Start();

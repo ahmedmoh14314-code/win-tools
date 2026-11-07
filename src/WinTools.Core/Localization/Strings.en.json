@@ -552,5 +552,20 @@
   "say.Windows cannot tell whether this folder is inside the one you are moving. Nothing was changed.": "Windows cannot tell whether this folder is inside the one you are moving. Nothing was changed.",
   "say.It is no longer there.": "It is no longer there.",
   "say.The items are in more than 5 folders. Drop fewer at a time.": "The items are in more than 5 folders. Drop fewer at a time.",
-  "say.Windows did not open it. The path may be too long.": "Windows did not open it. The path may be too long."
+  "say.Windows did not open it. The path may be too long.": "Windows did not open it. The path may be too long.",
+  "cmd.pdf.organize": "Edit pages…",
+  "dialog.organize": "Pages of {0}",
+  "toast.organizeWindow": "the page window",
+  "organize.hint": "Select pages, then turn, move, repeat or delete them. Drag a page to move it. Save writes a new PDF; the original stays as it is.",
+  "organize.turnLeft": "Turn left",
+  "organize.turnRight": "Turn right",
+  "organize.earlier": "Move earlier",
+  "organize.later": "Move later",
+  "organize.duplicate": "Duplicate",
+  "organize.delete": "Delete",
+  "organize.save": "Save as new PDF",
+  "organize.extract": "Extract selected",
+  "organize.page": "Page {0}",
+  "organize.pageTurned": "Page {0} · {1}°",
+  "organize.status": "Pages: {0} · selected: {1}"
 }
