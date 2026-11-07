@@ -354,6 +354,11 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             _ = AskRenameAndRunAsync(capability, paths, x, y);
             return;
         }
+        if (capability.Dialog == DialogKinds.Form)
+        {
+            _ = AskFormAndRunAsync(capability, paths, x, y);
+            return;
+        }
         if (capability.Prompt is { WhenRequired: false } first)
         {
             Ask(capability, first, paths, x, y);
@@ -471,6 +476,30 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         {
             _log.Event("rename.error", new { type = ex.GetType().Name });
             _feedback.DialogUnavailable(UiText.T("toast.renameWindow"));
+        }
+    }
+
+    /// <summary>
+    /// A command's form (Trim, Split, Shift…): one answer for every dropped file, read again by the host and the worker. A
+    /// cancel runs nothing and says nothing.
+    /// </summary>
+    private async Task AskFormAndRunAsync(CapabilityDescriptor capability, IReadOnlyList<string> paths, int x, int y)
+    {
+        // Fire and forget from Drop: nothing here may throw unobserved.
+        try
+        {
+            var title = UiText.TOr("dialog.form." + capability.Id, capability.Label.TrimEnd('…'));
+            var outcome = await DialogsClient.Default.AskFormAsync(new FormRequest(title, capability.Id, x, y)).ConfigureAwait(false);
+            _log.Event("form.ask", new { op = capability.Id, end = outcome.End.ToString(), files = paths.Count });
+            if (outcome.End == PickEnd.Unavailable) { _feedback.DialogUnavailable(UiText.T("toast.formWindow")); return; }
+            if (outcome.End != PickEnd.Picked || Forms.Read(capability.Id, outcome.Rule) is null) return;
+            if (_jobs.Enqueue(capability, paths, new Dictionary<string, string>(StringComparer.Ordinal) { [DialogParameters.Name] = outcome.Rule! }) is null)
+                _log.Event("job.refused", new { op = capability.Id, module = capability.Module });
+        }
+        catch (Exception ex)
+        {
+            _log.Event("form.error", new { type = ex.GetType().Name });
+            _feedback.DialogUnavailable(UiText.T("toast.formWindow"));
         }
     }
 

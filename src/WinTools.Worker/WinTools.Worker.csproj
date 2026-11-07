@@ -1,11 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- On-demand conversion process. Decodes, encodes and validates with Windows Imaging Component; one JSON line per job.
+       It also renders PDFs with the bundled PDFium (ADR-0029): PDF to images and text, and the check of Images to PDF.
        HEIC and AVIF go through the bundled FFmpeg as a child process (ADR-0031), the same files the media worker uses. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <FfmpegDir>$(MSBuildThisFileDirectory)..\..\artifacts\engines\ffmpeg-8.1.3\</FfmpegDir>
+    <PdfiumDir>$(MSBuildThisFileDirectory)..\..\artifacts\engines\pdfium-8111\</PdfiumDir>
   </PropertyGroup>
   <ItemGroup>
     <None Include="$(FfmpegDir)*.exe;$(FfmpegDir)*.dll;$(FfmpegDir)LICENSE.txt" Link="ffmpeg\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />
@@ -22,4 +24,11 @@
          job after it has started, and a GC that read the job's limit first would cap its heap at 75 % of it. -->
     <RuntimeHostConfigurationOption Include="System.GC.HeapHardLimit" Value="1610612736" />
   </ItemGroup>
+  <!-- PDFium, fetched and hash-checked by scripts\Get-Engines.ps1, in a folder of its own: loaded by full path only. -->
+  <ItemGroup>
+    <None Include="$(PdfiumDir)pdfium.dll" Link="pdfium\pdfium.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+  <Target Name="RequirePdfium" BeforeTargets="Build" Condition="!Exists('$(PdfiumDir)pdfium.dll')">
+    <Error Text="The PDF rendering engine is missing: run scripts\Get-Engines.ps1 (it fetches PDFium chromium/8111 and checks its hash, ADR-0029)." />
+  </Target>
 </Project>

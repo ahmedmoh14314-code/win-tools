@@ -11,6 +11,8 @@
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
+    <!-- UI Automation, to press a dialog's buttons as a screen reader would. -->
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
     <ProjectReference Include="..\..\src\WinTools.Worker\WinTools.Worker.csproj" />
     <ProjectReference Include="..\..\src\WinTools.Worker.Text\WinTools.Worker.Text.csproj" />
     <ProjectReference Include="..\..\src\WinTools.Worker.Pdf\WinTools.Worker.Pdf.csproj" />
