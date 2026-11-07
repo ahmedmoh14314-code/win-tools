@@ -109,7 +109,9 @@ internal static class Program
             var office = new JobModuleRunner(OfficeJobModule.Instance, new WorkerClient(textWorkerPath, OfficeTimeout, OfficeJobModule.Instance, parallelism: 1), OfficeJobModule.Parameters);
             // Media jobs: one worker at a time (an encode already uses every core; ADR-0028).
             var media = new JobModuleRunner(MediaJobModule.Instance, new WorkerClient(mediaWorkerPath, MediaTimeout, MediaJobModule.Instance, parallelism: 1), MediaJobModule.Parameters);
-            var jobs = new JobScheduler([images, files, pdf, archives, subtitles, documents, office, media], log, () => Volatile.Read(ref current), feedback);
+            // PDF to images and text, images to PDF: the image worker with PDFium, two at a time (a page can take a few hundred MB; ADR-0029).
+            var pdfRender = new JobModuleRunner(PdfRenderJobModule.Instance, new WorkerClient(workerPath, PdfTimeout, PdfRenderJobModule.Instance, parallelism: 2), PdfRenderJobModule.Parameters);
+            var jobs = new JobScheduler([images, files, pdf, archives, subtitles, documents, office, media, pdfRender], log, () => Volatile.Read(ref current), feedback);
             coordinator = new InteractionCoordinator(log, window, jobs, feedback, sounds, settings);
             using (coordinator)
             {

@@ -60,7 +60,10 @@ internal static class MediaJobs
         var id = request.Id;
         if (id is not { Length: > 0 and <= 64 } || id.Any(c => !char.IsAsciiLetterOrDigit(c)))
             return JobResult.Fail("invalid", ErrorCode.InvalidRequest, "Request id must be 1-64 ASCII letters or digits.");
-        if (request.Parameters is { Count: > 0 }) return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters.");
+        // Trim and Split take their form's answer, read again here; every other command takes nothing.
+        var form = request.Parameters is { Count: 1 } fp && fp.TryGetValue(DialogParameters.Name, out var answer) ? Forms.Read(request.CapabilityId ?? "", answer) : null;
+        if (Forms.For(request.CapabilityId ?? "") is not null ? form is null : request.Parameters is { Count: > 0 })
+            return JobResult.Fail(id, ErrorCode.InvalidRequest, form is null && request.Parameters is not { Count: > 0 } ? "This command needs its form's answer." : "This command takes no such parameters.");
         if (request.Inputs.Count == 0 || !request.Inputs.All(PathPolicy.IsSupported) || request.Inputs.Any(Path.EndsInDirectorySeparator))
             return JobResult.Fail(id, ErrorCode.InvalidRequest, "Every input must be a supported file path.");
         if (request.OutputDirectory is { } od && !PathPolicy.IsSupported(Path.Combine(od, "x.mp4")))
@@ -77,7 +80,8 @@ internal static class MediaJobs
                 MediaCapabilities.VideoInfoId or MediaCapabilities.AudioInfoId => Info(request),
                 MediaCapabilities.JoinId => Join(request),
                 MediaCapabilities.FramesId => Frames(request),
-                _ => Transform(request),
+                MediaCapabilities.SplitVideoId or MediaCapabilities.SplitAudioId => Split(request, form!),
+                _ => Transform(request, form),
             };
         }
         catch (MediaFailure ex) { return JobResult.Fail(id, ex.Code, ex.Message); }
@@ -239,14 +243,15 @@ internal static class MediaJobs
 
     // ---- One file in, one file out ----
 
-    private static JobResult Transform(JobRequest request)
+    private static JobResult Transform(JobRequest request, FormValues? form)
     {
         var path = request.Inputs[0];
         var id = request.CapabilityId;
         var target = MediaCapabilities.TargetOf(id);
         var isVideoKind = FileKinds.ByExtensionOf(path) is { Family: FileFamily.Video };
         var videoOut = target is not null ? MediaCapabilities.VideoTargets.Contains(target)
-            : id is MediaCapabilities.CompressVideoId or MediaCapabilities.CompressVideo720Id or MediaCapabilities.Speed2xId or MediaCapabilities.SpeedHalfId or MediaCapabilities.MuteId;
+            : id is MediaCapabilities.CompressVideoId or MediaCapabilities.CompressVideo720Id or MediaCapabilities.Speed2xId or MediaCapabilities.SpeedHalfId or MediaCapabilities.MuteId
+                or MediaCapabilities.TrimVideoId || MediaCapabilities.AspectOf(id) is not null;
         var p = Source(path, needsVideo: videoOut || isVideoKind && id != MediaCapabilities.ExtractAudioId,
             needsAudio: !videoOut && !(isVideoKind && id == MediaCapabilities.MuteId));
         var ext = MediaCapabilities.ExtensionOf(id, path)!;
@@ -257,6 +262,40 @@ internal static class MediaJobs
 
         switch (id)
         {
+            case MediaCapabilities.TrimVideoId or MediaCapabilities.TrimAudioId:
+            {
+                // Seeking on the input and re-encoding: the cut is at the moment asked for, not at the keyframe before it.
+                var start = form!.Get(Forms.TrimStart)!.Value;
+                var end = form.Get(Forms.TrimEnd);
+                if (p.Duration > 0 && start >= p.Duration - 0.05) throw new MediaFailure(ErrorCode.NothingToDo, $"The file ends at {Clock(p.Duration)}, before the start.");
+                if (end is { } late && p.Duration > 0 && late > p.Duration)
+                {
+                    notices.Add(new("End", $"The file ends at {Clock(p.Duration)}", Notice: true));
+                    end = null;
+                }
+                // From the beginning to the end is no cut: a lossy copy of the whole file is not a trim (review, #38).
+                if (start <= 0.05 && (end is null || p.Duration > 0 && end >= p.Duration - 0.05))
+                    throw new MediaFailure(ErrorCode.NothingToDo, "Nothing to cut: the start is the beginning and the end is the end of the file.");
+                input.InsertRange(input.IndexOf("-i"), ["-ss", Seconds(start)]);
+                string[] length = end is { } e ? ["-t", Seconds(e - start)] : [];
+                if (videoOut)
+                    foreach (var codecs in VideoCodecs(ext, null))
+                        variants.Add([.. length, "-map", "0:v:0", "-map", "0:a:0?", "-vf", $"{EvenSize},format=yuv420p", .. codecs, .. Faststart(ext)]);
+                else variants.Add([.. length, "-vn", "-map", "0:a:0", .. AudioCodec(ext)]);
+                break;
+            }
+            case var _ when MediaCapabilities.AspectOf(id) is { } aspect:
+            {
+                // Centred, on the picture as it is shown: a phone video's rotation is applied first, and non-square pixels (a
+                // camcorder's 1440 × 1080 shown 16:9, a DVD's 720 × 576) are made square before the shape is measured (review,
+                // #38). Even pixels.
+                var a = $"{aspect.W}/{aspect.H}";
+                var square = "scale='trunc(iw*if(gt(sar,0),sar,1)/2)*2':ih,setsar=1";
+                var crop = $"{square},crop='trunc(if(gt(iw/ih,{a}),ih*{a},iw)/2)*2':'trunc(if(gt(iw/ih,{a}),ih,iw/({a}))/2)*2'";
+                foreach (var codecs in VideoCodecs(ext, null))
+                    variants.Add(["-map", "0:v:0", "-map", "0:a:0?", "-vf", $"{crop},setsar=1,format=yuv420p", .. codecs, .. Faststart(ext)]);
+                break;
+            }
             case MediaCapabilities.MuteId:
                 // The picture as it is, the sound gone: no re-encoding, so no loss and little time.
                 if (p.Audio is null) throw new MediaFailure(ErrorCode.NothingToDo, "The video has no sound.");
@@ -335,6 +374,9 @@ internal static class MediaJobs
     }
 
     private static string[] Faststart(string ext) => ext is ".mp4" or ".mov" ? ["-movflags", "+faststart"] : [];
+
+    /// <summary>Seconds as the engine reads them, invariant ("83.5").</summary>
+    private static string Seconds(double s) => s.ToString("0.###", CultureInfo.InvariantCulture);
 
     /// <summary>
     /// Runs the engine into a temporary file in the destination with each variant in turn (the first that works wins:
@@ -437,7 +479,7 @@ internal static class MediaJobs
         {
             File.SetAttributes(staging, FileAttributes.Hidden | FileAttributes.Directory);
             var run = Ffmpeg.Convert(["-hide_banner", "-nostdin", "-loglevel", "error", "-protocol_whitelist", "file", "-i", Ffmpeg.FileUrl(path),
-                "-map", "0:v:0", "-vf", "fps=1", "-frames:v", MaxFrames.ToString(CultureInfo.InvariantCulture), "-f", "image2", Ffmpeg.FileUrl(Path.Combine(staging, "frame %04d.png"))], EngineTimeout);
+                "-map", "0:v:0", "-vf", "fps=1", "-frames:v", MaxFrames.ToString(CultureInfo.InvariantCulture), "-f", "image2", Ffmpeg.PatternUrl(staging, "frame %04d.png")], EngineTimeout);
             var frames = Directory.GetFiles(staging, "frame *.png");
             if (!run.Ok || frames.Length == 0)
                 return JobResult.Fail(request.Id, run.TimedOut ? ErrorCode.WorkerTimeout : ErrorCode.EncodeFailed, "The frames could not be saved; nothing was kept.");
@@ -453,6 +495,87 @@ internal static class MediaJobs
                 var facts = new List<JobFact> { new("Frames", frames.Length.ToString("N0", CultureInfo.InvariantCulture)) };
                 if (p.Duration > MaxFrames + 1) facts.Add(new("Length", $"The first {MaxFrames / 60} minutes, one frame a second", Notice: true));
                 return new JobResult(request.Id, true, ErrorCode.None, null, [new JobOutput(candidate, shape)], facts);
+            }
+            return JobResult.Fail(request.Id, ErrorCode.NoFreeOutputName, $"No free folder name after {OutputNaming.MaxCollisionIndex} attempts.");
+        }
+        finally
+        {
+            if (!committed) { try { Directory.Delete(staging, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
+        }
+    }
+
+    // ---- Split ----
+
+    /// <summary>
+    /// Equal parts, each re-encoded so it starts on its own frame. A video goes through the segment muxer, which cuts at the
+    /// given times, where keyframes are forced; sound is encoded one part per run, so each part has a whole header of its
+    /// own (FLAC's holds its length). The parts go to a hidden folder in the destination, are each probed, and the folder takes its
+    /// final name ("clip (parts)") only when every part checks out.
+    /// </summary>
+    private static JobResult Split(JobRequest request, FormValues form)
+    {
+        var path = request.Inputs[0];
+        var video = request.CapabilityId == MediaCapabilities.SplitVideoId;
+        var p = Source(path, needsVideo: video, needsAudio: !video);
+        var parts = (int)form.Get(Forms.SplitParts)!.Value;
+        if (p.Duration / parts < 1) throw new MediaFailure(ErrorCode.NothingToDo, $"The file is too short for {parts} parts of a second or more.");
+        var ext = MediaCapabilities.ExtensionOf(video ? MediaCapabilities.TrimVideoId : MediaCapabilities.TrimAudioId, path)!;
+        var times = string.Join(",", Enumerable.Range(1, parts - 1).Select(i => Seconds(Math.Round(p.Duration * i / parts, 3))));
+        var staging = OutputNaming.TempPath(path, request.Id, request.OutputDirectory);
+        switch (ExclusiveDirectory.Create(staging))
+        {
+            case CreateOutcome.Created: break;
+            case CreateOutcome.NotWritable: throw new MediaFailure(ErrorCode.OutputDirectoryNotWritable, "The destination folder is not writable.");
+            default: throw new MediaFailure(ErrorCode.Internal, "Something else is using this job's folder in the destination.");
+        }
+        var committed = false;
+        try
+        {
+            File.SetAttributes(staging, FileAttributes.Hidden | FileAttributes.Directory);
+            string[] input = ["-hide_banner", "-nostdin", "-loglevel", "error", "-protocol_whitelist", "file", "-i", Ffmpeg.FileUrl(path)];
+            string[] faststart = ext is ".mp4" or ".mov" ? ["-segment_format_options", "movflags=+faststart"] : [];
+            string[] segment = ["-f", "segment", "-segment_times", times, "-segment_format", Muxer(ext), "-reset_timestamps", "1", .. faststart,
+                Ffmpeg.PatternUrl(staging, "part %02d" + ext)];
+            var variants = VideoCodecs(ext, null).Select(c => (string[])["-map", "0:v:0", "-map", "0:a:0?", "-vf", $"{EvenSize},format=yuv420p", "-force_key_frames", times, .. c]);
+            EngineRun? run = null;
+            string[] files = [];
+            if (video)
+                foreach (var variant in variants)
+                {
+                    foreach (var f in Directory.GetFiles(staging)) File.Delete(f);
+                    run = Ffmpeg.Convert([.. input, .. variant, .. segment], EngineTimeout);
+                    files = Directory.GetFiles(staging, "part *" + ext);
+                    if (run.Ok && files.Length == parts) break;
+                }
+            else
+            {
+                // Audio: each part in its own run, so each gets a whole header (the segment muxer leaves FLAC parts without
+                // a correct one; review, #38). Decoding from a seek point is cheap for sound.
+                var cuts = Enumerable.Range(0, parts + 1).Select(i => Math.Round(p.Duration * i / parts, 3)).ToArray();
+                for (var i = 0; i < parts; i++)
+                {
+                    var part = Path.Combine(staging, $"part {i:00}{ext}");
+                    run = Ffmpeg.Convert(["-hide_banner", "-nostdin", "-loglevel", "error", "-protocol_whitelist", "file", "-ss", Seconds(cuts[i]), "-i", Ffmpeg.FileUrl(path),
+                        .. i < parts - 1 ? new[] { "-t", Seconds(cuts[i + 1] - cuts[i]) } : [], "-vn", "-map", "0:a:0", .. AudioCodec(ext), "-f", Muxer(ext), Ffmpeg.FileUrl(part)], EngineTimeout);
+                    if (!run.Ok) break;
+                }
+                files = Directory.GetFiles(staging, "part *" + ext);
+            }
+            if (run is null || !run.Ok || files.Length != parts)
+                return JobResult.Fail(request.Id, run?.TimedOut == true ? ErrorCode.WorkerTimeout : ErrorCode.EncodeFailed, "The file could not be split; nothing was kept.");
+            foreach (var f in files)
+                if (Probe(f) is not { Duration: > 0 } check || (video ? check.Video is null : check.Audio is null))
+                    return JobResult.Fail(request.Id, ErrorCode.OutputValidationFailed, "A part did not check out; nothing was kept.");
+            if (MarkOfTheWeb.ZoneToCarry(path) is { } z) foreach (var f in files) MarkOfTheWeb.Apply(f, z);
+            File.SetAttributes(staging, FileAttributes.Directory);
+            var shape = FolderManifest.ShapeOf(staging) ?? throw new MediaFailure(ErrorCode.OutputValidationFailed, "The parts did not check out; nothing was kept.");
+            foreach (var candidate in MediaCapabilities.Candidates(request.CapabilityId, path, request.OutputDirectory))
+            {
+                if (File.Exists(candidate) || Directory.Exists(candidate)) continue;
+                try { Directory.Move(staging, candidate); }
+                catch (IOException) { continue; }
+                committed = true;
+                return new JobResult(request.Id, true, ErrorCode.None, null, [new JobOutput(candidate, shape)], [new("Parts", parts.ToString(CultureInfo.InvariantCulture), Notice: true)]);
             }
             return JobResult.Fail(request.Id, ErrorCode.NoFreeOutputName, $"No free folder name after {OutputNaming.MaxCollisionIndex} attempts.");
         }

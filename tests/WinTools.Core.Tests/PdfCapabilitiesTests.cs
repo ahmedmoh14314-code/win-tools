@@ -28,12 +28,15 @@ public sealed class PdfCapabilitiesTests
     [Fact]
     public void One_pdf_gets_split_optimize_rotate_and_info_but_not_merge()
     {
-        Assert.Equal(["pdf.split", "pdf.rotate-left", "pdf.rotate-right", "pdf.rotate-180", "pdf.optimize", "pdf.linearize", "pdf.repair", "pdf.info", "pdf.protect", "pdf.unprotect",
+        Assert.Equal(["pdfrender.to-png", "pdfrender.to-jpg", "pdfrender.to-txt", "pdfrender.to-md", "pdf.split", "pdf.rotate-right", "pdf.rotate-left", "pdf.rotate-180", "pdf.optimize", "pdf.linearize", "pdf.repair", "pdf.info", "pdf.protect", "pdf.unprotect",
             "files.sha256", "files.copy-path", "files.copy-name", "files.rename", "files.copy-folder", "archive.zip"], Ids(@"C:\p\a.pdf"));
         var menu = RadialMenu.Build(Resolver, [@"C:\p\a.pdf"]);
-        Assert.Equal(["Tools", "Organize", "Optimize", "Rotate", "Protect", "Actions"], menu.Select(g => g.Label)); // Protect since V2 PR 2.2; Tools first and Actions since the wheel PR
-        Assert.Equal(["Smaller (lossless)", "Fast web view", "Repair"], menu[2].Commands.Select(c => c.Label));
-        Assert.Equal(["PDF info", "SHA-256", "Folder path"], menu[0].Commands.Select(c => c.Label));
+        // Protect since V2 PR 2.2; Tools first and Actions since the wheel PR; Convert, and the rotations in Organize, since PDFium (ADR-0029).
+        Assert.Equal(["Convert", "Tools", "Organize", "Optimize", "Protect", "Actions"], menu.Select(g => g.Label));
+        Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD"], menu[0].Commands.Select(c => c.Label));
+        Assert.Equal(["Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], menu[2].Commands.Select(c => c.Label));
+        Assert.Equal(["Smaller (lossless)", "Fast web view", "Repair"], menu[3].Commands.Select(c => c.Label));
+        Assert.Equal(["PDF info", "SHA-256", "Folder path"], menu[1].Commands.Select(c => c.Label));
         Assert.Equal(["Copy path", "Copy name", "Rename files", "Add to ZIP"], menu[^1].Commands.Select(c => c.Label));
     }
 
@@ -44,7 +47,7 @@ public sealed class PdfCapabilitiesTests
         Assert.Contains("pdf.merge", Ids([.. Enumerable.Range(0, PdfCapabilities.MaxMergeInputs).Select(i => $@"C:\p\{i}.pdf")]));
         Assert.DoesNotContain("pdf.merge", Ids([.. Enumerable.Range(0, PdfCapabilities.MaxMergeInputs + 1).Select(i => $@"C:\p\{i}.pdf")]));
         var organize = RadialMenu.Build(Resolver, [@"C:\p\a.pdf", @"C:\p\b.pdf"]).Single(g => g.Label == "Organize");
-        Assert.Equal(["Merge", "Split into pages"], organize.Commands.Select(c => c.Label));
+        Assert.Equal(["Merge", "Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], organize.Commands.Select(c => c.Label));
     }
 
     [Theory]

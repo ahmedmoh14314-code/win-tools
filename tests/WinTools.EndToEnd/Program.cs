@@ -71,6 +71,8 @@ string probeKey = "F5";
 var triggerKey = "Space";
 var cycles = 10; var fastMs = 25; string? resultsPath = null; string? targetArg = null; string? opArg = null; var batchSize = 12; var animations = "On"; string? hostArg = null; var selectMode = "ctrl-a"; var holdKey = "none"; var settleMs = 250; var pathStyle = "plain"; var expectNothing = false;
 var wrongPassword = false;
+var formCancel = false; // --form cancel: Esc in the form instead of an answer; nothing may be produced (review, #38)
+var formClosed = false;
 for (var i = 1; i < args.Length; i++)
 {
     switch (args[i])
@@ -88,6 +90,7 @@ for (var i = 1; i < args.Length; i++)
         case "--key": probeKey = args[++i]; break;                   // keyprobe: F2..F12, A..Z or 0..9
         case "--trigger": triggerKey = args[++i]; break;
         case "--expect": expectNothing = args[++i] switch { "copy" => false, "already-optimized" => true, var x => throw new ArgumentException($"--expect {x}") }; break;
+        case "--form": formCancel = args[++i] switch { "answer" => false, "cancel" => true, var x => throw new ArgumentException($"--form {x}") }; break;
         case "--password": wrongPassword = args[++i] switch { "right" => false, "wrong" => true, var x => throw new ArgumentException($"--password {x}") }; break;
         case "--path-style": pathStyle = args[++i] is "plain" or "unicode" or "long" ? args[i] : throw new ArgumentException($"--path-style {args[i]}"); break;
         case "--animations": animations = args[++i] switch { "on" => "On", "off" => "Off", "system" => "System", var a => throw new ArgumentException($"--animations {a}") }; break;
@@ -140,17 +143,26 @@ var pdfFile = scenario == "pdf" && capability is { Module: PdfCapabilities.Modul
 var zipFolder = (scenario is "zip" or "tgz" || scenario == "lockedzip" && !wrongPassword) && capability?.Id == ArchiveCapabilities.ExtractId;
 var subtitleFile = scenario == "srt" && capability is { Module: SubtitleCapabilities.Module, Produces: CapabilityOutput.File };
 var mediaFile = scenario is "video" or "audio" && capability is { Module: MediaCapabilities.Module, Produces: CapabilityOutput.File };
+// A command with a form (Trim, Shift…): what the harness types into it, and the answer that makes. Trim keeps 1 s to 3 s;
+// Shift… moves the subtitles 2.5 s later.
+var formKeys = capability?.Dialog != WinTools.Core.Jobs.DialogKinds.Form ? null : capability.Id switch
+{
+    MediaCapabilities.TrimVideoId or MediaCapabilities.TrimAudioId => new[] { "1", "\t", "3" },
+    SubtitleCapabilities.ShiftCustomId => ["2.5"],
+    _ => throw new ArgumentException($"The harness does not fill the form of {capability.Id}."),
+};
+var formAnswer = formKeys is null ? null : capability!.Id == SubtitleCapabilities.ShiftCustomId ? "seconds=2.5" : "start=1;end=3";
 var documentText = scenario == "docx" && capability?.Id == DocumentCapabilities.ExtractTextId;
 var documentClean = scenario == "docx" && capability?.Id == DocumentCapabilities.RemovePropertiesId;
 string? OutputNameFor(string path) => zipFolder ? (path.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ? Path.GetFileName(path)[..^".tar.gz".Length] : Path.GetFileNameWithoutExtension(path))
-    : subtitleFile ? Path.GetFileName(SubtitleCapabilities.Candidates(capability!.Id, path, null).First())
+    : subtitleFile ? Path.GetFileName(SubtitleCapabilities.Candidates(capability!.Id, path, null, formAnswer).First())
     : mediaFile ? Path.GetFileName(MediaCapabilities.Candidates(capability!.Id, path, null).First())
     : documentText ? Path.GetFileName(DocumentCapabilities.Candidates(path, null).First())
     : documentClean ? Path.GetFileName(DocumentCapabilities.CleanCandidates(path, null).First())
     : pdfFile ? Path.GetFileName(OutputNaming.CandidatesWithExtension(path, ".pdf", PdfCapabilities.NameSuffix(capability!.Id)).First())
     : outputFormat == ImageFormat.Unknown ? null : Path.GetFileName(OutputNaming.Candidates(path, outputFormat, op!.NameSuffix).First());
 var producing = scenario is "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "batch" or "edge" or "rename" || pdfFile || zipFolder || subtitleFile || documentText || documentClean || mediaFile;
-var expectOutput = producing && (outputFormat != ImageFormat.Unknown || pdfFile || zipFolder || subtitleFile || documentText || documentClean || mediaFile || scenario == "rename");
+var expectOutput = producing && !formCancel && (outputFormat != ImageFormat.Unknown || pdfFile || zipFolder || subtitleFile || documentText || documentClean || mediaFile || scenario == "rename");
 var stamp = DateTime.Now.ToString("HHmmss", System.Globalization.CultureInfo.InvariantCulture);
 var folder = Path.Combine(Path.GetTempPath(), "wintools-e2e", pathStyle == "unicode" ? $"{scenario} مجلد 😀 {stamp}" : $"{scenario}-{stamp}");
 if (pathStyle == "long")
@@ -756,7 +768,30 @@ using (var explorer = opened)
                     if (Desktop.ForegroundProcessName() == "WinTools.Dialogs") { dialogInFront = true; break; }
                     Thread.Sleep(100);
                 }
-                if (dialogInFront == true)
+                if (dialogInFront == true && formKeys is not null && formCancel)
+                {
+                    // Esc closes the form (it is shown with Show, so WPF's IsCancel alone would not), and nothing runs.
+                    Thread.Sleep(400);
+                    Desktop.Tap(Desktop.VkEscape);
+                    var escaped = Stopwatch.GetTimestamp();
+                    while (Stopwatch.GetElapsedTime(escaped) < TimeSpan.FromSeconds(3) && Process.GetProcessesByName("WinTools.Dialogs").Length > 0) Thread.Sleep(100);
+                    formClosed = Process.GetProcessesByName("WinTools.Dialogs").Length == 0;
+                }
+                else if (dialogInFront == true && formKeys is not null)
+                {
+                    // A form opens with its first box selected: typing replaces it; Tab goes to the next box.
+                    Thread.Sleep(400);
+                    foreach (var k in formKeys)
+                    {
+                        if (k == "\t") Desktop.Tap(0x09);
+                        else Desktop.TypeText(k);
+                        Thread.Sleep(150);
+                    }
+                    Thread.Sleep(250);
+                    if (Desktop.ForegroundProcessName() == "WinTools.Dialogs") Desktop.Tap(0x0D);
+                    else dialogInFront = false;
+                }
+                else if (dialogInFront == true)
                 {
                     Thread.Sleep(400);
                     Desktop.Tap(0x09); // Tab: from "New name" to "Add before"
@@ -857,11 +892,14 @@ using (var explorer = opened)
             bool MediaValid(string file)
             {
                 var psi = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "ffmpeg", "ffprobe.exe")) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true };
-                foreach (var a in new[] { "-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0", file }) psi.ArgumentList.Add(a);
+                foreach (var a in new[] { "-v", "error", "-show_entries", "stream=codec_type:format=duration", "-of", "csv=p=0", file }) psi.ArgumentList.Add(a);
                 using var probe = Process.Start(psi)!;
                 var types = probe.StandardOutput.ReadToEnd();
                 probe.WaitForExit();
-                return probe.ExitCode == 0 && types.Contains("audio", StringComparison.Ordinal) && (scenario == "audio" || types.Contains("video", StringComparison.Ordinal));
+                // Trim keeps 1 s to 3 s: about two seconds.
+                var lastLine = types.Trim().Split('\n')[^1].Trim();
+                var trimmed = formAnswer != "start=1;end=3" || double.TryParse(lastLine, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d) && d is > 1.6 and < 2.4;
+                return probe.ExitCode == 0 && trimmed && types.Contains("audio", StringComparison.Ordinal) && (scenario == "audio" || types.Contains("video", StringComparison.Ordinal));
             }
             var outputValid = output is not null && zipFolder ? ZipTreeValid(output!) : output is not null && subtitleFile ? SubtitleValid(output!)
                 : output is not null && mediaFile ? MediaValid(output!)
@@ -909,7 +947,10 @@ using (var explorer = opened)
                 "lockedzip" when facts => output is null && infoShown && focusKept == true && accepted == 1 && dialogInFront == true && secretAsked,
                 "lockedzip" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1 && dialogInFront == true && secretAsked,
                 "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" or "file" or "folder" or "pdf" or "zip" or "tgz" or "srt" or "docx" or "video" or "audio" when facts => output is null && infoShown && focusKept == true && accepted == 1,
-                "zip" or "tgz" or "srt" or "docx" or "video" or "audio" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,
+                "srt" or "video" or "audio" when formCancel => output is null && accepted == 1 && dialogInFront == true && formClosed
+                    && HostLines().Skip(hostLogLines).Any(l => l.Contains("\"ev\":\"form.ask\"", StringComparison.Ordinal) && l.Contains("\"end\":\"Cancelled\"", StringComparison.Ordinal)),
+                "zip" or "tgz" or "srt" or "docx" or "video" or "audio" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1
+                    && (formKeys is null || dialogInFront == true), // a form: it came to the front and was answered
                 "rename" => output is not null && Path.GetFileName(output) == "2026 notes.txt" && accepted == 1 && dialogInFront == true,
                 "pdf" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1 && (capability?.Prompt is null || dialogInFront == true),
                 "png" or "jpg" or "bmp" or "tif" or "webp" or "photo" => output is not null && Path.GetFileName(output) == outputName && outputValid && accepted == 1,

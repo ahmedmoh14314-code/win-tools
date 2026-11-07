@@ -40,6 +40,12 @@ internal static class Ffmpeg
     /// <summary>A path as the engine must read it: the file protocol, never anything else.</summary>
     public static string FileUrl(string fullPath) => "file:" + fullPath;
 
+    /// <summary>
+    /// A numbered output ("frame %04d.png") in a folder: the engine reads every "%" of the name as part of the pattern, so
+    /// one in the folder's own path is doubled to stay literal.
+    /// </summary>
+    public static string PatternUrl(string folder, string pattern) => FileUrl(Path.Combine(folder.Replace("%", "%%", StringComparison.Ordinal), pattern));
+
     public static EngineRun Probe(IReadOnlyList<string> arguments, TimeSpan timeout) => Run(FfprobePath, arguments, timeout);
 
     public static EngineRun Convert(IReadOnlyList<string> arguments, TimeSpan timeout) => Run(FfmpegPath, arguments, timeout);

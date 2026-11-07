@@ -21,9 +21,9 @@ public sealed class CapabilityResolver(IReadOnlyList<CapabilityDescriptor> catal
     /// program (ADR-0033): without LibreOffice, To PDF is not a button on the wheel.
     /// </summary>
     public static CapabilityResolver For(string? customResizeId, IReadOnlySet<string>? installed = null) =>
-        new([.. ((IEnumerable<CapabilityDescriptor>)[.. ImageCapabilities.Catalog(customResizeId), .. PdfCapabilities.Catalog, .. SubtitleCapabilities.Catalog, .. DocumentCapabilities.Catalog, .. OfficeCapabilities.Catalog, .. MediaCapabilities.Catalog, .. FilesCapabilities.Catalog, .. ArchiveCapabilities.Catalog])
+        new([.. ((IEnumerable<CapabilityDescriptor>)[.. ImageCapabilities.Catalog(customResizeId), .. PdfRenderCapabilities.Catalog, .. PdfCapabilities.Catalog, .. SubtitleCapabilities.Catalog, .. DocumentCapabilities.Catalog, .. OfficeCapabilities.Catalog, .. MediaCapabilities.Catalog, .. FilesCapabilities.Catalog, .. ArchiveCapabilities.Catalog])
                 .Where(c => c.Requires is null || installed?.Contains(c.Requires) == true)],
-            [.. ImageCapabilities.Categories, .. PdfCapabilities.Categories, .. ArchiveCapabilities.Categories, .. SubtitleCapabilities.Categories, .. DocumentCapabilities.Categories, .. OfficeCapabilities.Categories, .. MediaCapabilities.Categories, .. FilesCapabilities.Categories]);
+            [.. ImageCapabilities.Categories, .. PdfRenderCapabilities.Categories, .. PdfCapabilities.Categories, .. ArchiveCapabilities.Categories, .. SubtitleCapabilities.Categories, .. DocumentCapabilities.Categories, .. OfficeCapabilities.Categories, .. MediaCapabilities.Categories, .. FilesCapabilities.Categories]);
 
     /// <summary>The image module alone (V1's menu, which MenuGoldenTests pins).</summary>
     public static CapabilityResolver Images(string? customResizeId) => new(ImageCapabilities.Catalog(customResizeId), ImageCapabilities.Categories);

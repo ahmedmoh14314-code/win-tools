@@ -30,7 +30,6 @@ public static class PdfCapabilities
     [
         new("organize", "Organize", "pages", 15),
         new("optimize", "Optimize", "compress", 25),
-        new("rotate", "Rotate", "rotate", 40),
         new("protect", "Protect", "protect", 60),
         new("tools", "Tools", "tools", 11), // Convert, then Tools, then the module's own groups, Actions last (Tangerine's order)
     ];
@@ -45,11 +44,12 @@ public static class PdfCapabilities
             LongRunning: true, Feedback: Words("Merging", "merge", "Merged")),
         new(SplitId, "Split into pages", "organize", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.Folder,
             LongRunning: true, Feedback: Words("Splitting", "split", "Split into pages")),
-        new(RotateLeftId, "Left", "rotate", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File,
-            LongRunning: true, Feedback: Words("Rotating", "rotate", "Rotated left")),
-        new(RotateRightId, "Right", "rotate", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File,
+        // Rotation is part of Organize: the ring keeps six groups now that a PDF also has Convert (ADR-0029).
+        new(RotateRightId, "Rotate right", "organize", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File,
             LongRunning: true, Feedback: Words("Rotating", "rotate", "Rotated right")),
-        new(Rotate180Id, "180°", "rotate", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File,
+        new(RotateLeftId, "Rotate left", "organize", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File,
+            LongRunning: true, Feedback: Words("Rotating", "rotate", "Rotated left")),
+        new(Rotate180Id, "Rotate 180°", "organize", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File,
             LongRunning: true, Feedback: Words("Rotating", "rotate", "Rotated 180°")),
         new(OptimizeId, "Smaller (lossless)", "optimize", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File,
             LongRunning: true, Feedback: new("Optimizing", "optimize", "Optimized without loss", "Already optimized", "PDF", "PDFs", Savings: true)),

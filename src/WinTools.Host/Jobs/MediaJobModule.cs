@@ -11,7 +11,7 @@ namespace WinTools.Host.Jobs;
 /// <item>Video info and Audio info: facts within <see cref="JobFacts"/>' bounds, and no file.</item>
 /// <item>A new file: one, under a name the module allows for that command, whose SHA-256 is the one the worker validated
 /// (any facts are notices the toast shows).</item>
-/// <item>Save frames: one folder under an allowed name, holding no link, whose shape (paths and sizes) is the one the
+/// <item>Save frames and Split: one folder under an allowed name, holding no link, whose shape (paths and sizes) is the one the
 /// worker reported.</item>
 /// </list>
 /// A killed worker may leave its temporary file or folder, under one deterministic name.
@@ -22,7 +22,7 @@ internal sealed class MediaJobModule : IJobModule
 
     public string Name => MediaCapabilities.Module;
 
-    /// <summary>The module's commands take no parameters yet.</summary>
+    /// <summary>No settings reach the module; Trim and Split carry only their form's answer.</summary>
     public static IReadOnlyDictionary<string, string>? Parameters(Core.Settings.AppSettings _) => null;
 
     public bool IsBelievable(JobRequest request, JobResult result)
@@ -36,13 +36,21 @@ internal sealed class MediaJobModule : IJobModule
             {
                 case MediaCapabilities.VideoInfoId or MediaCapabilities.AudioInfoId:
                     return request.Inputs.Count == 1 && result.Outputs.Count == 0 && result.Facts.Any(f => f.Label == "Duration");
-                case MediaCapabilities.FramesId:
+                case MediaCapabilities.FramesId or MediaCapabilities.SplitVideoId or MediaCapabilities.SplitAudioId:
                 {
                     if (result.Outputs is not [{ Sha256: { Length: 64 } shape } output] || request.Inputs.Count != 1) return false;
                     if (!MediaCapabilities.Candidates(request.CapabilityId, request.Inputs[0], request.OutputDirectory).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
                     var folder = new DirectoryInfo(output.Path);
-                    return folder.Exists && folder.LinkTarget is null
-                        && string.Equals(FolderManifest.ShapeOf(output.Path, MediaJobsLimits.MaxFrames + 1), shape, StringComparison.OrdinalIgnoreCase);
+                    if (!folder.Exists || folder.LinkTarget is not null
+                        || !string.Equals(FolderManifest.ShapeOf(output.Path, MediaJobsLimits.MaxFrames + 1), shape, StringComparison.OrdinalIgnoreCase)) return false;
+                    if (request.CapabilityId == MediaCapabilities.FramesId) return true;
+                    // Split: exactly the parts the form asked for, "part 00" to the last, none empty (review, #38).
+                    var answer = request.Parameters is { } p && p.TryGetValue(DialogParameters.Name, out var a) ? a : null;
+                    if (Forms.Read(request.CapabilityId, answer)?.Get(Forms.SplitParts) is not { } parts) return false;
+                    var ext = MediaCapabilities.ExtensionOf(request.CapabilityId == MediaCapabilities.SplitVideoId ? MediaCapabilities.TrimVideoId : MediaCapabilities.TrimAudioId, request.Inputs[0]);
+                    var expected = Enumerable.Range(0, (int)parts).Select(i => $"part {i:00}{ext}").ToArray();
+                    var found = folder.GetFileSystemInfos().OrderBy(f => f.Name, StringComparer.Ordinal).ToArray();
+                    return found.Select(f => f.Name).SequenceEqual(expected, StringComparer.OrdinalIgnoreCase) && found.All(f => f is FileInfo { Length: > 0 });
                 }
                 default:
                 {

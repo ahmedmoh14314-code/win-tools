@@ -24,10 +24,12 @@ internal sealed class SubtitleJobModule : IJobModule
         if (request.CapabilityId == SubtitleCapabilities.InfoId) return result.Outputs.Count == 0 && JobFacts.AreShowable(result.Facts);
         if (result.Outputs is not [{ Sha256: { Length: 64 } claimed } output]) return false;
         // A written file may carry only notices for the toast: the code page it was read as, and what a conversion could not keep.
-        if (result.Facts.Count > 0 && !(result.Facts.Count <= 2 && result.Facts.All(f => f is { Label: "Read as" or "Dropped", Notice: true }) && JobFacts.AreShowable(result.Facts))) return false;
+        if (result.Facts.Count > 0 && !(result.Facts.Count <= 3 && result.Facts.All(f => f is { Label: "Read as" or "Dropped" or "Clamped", Notice: true }) && JobFacts.AreShowable(result.Facts))) return false;
         try
         {
-            if (!SubtitleCapabilities.Candidates(request.CapabilityId, source, request.OutputDirectory).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
+            var answer = request.Parameters is { } p && p.TryGetValue(DialogParameters.Name, out var a) ? a : null;
+            if (SubtitleCapabilities.ShiftOf(request.CapabilityId, answer) is null && request.CapabilityId == SubtitleCapabilities.ShiftCustomId) return false;
+            if (!SubtitleCapabilities.Candidates(request.CapabilityId, source, request.OutputDirectory, answer).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
             var info = new FileInfo(output.Path);
             if (!info.Exists || info.Length > SubtitleCapabilities.MaxInputBytes * 2) return false;
             var bytes = File.ReadAllBytes(output.Path);
