@@ -17,9 +17,10 @@ namespace WinTools.Worker.Text;
 /// and macro execution disabled), linked content of untrusted documents blocked, OLE objects and DDE disabled, links
 /// never updated on load in Writer and Calc, formulas never recalculated on load, the update check off, and every proxy
 /// set to a closed local port.</item>
-/// <item><b>Text and CSV</b> are decoded by the worker, written again as UTF-8, and opened with an explicit filter, so
-/// LibreOffice never guesses their type (a .txt holding HTML stays text). A CSV's "=" cells are imported as text,
-/// never as formulas.</item>
+/// <item><b>Every input opens with the filter of its kind</b> (<see cref="InputFilter"/>), so LibreOffice's content detection
+/// never picks an importer the product did not mean to expose: a .txt holding HTML stays text. Text is decoded by the
+/// worker and written again as UTF-8; a CSV becomes a workbook first, on To Excel's rules, so "007" stays text and "="
+/// cells are never formulas.</item>
 /// <item><b>The environment</b>: only what a Windows program needs, TEMP in the work folder, and the proxy variables
 /// libcurl reads pointing at the same closed port.</item>
 /// </list>
@@ -37,25 +38,40 @@ internal static class Soffice
     /// <summary>The PDF LibreOffice writes for that input: "out\source.pdf".</summary>
     public static string OutputName => Path.Combine(OutputFolder, "source.pdf");
 
-    /// <summary>The import filter for decoded text: plain text and CSV are never type-detected.</summary>
-    public static string? InputFilter(string extension, char csvSeparator = ',') => extension.ToLowerInvariant() switch
+    /// <summary>
+    /// The import filter of an input's extension: the node names in LibreOffice's filter/source/config/fragments/filters.
+    /// </summary>
+    public static string InputFilter(string extension) => "--infilter=" + extension.ToLowerInvariant() switch
     {
-        ".txt" => "--infilter=Text (encoded):UTF8",
-        // Separator, quote, UTF-8 (76), first line, no column formats, default language, quoted not forced to text, no
-        // special numbers, (two export tokens), no trimming, (export token), formulas imported as text (token 13 false),
-        // (export token), no scientific notation (LibreOffice help, "CSV Filter Options").
-        ".csv" => $"--infilter=Text - txt - csv (StarCalc):{(int)csvSeparator},34,76,1,,0,false,false,false,false,false,0,false,false,false",
-        _ => null,
+        ".docx" => "MS Word 2007 XML",
+        ".doc" => "MS Word 97",
+        ".rtf" => "Rich Text Format",
+        ".odt" => "writer8",
+        ".xlsx" => "Calc MS Excel 2007 XML",
+        ".xls" => "MS Excel 97",
+        ".ods" => "calc8",
+        ".pptx" => "Impress MS PowerPoint 2007 XML",
+        ".ppt" => "MS PowerPoint 97",
+        ".odp" => "impress8",
+        ".txt" => "Text (encoded):UTF8",
+        _ => throw new ArgumentException("No filter for that kind.", nameof(extension)),
     };
 
-    public static IReadOnlyList<string> Arguments(string workFolder, string inputName, string? inputFilter)
+    /// <summary>
+    /// The file URL of the profile. "$" is escaped too: LibreOffice expands macros in bootstrap values, so a temp path with
+    /// a "$" could otherwise name another folder and the settings below would go unused (evaluator).
+    /// </summary>
+    public static string ProfileUrl(string workFolder) =>
+        new Uri(Path.Combine(workFolder, ProfileFolder) + Path.DirectorySeparatorChar).AbsoluteUri.TrimEnd('/').Replace("$", "%24", StringComparison.Ordinal);
+
+    public static IReadOnlyList<string> Arguments(string workFolder, string inputName, string inputFilter)
     {
         List<string> args =
         [
-            "-env:UserInstallation=" + new Uri(Path.Combine(workFolder, ProfileFolder) + Path.DirectorySeparatorChar).AbsoluteUri.TrimEnd('/'),
+            "-env:UserInstallation=" + ProfileUrl(workFolder),
             "--headless", "--invisible", "--nologo", "--nodefault", "--nofirststartwizard", "--norestore", "--nolockcheck",
         ];
-        if (inputFilter is not null) args.Add(inputFilter);
+        args.Add(inputFilter);
         args.AddRange(["--convert-to", "pdf", "--outdir", OutputFolder, Path.Combine(InputFolder, inputName)]);
         return args;
     }

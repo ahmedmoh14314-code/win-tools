@@ -28,6 +28,7 @@ Keep this a snapshot, not a diary. Update at the end of every session (workflow 
 | #36 | Media: FFmpeg 8.1.3 LGPL, video and audio convert, compress, edit, info (ADR-0028) | Merged |
 | #37 | The wheel as Convert / Tools / Actions; the wheel, toasts, dialogs and panels in Arabic (RTL) | Open at this writing |
 | #38 | Forms: Trim, Split, a custom subtitle shift, video crop presets | This PR |
+| Next | Document conversions: CSV/TSV to Excel, Excel to CSV, Markdown to HTML; Office to PDF through the user's LibreOffice (ADR-0033). End-to-end run with real LibreOffice pending (owner) | Open at this writing |
 
 ## Last known-good commit
 - `main` at `fe01125`, the merge of #31, with CI `build-and-test` green.

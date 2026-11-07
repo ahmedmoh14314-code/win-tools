@@ -221,7 +221,21 @@ internal static class XlsxWriter
 /// </summary>
 internal static class WorkbookReader
 {
-    public sealed record Sheet(string Name, string Part);
+    public sealed record Sheet(string Name, string Part, bool Hidden = false);
+
+    /// <summary>
+    /// How many cells a whole workbook may spread out to, gaps included: a few bytes of XML can name a million rows of
+    /// 16,384 columns, so the count is kept across sheets and passing it is a limit, never an allocation.
+    /// </summary>
+    public sealed class CellBudget(long cells = 50_000_000)
+    {
+        private long _left = cells;
+
+        public void Spend(long cells)
+        {
+            if ((_left -= cells) < 0) throw new Csv.Problem("The workbook is too large to write as CSV.", limit: true);
+        }
+    }
 
     /// <summary>What the cells of a workbook need: its shared strings, which styles are dates, and its date system.</summary>
     public sealed record Context(IReadOnlyList<string> Shared, IReadOnlySet<int> DateStyles, IReadOnlySet<int> TimeOnlyStyles, bool Date1904);
@@ -231,17 +245,7 @@ internal static class WorkbookReader
     /// <summary>The worksheets in the workbook's order, or the numbered parts ("Sheet 1"...) when it lists none.</summary>
     public static IReadOnlyList<Sheet> Sheets(ZipArchive zip)
     {
-        var rels = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (DocumentJobs.ReadPart(zip, "xl/_rels/workbook.xml.rels") is { } relsXml)
-        {
-            using var r = DocumentJobs.Xml(relsXml);
-            while (r.Read())
-                if (r.NodeType == XmlNodeType.Element && r.LocalName == "Relationship" && (r.GetAttribute("Type") ?? "").EndsWith("/worksheet", StringComparison.Ordinal)
-                    && !string.Equals(r.GetAttribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase)
-                    && r.GetAttribute("Id") is { } id && r.GetAttribute("Target") is { Length: > 0 } target
-                    && Uri.TryCreate(WorkbookUri, target, out var uri) && uri.Host == "package")
-                    rels.TryAdd(id, Uri.UnescapeDataString(uri.AbsolutePath.TrimStart('/')));
-        }
+        var rels = Relationships(zip).Where(r => r.Type == "worksheet").ToDictionary(r => r.Id, r => r.Part, StringComparer.Ordinal);
         var sheets = new List<Sheet>();
         if (DocumentJobs.ReadPart(zip, "xl/workbook.xml") is { } wb)
         {
@@ -256,8 +260,10 @@ internal static class WorkbookReader
                     if (r.LocalName == "id" && r.NamespaceURI.EndsWith("/relationships", StringComparison.Ordinal)) rid = r.Value;
                 }
                 r.MoveToElement();
-                if (rid is not null && rels.TryGetValue(rid, out var part) && DocumentJobs.Find(zip, part) is { } entry)
-                    sheets.Add(new(r.GetAttribute("name") is { Length: > 0 } n ? n : $"Sheet {sheets.Count + 1}", entry.FullName));
+                if (rid is null || !rels.TryGetValue(rid, out var part)) continue; // a chart sheet: no cells
+                // A sheet the workbook lists and the package lacks is damage: leaving it out would lose it without a word.
+                var entry = DocumentJobs.Find(zip, part) ?? throw new Csv.Problem("The workbook lists a sheet its package does not hold.");
+                sheets.Add(new(r.GetAttribute("name") is { Length: > 0 } n ? n : $"Sheet {sheets.Count + 1}", entry.FullName, r.GetAttribute("state") is "hidden" or "veryHidden"));
             }
         }
         if (sheets.Count == 0)
@@ -265,10 +271,38 @@ internal static class WorkbookReader
         return sheets;
     }
 
+    /// <summary>The workbook's internal relationships: their id, the last word of their type, and the part they name.</summary>
+    private static List<(string Id, string Type, string Part)> Relationships(ZipArchive zip)
+    {
+        var found = new List<(string, string, string)>();
+        if (DocumentJobs.Find(zip, "xl/_rels/workbook.xml.rels") is not { } entry) return found;
+        using var r = DocumentJobs.Xml(DocumentJobs.ReadPart(zip, entry.FullName)!);
+        while (r.Read())
+            if (r.NodeType == XmlNodeType.Element && r.LocalName == "Relationship"
+                && !string.Equals(r.GetAttribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase)
+                && r.GetAttribute("Id") is { } id && r.GetAttribute("Type") is { } type && r.GetAttribute("Target") is { Length: > 0 } target
+                && Uri.TryCreate(WorkbookUri, target, out var uri) && uri.Host == "package")
+                found.Add((id, type[(type.LastIndexOf('/') + 1)..], Uri.UnescapeDataString(uri.AbsolutePath.TrimStart('/'))));
+        return found;
+    }
+
+    /// <summary>
+    /// The text of the part the workbook's relationship of this type names, else of the usual name, in any case (Office
+    /// does not promise the case, and other writers name parts as they like); null when the workbook has none. A
+    /// relationship to a part that is not there is damage: going on without shared strings would blank every text cell.
+    /// </summary>
+    private static string? WorkbookPart(ZipArchive zip, IReadOnlyList<(string Id, string Type, string Part)> rels, string type, string usual)
+    {
+        var named = rels.FirstOrDefault(r => r.Type == type).Part;
+        var entry = named is null ? DocumentJobs.Find(zip, usual) : DocumentJobs.Find(zip, named) ?? throw new Csv.Problem("The workbook names a part its package does not hold.");
+        return entry is null ? null : DocumentJobs.ReadPart(zip, entry.FullName);
+    }
+
     public static Context ContextOf(ZipArchive zip)
     {
+        var rels = Relationships(zip);
         var shared = new List<string>();
-        if (DocumentJobs.ReadPart(zip, "xl/sharedStrings.xml") is { } sst)
+        if (WorkbookPart(zip, rels, "sharedStrings", "xl/sharedStrings.xml") is { } sst)
         {
             using var r = DocumentJobs.Xml(sst);
             StringBuilder? item = null;
@@ -285,7 +319,7 @@ internal static class WorkbookReader
         var formats = new Dictionary<int, string>();
         var dates = new HashSet<int>();
         var times = new HashSet<int>();
-        if (DocumentJobs.ReadPart(zip, "xl/styles.xml") is { } styles)
+        if (WorkbookPart(zip, rels, "styles", "xl/styles.xml") is { } styles)
         {
             using (var r = DocumentJobs.Xml(styles))
                 while (r.Read())
@@ -328,7 +362,7 @@ internal static class WorkbookReader
     internal static int DateKind(int id, string? code)
     {
         if (id is >= 14 and <= 17 or 22 or >= 27 and <= 31 or >= 34 and <= 36 or >= 50 and <= 58) return 1;
-        if (id is >= 18 and <= 21 or 32 or 33 or 45 or 46 or 47) return 2;
+        if (id is >= 18 and <= 21 or 32 or 33 or 45 or 47) return 2; // 46 is [h]:mm:ss, a duration: a number
         if (code is null) return 0;
         // Quoted text, escaped characters and [colour]/[condition] sections are not date parts; [h] or [mm] are durations.
         var plain = new StringBuilder();
@@ -341,7 +375,8 @@ internal static class WorkbookReader
             {
                 var end = code.IndexOf(']', i + 1);
                 if (end < 0) break;
-                if (code.AsSpan(i + 1, end - i - 1).Trim().ToString().ToLowerInvariant() is ['h', ..] or ['m', ..] or ['s', ..]) return 0;
+                var section = code[(i + 1)..end].Trim();
+                if (section.Length > 0 && section.All(s => s is 'h' or 'H' or 'm' or 'M' or 's' or 'S')) return 0; // [h], [mm], [ss]; [Magenta] is a colour
                 i = end;
                 continue;
             }
@@ -357,10 +392,16 @@ internal static class WorkbookReader
     /// The sheet's rows as CSV text, every gap kept (a missing row is an empty row, a missing cell an empty field).
     /// <paramref name="raw"/>: numbers as stored, for checking a workbook this module wrote.
     /// </summary>
-    public static List<string[]> Rows(string xml, Context context, bool raw = false)
+    public static List<string[]> Rows(string xml, Context context, bool raw = false, CellBudget? budget = null)
+    {
+        using var r = DocumentJobs.Xml(xml);
+        return Rows(r, context, raw, budget ?? new CellBudget());
+    }
+
+    /// <summary>The same from a reader the caller set up (a workbook this module wrote is read back as a stream).</summary>
+    public static List<string[]> Rows(XmlReader r, Context context, bool raw, CellBudget budget)
     {
         var rows = new List<string[]>();
-        using var r = DocumentJobs.Xml(xml);
         SortedDictionary<int, string>? cells = null;
         int rowNumber = 0, nextRow = 1, column = 0, nextColumn = 0, style = 0;
         string? type = null;
@@ -376,6 +417,7 @@ internal static class WorkbookReader
             }
             var width = cells!.Count == 0 ? 0 : cells.Keys.Max() + 1;
             if (width > Csv.MaxColumns) throw new Csv.Problem("A row is wider than a worksheet can be.", limit: true);
+            budget.Spend(width);
             rows.Add([.. Enumerable.Range(0, width).Select(k => cells.TryGetValue(k, out var c) ? c : "")]);
             if (rows.Count > Csv.MaxRows) throw new Csv.Problem("A sheet has more rows than Excel allows.", limit: true);
             nextRow = rowNumber + 1;
@@ -404,7 +446,9 @@ internal static class WorkbookReader
                 onNext = true;
                 cells[column] = type switch
                 {
-                    "s" => int.TryParse(v, NumberStyles.None, CultureInfo.InvariantCulture, out var i) && i < context.Shared.Count ? context.Shared[i] : "",
+                    // A blank here would look like a success with the text gone.
+                    "s" => int.TryParse(v, NumberStyles.None, CultureInfo.InvariantCulture, out var i) && i < context.Shared.Count ? context.Shared[i]
+                        : throw new Csv.Problem("A cell points at text the workbook does not hold."),
                     "b" => v.Trim() == "1" ? "TRUE" : "FALSE",
                     "str" or "e" or "d" or "inlineStr" => v,
                     _ => raw ? v : Number(v, style, context),
@@ -440,6 +484,7 @@ internal static class WorkbookReader
                 : when.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
         }
         if (d == Math.Floor(d) && Math.Abs(d) < 1e15) return ((long)d).ToString(CultureInfo.InvariantCulture);
+        if (stored.AsSpan().TrimStart('-') is { Length: > 0 } digits && !digits.ContainsAnyExceptInRange('0', '9')) return stored; // an exact long ID some writers store
         return d.ToString("G15", CultureInfo.InvariantCulture);
     }
 }

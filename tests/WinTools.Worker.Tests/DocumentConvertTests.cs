@@ -171,6 +171,96 @@ public sealed class DocumentConvertTests : IDisposable
     }
 
     [Fact]
+    public void Shared_strings_are_found_through_the_relationships_in_any_case()
+    {
+        // Numbers would survive and the job would succeed with the text gone (evaluator, blocker).
+        var parts = Workbook(("Data", """<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><v>1</v></c></row>"""));
+        parts = [.. parts.Select(p => p.Item1 == "xl/sharedStrings.xml" ? ("xl/SharedStrings.xml", p.Item2) : p)];
+        var odd = Path.Combine(_dir.Path, "case.xlsx");
+        OoxmlSamples.Write(odd, parts);
+        Assert.Equal(Encoding.UTF8.GetBytes("\uFEFFمرحبا,1\r\n"), File.ReadAllBytes(Run(Request(DocumentCapabilities.ToCsvId, odd)).OutputPath!));
+
+        parts = [.. Workbook(("Data", """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""")).Select(p => p.Item1 switch
+        {
+            "xl/sharedStrings.xml" => ("xl/text/words.xml", p.Item2),
+            "xl/_rels/workbook.xml.rels" => (p.Item1, p.Item2.Replace("</Relationships>", "<Relationship Id=\"rS\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"/xl/text/words.xml\"/></Relationships>", StringComparison.Ordinal)),
+            _ => p,
+        })];
+        var moved = Path.Combine(_dir.Path, "moved.xlsx");
+        OoxmlSamples.Write(moved, parts);
+        Assert.Equal(Encoding.UTF8.GetBytes("\uFEFFمرحبا\r\n"), File.ReadAllBytes(Run(Request(DocumentCapabilities.ToCsvId, moved)).OutputPath!));
+    }
+
+    [Fact]
+    public void A_cell_or_sheet_the_workbook_does_not_hold_is_damage_not_a_blank()
+    {
+        var index = Xlsx("index.xlsx", ("Data", """<row r="1"><c r="A1" t="s"><v>999</v></c><c r="B1"><v>1</v></c></row>"""));
+        Assert.Equal(ErrorCode.DecodeFailed, Run(Request(DocumentCapabilities.ToCsvId, index)).Error);
+        var parts = Workbook(("Data", """<row r="1"><c r="A1"><v>1</v></c></row>"""), ("Lost", """<row r="1"><c r="A1"><v>2</v></c></row>"""));
+        var lost = Path.Combine(_dir.Path, "lost.xlsx");
+        OoxmlSamples.Write(lost, [.. parts.Where(p => p.Item1 != "xl/worksheets/sheet1.xml")]);
+        Assert.Equal(ErrorCode.DecodeFailed, Run(Request(DocumentCapabilities.ToCsvId, lost)).Error);
+        Assert.Equal(["index.xlsx", "lost.xlsx"], _dir.Names());
+    }
+
+    [Fact]
+    public void A_field_with_a_semicolon_or_tab_is_quoted_so_no_locale_splits_a_formula_free()
+    {
+        Assert.Equal(Encoding.UTF8.GetBytes("\uFEFF\"x;=cmd|' /C calc'!A0\",\"a\tb\"\r\n"), Csv.Write([["x;=cmd|' /C calc'!A0", "a\tb"]]));
+    }
+
+    [Fact]
+    public void Hidden_sheets_are_exported_and_said()
+    {
+        var parts = Workbook(("Open", """<row r="1"><c r="A1"><v>1</v></c></row>"""), ("Secret", """<row r="1"><c r="A1"><v>2</v></c></row>"""));
+        parts = [.. parts.Select(p => p.Item1 == "xl/workbook.xml" ? (p.Item1, p.Item2.Replace("name=\"Secret\"", "name=\"Secret\" state=\"hidden\"", StringComparison.Ordinal)) : p)];
+        var book = Path.Combine(_dir.Path, "hidden.xlsx");
+        OoxmlSamples.Write(book, parts);
+        var r = Run(Request(DocumentCapabilities.ToCsvId, book));
+        Assert.True(r.Success, r.Message);
+        Assert.Contains(r.Facts, f => f is { Notice: true, Value: ConvertJobs.HiddenNotice });
+    }
+
+    [Fact]
+    public void A_table_near_excels_size_converts_and_is_checked()
+    {
+        // About 70 characters of XML per text cell: past the 50 million characters a stranger's part may hold (evaluator).
+        var csv = new StringBuilder();
+        for (var row = 0; row < 90_000; row++)
+            csv.Append(string.Join(',', Enumerable.Range(0, 10).Select(k => $"text{row}x{k}"))).Append("\r\n");
+        var path = Text("large.csv", csv.ToString());
+        var r = Run(Request(DocumentCapabilities.ToXlsxId, path));
+        Assert.True(r.Success, $"{r.Error} {r.Message}");
+    }
+
+    [Fact]
+    public void Many_wide_rows_in_a_few_bytes_are_a_limit_not_a_crash()
+    {
+        var rows = string.Concat(Enumerable.Range(1, 20_000).Select(n => $"<row r=\"{n}\"><c r=\"XFD{n}\"><v>1</v></c></row>"));
+        var book = Xlsx("wide.xlsx", ("Data", rows));
+        Assert.Equal(ErrorCode.LimitExceeded, Run(Request(DocumentCapabilities.ToCsvId, book)).Error);
+        Assert.Equal(["wide.xlsx"], _dir.Names());
+    }
+
+    [Theory]
+    [InlineData("1234567890123456", "1234567890123456")] // an exact ID some writers store
+    [InlineData("1E+20", "1E+20")]
+    public void Long_integers_stay_exact(string stored, string expected)
+    {
+        var context = new WorkbookReader.Context([], new HashSet<int>(), new HashSet<int>(), false);
+        Assert.Equal(expected, WorkbookReader.Number(stored, 0, context));
+    }
+
+    [Fact]
+    public void One_cell_at_the_far_corner_of_a_sheet_is_refused_not_padded_to_gigabytes()
+    {
+        var book = Xlsx("corner.xlsx", ("Data", """<row r="1"><c r="A1"><v>1</v></c></row><row r="1048576"><c r="XFD1048576"><v>2</v></c></row>"""));
+        var r = Run(Request(DocumentCapabilities.ToCsvId, book));
+        Assert.Equal(ErrorCode.LimitExceeded, r.Error);
+        Assert.Equal(["corner.xlsx"], _dir.Names());
+    }
+
+    [Fact]
     public void Several_sheets_with_data_become_a_folder_of_csv_files_in_workbook_order()
     {
         var book = Xlsx("book.xlsx", ("Sales", """<row r="1"><c r="A1"><v>1</v></c></row>"""), ("Empty", ""), ("a/b:c", """<row r="1"><c r="A1"><v>2</v></c></row>"""), ("CON", """<row r="1"><c r="A1"><v>3</v></c></row>"""));
@@ -218,6 +308,16 @@ public sealed class DocumentConvertTests : IDisposable
     }
 
     [Fact]
+    public void Aligned_and_grid_tables_convert()
+    {
+        // Markdig writes these two styles itself; refusing every style failed any table with alignment (evaluator).
+        var md = Text("tables.md", "| a | b | c |\n|:--|--:|:-:|\n| 1 | 2 | 3 |\n\n+---+---+\n| x | y |\n+---+---+\n");
+        var html = File.ReadAllText(Run(Request(DocumentCapabilities.ToHtmlId, md)).OutputPath!);
+        Assert.Contains("style=\"text-align: right;\"", html, StringComparison.Ordinal);
+        Assert.Contains("<col style=\"width:", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Raw_html_scripts_and_script_addresses_never_reach_the_page()
     {
         var md = Text("evil.md", """
@@ -246,11 +346,21 @@ public sealed class DocumentConvertTests : IDisposable
     }
 
     [Theory]
+    [InlineData("java\tscript:alert(1)")] // browsers drop a tab inside a scheme
+    [InlineData(" JAVASCRIPT:alert(1)")]
+    [InlineData("vbscript:x")]
+    [InlineData("data:text/html,x")]
+    [InlineData("file:///C:/x")]
+    public void Addresses_are_read_the_way_browsers_read_them(string url) => Assert.Equal("#", MarkdownPage.SafeUrl(url));
+
+    [Theory]
     [InlineData("<p onclick=\"x\">a</p>")]
     [InlineData("<a href=\"javascript:x\">a</a>")]
     [InlineData("<script>x</script>")]
     [InlineData("<iframe src=\"https://e\"></iframe>")]
     [InlineData("<p style=\"x\">a</p>")]
+    [InlineData("<td style=\"background:url(x)\">a</td>")]
+    [InlineData("<col style=\"width:1%;background:url(x)%\">")]
     public void A_page_with_anything_active_is_not_inert(string fragment)
     {
         var page = $"<html><head><meta http-equiv=\"Content-Security-Policy\" content=\"{DocumentCapabilities.HtmlPolicy}\"></head><body>{fragment}</body></html>";
@@ -299,6 +409,8 @@ public sealed class DocumentConvertTests : IDisposable
     [InlineData(164, "hh:mm", 2)]
     [InlineData(164, "0.00%", 0)]
     [InlineData(164, "[Red]d/m/yyyy", 1)]
+    [InlineData(164, "[Magenta]yyyy-mm-dd", 1)] // a colour, not a duration
+    [InlineData(46, null, 0)] // [h]:mm:ss, a duration
     public void Date_formats_are_told_from_number_formats(int id, string? code, int kind) =>
         Assert.Equal(kind, WorkbookReader.DateKind(id, code));
 

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using WinTools.Core.Capabilities;
@@ -49,14 +50,17 @@ internal sealed class InstalledOfficeEngine : IOfficeEngine
 /// this module's jobs on one worker). The steps:
 /// <list type="number">
 /// <item>LibreOffice is looked for again here (a path is never taken from the request); not found is "not found".</item>
-/// <item>The document is checked against its kind's signature (a ZIP package, a compound file, an RTF header, or
-/// text that decodes), so a file that is really something else (HTML named .doc) never reaches LibreOffice's type
-/// detection. A password-protected Office file is said to be one.</item>
+/// <item>The document is checked as its kind: an Office package on ADR-0025's rules (limits and content types), an
+/// OpenDocument package by its limits and its mimetype entry, a compound file or RTF by its signature, text by decoding
+/// it. It then opens with its kind's own filter, so nothing reaches LibreOffice's content detection. A password-protected
+/// Office file is said to be one.</item>
 /// <item>A private work folder under the user's temp folder (created exclusively): the document copied in under a fixed
 /// name (text decoded and written again as UTF-8), and a fresh profile (<see cref="Soffice"/>). Nothing is ever written
 /// next to the original, not even LibreOffice's lock file.</item>
-/// <item>LibreOffice runs headless with a time limit; on the limit it is killed with every process it started.</item>
-/// <item>The PDF must be the only file written, start with "%PDF-", pass "qpdf --check", and have at least one page.</item>
+/// <item>LibreOffice runs headless with a time limit; on the limit it is killed with every process it started. Any
+/// exit code but 0 is a failure.</item>
+/// <item>The PDF must be the only file written, start with "%PDF-", pass "qpdf --check" without a warning (qpdf reads a cut
+/// PDF with exit 3, and loses pages doing so), and have at least one page.</item>
 /// <item>It is copied to an exclusive temp in the destination, checked again by hash, given the source's zone and
 /// moved to the first free name ("report.pdf", "report (1).pdf"...), never over a file.</item>
 /// </list>
@@ -65,6 +69,7 @@ internal sealed class InstalledOfficeEngine : IOfficeEngine
 internal static class OfficeJobs
 {
     private const FileAttributes RecallOnOpen = (FileAttributes)0x00040000, RecallOnDataAccess = (FileAttributes)0x00400000;
+    private const int DiskFull = unchecked((int)0x80070070);
 
     /// <summary>How long LibreOffice may take for one document (a fresh profile starts in seconds; a long deck takes longer).</summary>
     public static readonly TimeSpan ConvertTimeout = TimeSpan.FromMinutes(3);
@@ -97,6 +102,7 @@ internal static class OfficeJobs
             return JobResult.Fail(id, ErrorCode.UnsupportedContent, "LibreOffice is not used for this kind of file.");
         var work = WorkFolderOf(id);
         var workCreated = false;
+        var atDestination = false; // past this point an IO failure is the destination's, not the temp folder's
         try
         {
             var soffice = engine.Locate();
@@ -111,43 +117,48 @@ internal static class OfficeJobs
             foreach (var sub in new[] { Soffice.InputFolder, Soffice.OutputFolder, Soffice.TempFolder, Path.Combine(Soffice.ProfileFolder, "user") })
                 Directory.CreateDirectory(Path.Combine(work, sub));
             File.WriteAllText(Path.Combine(work, Soffice.ProfileFolder, "user", "registrymodifications.xcu"), Soffice.RegistryModifications(), new UTF8Encoding(false));
-            var extension = kind.Extensions[0];
+            // A CSV goes as a workbook, on To Excel's rules; other text as UTF-8 with a BOM, whatever it was.
+            var extension = kind == FileKinds.Csv ? ".xlsx" : kind.Extensions[0];
             var inputName = Soffice.InputName(extension);
             var input = Path.Combine(work, Soffice.InputFolder, inputName);
-            char separator = ',';
-            if (text is not null)
+            if (kind == FileKinds.Csv)
             {
-                // Text is handed over as UTF-8 with a BOM, whatever it was; a CSV without its "sep=" line.
-                var body = text.Text;
-                if (kind == FileKinds.Csv)
-                {
-                    separator = Csv.DetectSeparator(body, out var sepLine);
-                    if (sepLine) body = body[(body.IndexOfAny(['\r', '\n']) is var e and >= 0 ? e : body.Length)..].TrimStart('\r', '\n');
-                }
-                File.WriteAllBytes(input, [0xEF, 0xBB, 0xBF, .. new UTF8Encoding(false).GetBytes(body)]);
+                var separator = Csv.DetectSeparator(text!.Text, out var sepLine);
+                var table = Csv.Parse(text.Text, separator, sepLine);
+                if (!table.HasData) return JobResult.Fail(id, ErrorCode.NothingToDo, "The table is empty.");
+                File.WriteAllBytes(input, ConvertJobs.Workbook(table, path).Bytes);
             }
+            else if (text is not null) File.WriteAllBytes(input, [0xEF, 0xBB, 0xBF, .. new UTF8Encoding(false).GetBytes(text.Text)]);
             else CopyNew(source.FullName, input);
 
-            var run = engine.Convert(soffice, Soffice.Arguments(work, inputName, Soffice.InputFilter(extension, separator)), work,
+            var run = engine.Convert(soffice, Soffice.Arguments(work, inputName, Soffice.InputFilter(extension)), work,
                 Soffice.Environment(work, System.Environment.GetEnvironmentVariable), timeout);
             if (run.TimedOut) throw new OfficeFailure(ErrorCode.WorkerTimeout, "LibreOffice took too long and was stopped.");
+            if (run.ExitCode != 0) throw new OfficeFailure(ErrorCode.EncodeFailed, $"LibreOffice stopped with code {run.ExitCode}.");
             var pdf = Path.Combine(work, Soffice.OutputName);
             var written = Directory.GetFileSystemEntries(Path.Combine(work, Soffice.OutputFolder));
             if (written.Length == 0) throw new OfficeFailure(ErrorCode.EncodeFailed, "LibreOffice did not write a PDF (the document may be damaged or protected).");
             if (written is not [var only] || !string.Equals(only, pdf, StringComparison.OrdinalIgnoreCase)) throw new OfficeFailure(ErrorCode.OutputValidationFailed, "LibreOffice wrote something unexpected; nothing was saved.");
             var pages = Validate(engine, work, pdf);
             var hash = Sha256Of(pdf);
+            atDestination = true;
+            List<JobFact> facts = [new JobFact("Pages", pages.ToString("N0", CultureInfo.InvariantCulture))];
+            // A legacy code page is a judgement, not a fact the file states: said, as the subtitles and To Excel say it.
+            if (text is { } read && read.EncodingName.StartsWith("Windows-", StringComparison.Ordinal)) facts.Add(new("Read as", $"Read as {read.EncodingName}", Notice: true));
             return DocumentJobs.Commit(request, path, OfficeCapabilities.Candidates(path, request.OutputDirectory),
                 s => { using var from = new FileStream(pdf, FileMode.Open, FileAccess.Read, FileShare.Read); from.CopyTo(s); },
                 temp => string.Equals(Sha256Of(temp), hash, StringComparison.Ordinal),
-                [new JobFact("Pages", pages.ToString("N0", CultureInfo.InvariantCulture))]);
+                facts);
         }
         catch (OfficeFailure ex) { return JobResult.Fail(id, ex.Code, ex.Message); }
         catch (DocumentJobs.DocFailure ex) { return JobResult.Fail(id, ex.Code, ex.Message); }
+        catch (Csv.Problem ex) { return JobResult.Fail(id, ex.Limit ? ErrorCode.LimitExceeded : ErrorCode.DecodeFailed, ex.Message); }
+        catch (Exception ex) when (ex is InvalidDataException or System.Xml.XmlException) { return JobResult.Fail(id, ErrorCode.DecodeFailed, "The document's package is damaged."); }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return JobResult.Fail(id, ErrorCode.SourceNotFound, "The file is no longer there."); }
-        catch (System.ComponentModel.Win32Exception) { return JobResult.Fail(id, ErrorCode.UnsupportedOperation, "LibreOffice could not be started."); }
+        catch (System.ComponentModel.Win32Exception) { return JobResult.Fail(id, ErrorCode.EncodeFailed, "LibreOffice is installed but could not be started."); }
+        catch (Exception ex) when (!atDestination && ex is UnauthorizedAccessException or IOException) { return JobResult.Fail(id, ex.HResult == DiskFull ? ErrorCode.DiskFull : ErrorCode.Internal, "The temporary folder could not be used."); }
         catch (UnauthorizedAccessException) { return JobResult.Fail(id, ErrorCode.OutputDirectoryNotWritable, "The destination folder is not writable."); }
-        catch (IOException ex) { return JobResult.Fail(id, ErrorCode.OutputDirectoryNotWritable, $"Writing failed (0x{ex.HResult:X8})."); }
+        catch (IOException ex) { return JobResult.Fail(id, ex.HResult == DiskFull ? ErrorCode.DiskFull : ErrorCode.OutputDirectoryNotWritable, $"Writing failed (0x{ex.HResult:X8})."); }
         finally
         {
             if (workCreated) DeleteFolder(work);
@@ -191,7 +202,38 @@ internal static class OfficeJobs
         // An encrypted .docx, .xlsx or .pptx is a compound file, not a ZIP (ADR-0025): it needs its password in Office first.
         if (compound && signature.SequenceEqual(Zip)) throw new OfficeFailure(ErrorCode.PasswordRequired, "The document is protected with a password; open it in Office to remove the protection first.");
         if (!head.AsSpan().StartsWith(signature)) throw new OfficeFailure(ErrorCode.ContentMismatch, $"The file is not a {kind.DisplayName}, whatever its name says.");
+        CheckPackage(path, kind);
         return info;
+    }
+
+    /// <summary>
+    /// A ZIP-based kind as a package: Office on ADR-0025's rules (limits, and the content type of its kind), OpenDocument by
+    /// the same limits and its "mimetype" entry. Anything else with a ZIP signature stops here.
+    /// </summary>
+    private static void CheckPackage(string path, FileKind kind)
+    {
+        if (kind == FileKinds.Docx || kind == FileKinds.Xlsx || kind == FileKinds.Pptx)
+        {
+            using var _ = DocumentJobs.Open(path, kind == FileKinds.Docx ? DocumentJobs.Kind.Word : kind == FileKinds.Xlsx ? DocumentJobs.Kind.Excel : DocumentJobs.Kind.PowerPoint);
+            return;
+        }
+        var expected = kind == FileKinds.Odt ? "application/vnd.oasis.opendocument.text"
+            : kind == FileKinds.Ods ? "application/vnd.oasis.opendocument.spreadsheet"
+            : kind == FileKinds.Odp ? "application/vnd.oasis.opendocument.presentation" : null;
+        if (expected is null) return;
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var zip = new ZipArchive(stream, ZipArchiveMode.Read);
+        if (zip.Entries.Count > DocumentJobs.MaxParts) throw new OfficeFailure(ErrorCode.LimitExceeded, "The document has too many parts.");
+        long declared = 0;
+        foreach (var e in zip.Entries)
+        {
+            declared += e.Length;
+            if (ArchiveLimits.IsBomb(e.Length, e.CompressedLength) || ArchiveLimits.IsArchiveBomb(declared, stream.Length))
+                throw new OfficeFailure(ErrorCode.LimitExceeded, "The document's package expands far beyond its size; it looks like a compression bomb.");
+        }
+        if (zip.GetEntry("mimetype") is not { Length: < 200 } entry) throw new OfficeFailure(ErrorCode.ContentMismatch, $"The file is not a {kind.DisplayName}, whatever its name says.");
+        using var reader = new StreamReader(entry.Open(), Encoding.ASCII);
+        if (reader.ReadToEnd().Trim() != expected) throw new OfficeFailure(ErrorCode.ContentMismatch, $"The file is not a {kind.DisplayName}, whatever its name says.");
     }
 
     private static readonly byte[] Zip = [0x50, 0x4B, 0x03, 0x04], CompoundFile = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1], RtfHeader = "{\\rtf"u8.ToArray();
@@ -214,9 +256,9 @@ internal static class OfficeJobs
         }
         var relative = Soffice.OutputName;
         var check = engine.Qpdf(["--check", relative], work) ?? throw new OfficeFailure(ErrorCode.Internal, "The PDF checker (qpdf) is missing from this copy of WinTools.");
-        if (check.TimedOut || check.ExitCode is not (0 or 3)) throw new OfficeFailure(ErrorCode.OutputValidationFailed, "The PDF LibreOffice wrote does not check out; nothing was saved.");
+        if (check.TimedOut || check.ExitCode != 0) throw new OfficeFailure(ErrorCode.OutputValidationFailed, "The PDF LibreOffice wrote does not check out; nothing was saved.");
         var count = engine.Qpdf(["--show-npages", relative], work);
-        if (count is not { TimedOut: false, ExitCode: 0 or 3 } || !int.TryParse(count.Output.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var pages) || pages < 1)
+        if (count is not { TimedOut: false, ExitCode: 0 } || !int.TryParse(count.Output.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var pages) || pages < 1)
             throw new OfficeFailure(ErrorCode.OutputValidationFailed, "The PDF LibreOffice wrote has no pages; nothing was saved.");
         return pages;
     }

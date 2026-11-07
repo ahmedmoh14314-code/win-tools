@@ -21,7 +21,7 @@ public sealed class OfficeConvertTests : IDisposable
     public void Dispose() => _dir.Dispose();
 
     /// <summary>A stand-in for LibreOffice: what it was asked, and what it does in the work folder.</summary>
-    private sealed class FakeOffice(Action<string>? act, string? soffice = @"C:\Program Files\LibreOffice\program\soffice.exe", bool timeOut = false) : IOfficeEngine
+    private sealed class FakeOffice(Action<string>? act, string? soffice = @"C:\Program Files\LibreOffice\program\soffice.exe", bool timeOut = false, int exitCode = 0) : IOfficeEngine
     {
         public IReadOnlyList<string>? Arguments { get; private set; }
         public IReadOnlyDictionary<string, string>? Environment { get; private set; }
@@ -39,7 +39,7 @@ public sealed class OfficeConvertTests : IDisposable
             Input = File.ReadAllBytes(Path.Combine(workFolder, arguments[^1]));
             if (timeOut) return new ProgramRun(-1, "", TimedOut: true);
             act?.Invoke(workFolder);
-            return new ProgramRun(0, "", TimedOut: false);
+            return new ProgramRun(exitCode, "", TimedOut: false);
         }
 
         public ProgramRun? Qpdf(IReadOnlyList<string> arguments, string workFolder) => InstalledOfficeEngine.Instance.Qpdf(arguments, workFolder);
@@ -92,6 +92,7 @@ public sealed class OfficeConvertTests : IDisposable
         Assert.Equal(new Uri(Path.Combine(office.WorkFolder!, "profile")).AbsoluteUri, args[0]["-env:UserInstallation=".Length..]);
         foreach (var flag in new[] { "--headless", "--invisible", "--nologo", "--nodefault", "--nofirststartwizard", "--norestore", "--nolockcheck" })
             Assert.Contains(flag, args);
+        Assert.Contains("--infilter=MS Word 2007 XML", args); // its kind's filter: LibreOffice's content detection never runs
         Assert.Equal(["--convert-to", "pdf", "--outdir", "out", Path.Combine("in", "source.docx")], args.TakeLast(5));
         Assert.DoesNotContain(args, a => a.Contains("تقرير", StringComparison.Ordinal) || a.Contains(_dir.Path, StringComparison.OrdinalIgnoreCase));
         Assert.Equal(@"C:\Program Files\LibreOffice\program\soffice.exe", office.Executable);
@@ -112,6 +113,9 @@ public sealed class OfficeConvertTests : IDisposable
         Assert.Equal("true", Value("/org.openoffice.Office.Common/Security/Scripting", "DisableMacrosExecution"));
         Assert.Equal("true", Value("/org.openoffice.Office.Common/Security/Scripting", "BlockUntrustedRefererLinks"));
         Assert.Equal("true", Value("/org.openoffice.Office.Common/Security/Scripting", "DisableActiveContent"));
+        Assert.Equal("true", Value("/org.openoffice.Office.Common/Security/Scripting", "DisableOLEAutomation"));
+        Assert.Equal("1", Value("/org.openoffice.Office.Calc/Formula/Load", "ODFRecalcMode"));
+        Assert.Equal("", Value("/org.openoffice.Inet/Settings", "ooInetNoProxy"));
         Assert.Equal("2", Value("/org.openoffice.Office.Writer/Content/Update", "Link")); // Writer: never
         Assert.Equal("1", Value("/org.openoffice.Office.Calc/Content/Update", "Link")); // Calc: never
         Assert.Equal("1", Value("/org.openoffice.Office.Calc/Formula/Load", "OOXMLRecalcMode"));
@@ -134,7 +138,7 @@ public sealed class OfficeConvertTests : IDisposable
     }
 
     [Fact]
-    public void Text_and_csv_are_handed_over_as_utf8_with_an_explicit_filter_and_formulas_as_text()
+    public void Text_goes_as_utf8_with_its_filter_and_a_csv_as_a_workbook_of_text()
     {
         var office = new FakeOffice(WritesPdf);
         var txt = _dir.Write("notes.txt", Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes("<html><img src=http://x></html>")).ToArray());
@@ -142,13 +146,91 @@ public sealed class OfficeConvertTests : IDisposable
         Assert.Contains("--infilter=Text (encoded):UTF8", office.Arguments!);
         Assert.Equal([0xEF, 0xBB, 0xBF, .. "<html><img src=http://x></html>"u8], office.Input);
 
-        var csv = _dir.Write("data.csv", "sep=;\r\na;=WEBSERVICE(\"http://x\")\r\n"u8.ToArray());
+        var csv = _dir.Write("data.csv", "sep=;\r\na;=WEBSERVICE(\"http://x\");007\r\n"u8.ToArray());
         Assert.True(Run(Request(csv), office).Success);
-        var filter = office.Arguments!.Single(a => a.StartsWith("--infilter=", StringComparison.Ordinal));
-        Assert.Equal("--infilter=Text - txt - csv (StarCalc):59,34,76,1,,0,false,false,false,false,false,0,false,false,false", filter);
-        Assert.Equal(15, filter.Split(":")[1].Split(",").Length);
-        Assert.Equal("false", filter.Split(":")[1].Split(",")[12]); // token 13, "import as formulas"
-        Assert.Equal("\uFEFFa;=WEBSERVICE(\"http://x\")\r\n"u8.ToArray(), office.Input); // the sep= line is not data
+        Assert.Contains("--infilter=Calc MS Excel 2007 XML", office.Arguments!);
+        Assert.EndsWith("source.xlsx", office.Arguments![^1], StringComparison.Ordinal);
+        using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(office.Input!));
+        using var sheet = new StreamReader(zip.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+        var xml = sheet.ReadToEnd();
+        Assert.DoesNotContain("<f>", xml, StringComparison.Ordinal); // never a formula, so WEBSERVICE fetches nothing
+        Assert.Contains("007</t>", xml, StringComparison.Ordinal); // text, as To Excel keeps it
+        Assert.DoesNotContain("sep=", xml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_text_read_as_a_legacy_code_page_says_so()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var txt = _dir.Write("legacy.txt", Encoding.GetEncoding(1256).GetBytes("الاسم في المدينة والبلد الكبير والقرية الصغيرة\r\n"));
+        var r = Run(Request(txt), new FakeOffice(WritesPdf));
+        Assert.True(r.Success, r.Message);
+        Assert.Contains(r.Facts, f => f is { Label: "Read as", Notice: true });
+    }
+
+    [Theory]
+    [InlineData("a.odt", "application/vnd.oasis.opendocument.text", true)]
+    [InlineData("b.ods", "application/vnd.oasis.opendocument.spreadsheet", true)]
+    [InlineData("c.odp", "application/vnd.oasis.opendocument.presentation", true)]
+    [InlineData("d.odt", "application/vnd.oasis.opendocument.spreadsheet", false)]
+    [InlineData("e.ods", "application/epub+zip", false)]
+    public void An_opendocument_file_is_told_by_its_mimetype_entry(string name, string mimetype, bool accepted)
+    {
+        var path = Path.Combine(_dir.Path, name);
+        OoxmlSamples.Write(path, ("mimetype", mimetype), ("content.xml", "<x/>"));
+        var office = new FakeOffice(WritesPdf);
+        var r = Run(Request(path), office);
+        Assert.Equal(accepted ? ErrorCode.None : ErrorCode.ContentMismatch, r.Error);
+        Assert.Equal(accepted, office.Arguments is not null);
+    }
+
+    [Fact]
+    public void A_zip_named_like_an_office_file_never_reaches_LibreOffice()
+    {
+        var office = new FakeOffice(WritesPdf);
+        var plain = Path.Combine(_dir.Path, "plain.docx");
+        OoxmlSamples.Write(plain, ("readme.txt", "just a zip"));
+        Assert.Equal(ErrorCode.ContentMismatch, Run(Request(plain), office).Error);
+        var deck = Path.Combine(_dir.Path, "deck.docx");
+        OoxmlSamples.Write(deck, OoxmlSamples.Pptx("x"));
+        Assert.Equal(ErrorCode.ContentMismatch, Run(Request(deck), office).Error);
+        var noMime = Path.Combine(_dir.Path, "bare.odt");
+        OoxmlSamples.Write(noMime, ("content.xml", "<x/>"));
+        Assert.Equal(ErrorCode.ContentMismatch, Run(Request(noMime), office).Error);
+        Assert.Null(office.Arguments);
+    }
+
+    [Fact]
+    public void A_dollar_in_the_temp_path_cannot_redirect_the_profile()
+    {
+        var url = Soffice.ProfileUrl(@"C:\Users\a$b\wintools-office-1");
+        Assert.Equal("file:///C:/Users/a%24b/wintools-office-1/profile", url);
+    }
+
+    [Theory]
+    [InlineData(".docx", "MS Word 2007 XML")]
+    [InlineData(".DOC", "MS Word 97")]
+    [InlineData(".rtf", "Rich Text Format")]
+    [InlineData(".odt", "writer8")]
+    [InlineData(".xlsx", "Calc MS Excel 2007 XML")]
+    [InlineData(".xls", "MS Excel 97")]
+    [InlineData(".ods", "calc8")]
+    [InlineData(".pptx", "Impress MS PowerPoint 2007 XML")]
+    [InlineData(".ppt", "MS PowerPoint 97")]
+    [InlineData(".odp", "impress8")]
+    [InlineData(".txt", "Text (encoded):UTF8")]
+    public void Every_kind_opens_with_its_own_filter(string extension, string filter) =>
+        Assert.Equal("--infilter=" + filter, Soffice.InputFilter(extension));
+
+    [Fact]
+    public void Work_folders_a_crash_left_are_swept_when_the_host_starts()
+    {
+        var old = Directory.CreateDirectory(Path.Combine(_dir.Path, OfficeCapabilities.WorkFolderName("abc"), "in"));
+        File.WriteAllText(Path.Combine(old.FullName, "source.docx"), "a user's copy");
+        var other = Directory.CreateDirectory(Path.Combine(_dir.Path, "someone-elses-folder"));
+        OfficeJobModule.SweepLeftovers(_dir.Path);
+        Assert.False(Directory.Exists(Path.Combine(_dir.Path, OfficeCapabilities.WorkFolderName("abc"))));
+        Assert.True(other.Exists);
     }
 
     [Theory]
@@ -167,7 +249,7 @@ public sealed class OfficeConvertTests : IDisposable
     }
 
     [Fact]
-    public void A_password_protected_office_file_says_so_and_a_real_compound_doc_is_accepted()
+    public void A_password_protected_office_file_says_so_and_the_old_signatures_pass()
     {
         byte[] compound = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, 0, 0, 0, 0];
         var office = new FakeOffice(WritesPdf);
@@ -192,6 +274,8 @@ public sealed class OfficeConvertTests : IDisposable
         { "junk", ErrorCode.OutputValidationFailed },
         { "two", ErrorCode.OutputValidationFailed },
         { "damaged", ErrorCode.OutputValidationFailed },
+        { "cut", ErrorCode.OutputValidationFailed }, // qpdf reads a cut PDF with exit 3 and a page lost: never kept
+        { "exit", ErrorCode.EncodeFailed }, // a good-looking PDF from a run that says it failed
         { "timeout", ErrorCode.WorkerTimeout },
     };
 
@@ -204,11 +288,17 @@ public sealed class OfficeConvertTests : IDisposable
             "junk" => w => File.WriteAllText(Path.Combine(w, "out", "source.pdf"), new string('x', 100)),
             "two" => w => { WritesPdf(w); File.WriteAllText(Path.Combine(w, "out", "other.pdf"), "%PDF-1.4"); },
             "damaged" => w => File.WriteAllBytes(Path.Combine(w, "out", "source.pdf"), [.. "%PDF-1.7\n"u8, .. new byte[200]]),
+            "cut" => w =>
+            {
+                var whole = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "samples", "pages-3.pdf"));
+                File.WriteAllBytes(Path.Combine(w, "out", "source.pdf"), whole[..(whole.Length * 7 / 10)]);
+            },
+            "exit" => WritesPdf,
             _ => _ => { },
         };
         var docx = Docx();
         var before = Hash.Of(docx);
-        var r = Run(Request(docx), new FakeOffice(act, timeOut: what == "timeout"));
+        var r = Run(Request(docx), new FakeOffice(act, timeOut: what == "timeout", exitCode: what == "exit" ? 1 : 0));
         Assert.Equal(expected, r.Error);
         Assert.Equal(["report.docx"], _dir.Names());
         Assert.Equal(before, Hash.Of(docx));
@@ -232,6 +322,8 @@ public sealed class OfficeConvertTests : IDisposable
         var r = OfficeJobs.Run(request, new FakeOffice(WritesPdf), TimeSpan.FromSeconds(30));
         Assert.True(OfficeJobModule.Instance.IsBelievable(request, r));
         Assert.False(OfficeJobModule.Instance.IsBelievable(request, r with { Facts = [] }));
+        Assert.True(OfficeJobModule.Instance.IsBelievable(request, r with { Facts = [.. r.Facts, new JobFact("Read as", "Read as Windows-1256 (Arabic)", Notice: true)] }));
+        Assert.False(OfficeJobModule.Instance.IsBelievable(request, r with { Facts = [.. r.Facts, new JobFact("Extra", "not a notice")] }));
         Assert.False(OfficeJobModule.Instance.IsBelievable(request, r with { Outputs = [r.Outputs[0] with { Path = Path.Combine(_dir.Path, "elsewhere.pdf") }] }));
         File.AppendAllText(r.OutputPath!, "tampered");
         Assert.False(OfficeJobModule.Instance.IsBelievable(request, r));

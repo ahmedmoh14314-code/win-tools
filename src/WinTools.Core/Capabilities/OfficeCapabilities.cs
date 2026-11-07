@@ -48,6 +48,9 @@ public static class OfficeCapabilities
     public static IEnumerable<string> Candidates(string source, string? outputDirectory) =>
         Output.OutputNaming.CandidatesWithExtension(source, ".pdf", null, outputDirectory);
 
+    /// <summary>The start of every conversion's private folder, which the host also sweeps when it starts.</summary>
+    public const string WorkFolderPrefix = "wintools-office-";
+
     /// <summary>The private folder of one conversion under the user's temp folder (the copy, the profile, the PDF).</summary>
-    public static string WorkFolderName(string requestId) => $"wintools-office-{requestId}";
+    public static string WorkFolderName(string requestId) => WorkFolderPrefix + requestId;
 }

@@ -172,11 +172,14 @@ internal static class DocumentJobs
     }
 
     /// <summary>An XML reader that reads no DTD, resolves nothing and stops at <see cref="MaxPartChars"/>.</summary>
-    internal static XmlReader Xml(string text) => XmlReader.Create(new StringReader(text), new XmlReaderSettings
+    internal static XmlReader Xml(string text) => Xml(new StringReader(text), MaxPartChars);
+
+    /// <summary>The same reader over any text, with its own limit (0: none, for a part this worker wrote itself).</summary>
+    internal static XmlReader Xml(TextReader text, long maxChars) => XmlReader.Create(text, new XmlReaderSettings
     {
         DtdProcessing = DtdProcessing.Prohibit,
         XmlResolver = null,
-        MaxCharactersInDocument = MaxPartChars,
+        MaxCharactersInDocument = maxChars,
         MaxCharactersFromEntities = 0,
         IgnoreComments = true,
         IgnoreProcessingInstructions = true,

@@ -112,6 +112,7 @@ internal static class Program
             // PDF to images and text, images to PDF: the image worker with PDFium, two at a time (a page can take a few hundred MB; ADR-0029).
             var pdfRender = new JobModuleRunner(PdfRenderJobModule.Instance, new WorkerClient(workerPath, PdfTimeout, PdfRenderJobModule.Instance, parallelism: 2), PdfRenderJobModule.Parameters);
             var jobs = new JobScheduler([images, files, pdf, archives, subtitles, documents, office, media, pdfRender], log, () => Volatile.Read(ref current), feedback);
+            _ = Task.Run(() => OfficeJobModule.SweepLeftovers()); // copies of documents a crash left behind (ADR-0033)
             coordinator = new InteractionCoordinator(log, window, jobs, feedback, sounds, settings);
             using (coordinator)
             {

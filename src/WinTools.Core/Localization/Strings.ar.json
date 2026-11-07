@@ -530,6 +530,7 @@
   "say.Characters Excel cannot hold were replaced with �.": "استُبدلت بالرمز � محارف لا يقبلها Excel.",
   "say.Cells starting with = + - @ got a leading ' so Excel shows them as text and does not run them.": "أُضيفت ' قبل الخلايا التي تبدأ بـ = + - @ ليعرضها Excel نصًا ولا ينفّذها.",
   "say.Read as Windows-1256 (Arabic)": "قُرئ بترميز Windows-1256 (عربي)",
+  "say.Hidden sheets are included.": "شملت النتيجة أوراقًا مخفية.",
   "toast.altText": "يستخدم Windows مفتاح Alt مع مفاتيح أخرى لاختصاراته، لذلك لا يُفتح WinTools أثناء الضغط على Alt.",
   "toast.titleOne": "{0}: {1}"
 }

@@ -111,11 +111,21 @@ internal static class MarkdownPage
             if (name is "script" or "iframe" or "frame" or "object" or "embed" or "form" or "base" or "link" or "svg" or "math" or "style" && !(name == "style" && i < html.IndexOf("</head>", StringComparison.Ordinal))) return false;
             foreach (var (attribute, value) in Attributes(tag[name.Length..]))
             {
+                if (attribute == "style" && IsLayoutStyle(name, value)) continue;
                 if (attribute.StartsWith("on", StringComparison.Ordinal) || attribute is "style" or "srcdoc" or "formaction") return false;
                 if (attribute is "href" or "src" or "action" or "xlink:href" && SafeUrl(WebUtility.HtmlDecode(value)) == "#" && value != "#") return false;
             }
         }
         return true;
+    }
+
+    /// <summary>The only styles Markdig writes itself: a table cell's alignment and a grid table's column width.</summary>
+    private static bool IsLayoutStyle(string element, string value)
+    {
+        if (element is "th" or "td") return value is "text-align: left;" or "text-align: right;" or "text-align: center;";
+        if (element != "col" || !value.StartsWith("width:", StringComparison.Ordinal) || !value.EndsWith('%')) return false;
+        var number = value.AsSpan(6, value.Length - 7);
+        return number.Length is > 0 and < 12 && number.ToString().All(c => char.IsAsciiDigit(c) || c == '.');
     }
 
     /// <summary>The '>' that closes the tag opened at <paramref name="start"/>, skipping quoted attribute values.</summary>

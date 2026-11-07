@@ -27,12 +27,12 @@ internal static class ConvertJobs
     private const int ErrorFileExists = unchecked((int)0x80070050), ErrorAlreadyExists = unchecked((int)0x800700B7);
     private const int ErrorSharingViolation = unchecked((int)0x80070020), ErrorAccessDenied = unchecked((int)0x80070005);
 
-    /// <summary>The most characters a CSV To CSV writes (the host reads the file again to check it).</summary>
-    public const int MaxCsvChars = 200_000_000;
+    private const int MaxCsvBytes = Csv.MaxWrittenChars; // under the host's 256 MB read-back limit
 
     /// <summary>To Excel and To HTML: the source is text, read once and bounded.</summary>
     /// <summary>The notices, fixed sentences so the toast can say them in the language in use ("say." keys).</summary>
     public const string ReplacedNotice = "Characters Excel cannot hold were replaced with �.";
+    public const string HiddenNotice = "Hidden sheets are included.";
     public const string GuardedNotice = "Cells starting with = + - @ got a leading ' so Excel shows them as text and does not run them.";
 
     public static JobResult FromText(JobRequest request, string path)
@@ -75,28 +75,40 @@ internal static class ConvertJobs
         if (!table.HasData) return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "The table is empty.");
         // A line break inside a cell becomes Excel's own (LF), and a character XML cannot hold becomes U+FFFD: this is
         // what the workbook must give back, cell for cell.
-        var replaced = 0;
-        var expected = table.Rows.Select(row => row.Select(c => XlsxWriter.XmlSafe(c.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n'), ref replaced)).ToArray()).ToList();
-        var (bytes, _) = XlsxWriter.Build(expected, XlsxWriter.SheetName(Path.GetFileNameWithoutExtension(path)));
+        var (bytes, expected, replaced) = Workbook(table, path);
 
         bool Valid(string temp)
         {
             try
             {
-                using var zip = DocumentJobs.Open(temp, DocumentJobs.Kind.Excel);
-                if (!File.ReadAllBytes(temp).AsSpan().SequenceEqual(bytes)) return false;
-                var sheets = WorkbookReader.Sheets(zip);
-                if (sheets is not [var sheet]) return false;
-                var back = WorkbookReader.Rows(DocumentJobs.ReadPart(zip, sheet.Part)!, WorkbookReader.ContextOf(zip), raw: true);
+                // This module's own workbook, read as a stream: the limits on a stranger's parts would refuse a table
+                // far below the limits promised (a text cell is about 70 characters of XML; evaluator).
+                var written = File.ReadAllBytes(temp);
+                if (!written.AsSpan().SequenceEqual(bytes)) return false;
+                using var zip = new ZipArchive(new MemoryStream(written), ZipArchiveMode.Read);
+                using var sheet = new StreamReader(zip.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+                using var xml = DocumentJobs.Xml(sheet, 0);
+                var back = WorkbookReader.Rows(xml, new WorkbookReader.Context([], new HashSet<int>(), new HashSet<int>(), false), raw: true, new WorkbookReader.CellBudget(long.MaxValue));
                 return SameTable(back, expected);
             }
-            catch (Exception ex) when (ex is DocumentJobs.DocFailure or InvalidDataException or System.Xml.XmlException or IOException or Csv.Problem) { return false; }
+            catch (Exception ex) when (ex is InvalidDataException or System.Xml.XmlException or IOException or Csv.Problem) { return false; }
         }
 
         var facts = new List<JobFact>();
         if (decoded.EncodingName.StartsWith("Windows-", StringComparison.Ordinal)) facts.Add(new("Read as", $"Read as {decoded.EncodingName}", Notice: true));
         if (replaced > 0) facts.Add(new("Changed", ReplacedNotice, Notice: true));
         return DocumentJobs.Commit(request, path, DocumentCapabilities.XlsxCandidates(path, request.OutputDirectory), s => s.Write(bytes), Valid, facts);
+    }
+
+    /// <summary>
+    /// A table as a one-sheet workbook. A line break inside a cell becomes Excel's own (LF) and a character XML cannot
+    /// hold becomes U+FFFD: the rows returned are what the workbook must give back, cell for cell.
+    /// </summary>
+    internal static (byte[] Bytes, List<string[]> Rows, int Replaced) Workbook(Table table, string path)
+    {
+        var replaced = 0;
+        var rows = table.Rows.Select(row => row.Select(c => XlsxWriter.XmlSafe(c.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n'), ref replaced)).ToArray()).ToList();
+        return (XlsxWriter.Build(rows, XlsxWriter.SheetName(Path.GetFileNameWithoutExtension(path))).Bytes, rows, replaced);
     }
 
     /// <summary>Two tables hold the same cells, ignoring empty cells at the end of a row and empty rows at the end.</summary>
@@ -134,20 +146,26 @@ internal static class ConvertJobs
         var context = WorkbookReader.ContextOf(zip);
         var sheets = new List<(string Name, List<string[]> Rows)>();
         var guarded = 0;
+        var hidden = false;
+        var budget = new WorkbookReader.CellBudget();
         foreach (var sheet in WorkbookReader.Sheets(zip))
         {
-            var rows = WorkbookReader.Rows(DocumentJobs.ReadPart(zip, sheet.Part) ?? "", context);
+            var rows = WorkbookReader.Rows(DocumentJobs.ReadPart(zip, sheet.Part) ?? "", context, budget: budget);
             if (!rows.Any(r => r.Any(c => c.Length > 0))) continue;
             if (sheets.Count == DocumentCapabilities.MaxCsvSheets)
                 throw new DocumentJobs.DocFailure(ErrorCode.LimitExceeded, $"The workbook has more than {DocumentCapabilities.MaxCsvSheets} sheets with data.");
             guarded += Guard(rows);
+            hidden |= sheet.Hidden;
             sheets.Add((sheet.Name, rows));
         }
         if (sheets.Count == 0) return JobResult.Fail(request.Id, ErrorCode.NothingToDo, "No sheet has data.");
+        if (sheets.Sum(s => (long)s.Rows.Count * s.Rows.Max(r => r.Length)) > Csv.MaxWrittenChars)
+            throw new DocumentJobs.DocFailure(ErrorCode.LimitExceeded, "The workbook is too large to write as CSV.");
         var files = sheets.Select(s => (s.Name, s.Rows, Bytes: Csv.Write(s.Rows))).ToList();
-        if (files.Any(f => f.Bytes.Length > MaxCsvChars)) throw new DocumentJobs.DocFailure(ErrorCode.LimitExceeded, "A sheet is too large to write as CSV.");
+        if (files.Any(f => f.Bytes.Length > MaxCsvBytes)) throw new DocumentJobs.DocFailure(ErrorCode.LimitExceeded, "A sheet is too large to write as CSV.");
         var facts = new List<JobFact>();
         if (guarded > 0) facts.Add(new("Changed", GuardedNotice, Notice: true));
+        if (hidden) facts.Add(new("Contains", HiddenNotice, Notice: true)); // hidden data must not reach a shared CSV unannounced
 
         // The written CSV must parse back to the same rows, with the same width (every row padded to the widest).
         bool Valid(byte[] bytes, List<string[]> rows)

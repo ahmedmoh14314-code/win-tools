@@ -12,6 +12,7 @@ every file here (except this one) into `THIRD-PARTY-NOTICES.txt` in the installe
 | `qpdf/` | OpenSSL, statically linked into qpdf | 3.6.4 | Apache-2.0 | `share/openssl/copyright`, same archive |
 | `dotnet/` | .NET runtime and Windows Desktop runtime (self-contained in the installer) | 10.0.13 | MIT; the notices of the libraries they include | `LICENSE.TXT` and `THIRD-PARTY-NOTICES.TXT` of the runtime packs the payload is published with (Microsoft.NETCore.App.Runtime.win-x64, Microsoft.WindowsDesktop.App.Runtime.win-x64) |
 | `skiasharp/` | SkiaSharp and its native library (image worker) | 4.153.1 | MIT; the libraries in its notices file | `LICENSE.txt` of the SkiaSharp package; `THIRD-PARTY-NOTICES.txt` of SkiaSharp.NativeAssets.Win32 |
+| `markdig/` | Markdig (text worker, ADR-0033) | 1.4.0 | BSD-2-Clause | `license.txt` at tag 1.4.0 of github.com/xoofx/markdig |
 
 The Visual C++ runtime DLLs next to qpdf (`msvcp140.dll`, `vcruntime140.dll`, `vcruntime140_1.dll`) are files from
 Microsoft's Visual C++ Redistributable, which the qpdf project ships app-locally with its own build; WinTools passes them on

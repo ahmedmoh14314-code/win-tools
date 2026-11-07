@@ -22,6 +22,9 @@ internal static class Csv
     /// <summary>Excel's limits: rows and columns of a sheet, characters in a cell.</summary>
     public const int MaxRows = 1_048_576, MaxColumns = 16_384, MaxCellChars = 32_767;
 
+    /// <summary>The most characters one CSV may hold (the host reads each file again to check it).</summary>
+    public const int MaxWrittenChars = 200_000_000;
+
     /// <summary>A table that could not be read, with the reason in the user's words.</summary>
     public sealed class Problem(string message, bool limit = false) : Exception(message)
     {
@@ -134,11 +137,14 @@ internal static class Csv
     public static byte[] Write(IReadOnlyList<string[]> rows, char separator = ',')
     {
         var width = rows.Count == 0 ? 0 : rows.Max(r => r.Length);
+        // One cell at the far corner of a sheet would pad a million rows to 16,384 columns: refused before any is written.
+        if (width * (long)rows.Count > MaxWrittenChars) throw new Problem("A sheet is too large to write as CSV.", limit: true);
         var text = new StringBuilder();
         foreach (var row in rows)
         {
             for (var k = 0; k < width; k++)
             {
+                if (text.Length > MaxWrittenChars) throw new Problem("A sheet is too large to write as CSV.", limit: true); // one row of long cells
                 if (k > 0) text.Append(separator);
                 var v = k < row.Length ? row[k] : "";
                 if (NeedsQuotes(v, separator)) text.Append('"').Append(v.Replace("\"", "\"\"", StringComparison.Ordinal)).Append('"');
@@ -149,8 +155,12 @@ internal static class Csv
         return [0xEF, 0xBB, 0xBF, .. new UTF8Encoding(false).GetBytes(text.ToString())];
     }
 
+    /// <summary>
+    /// Also when it holds a semicolon or a tab: Excel with another list separator would split the field there, and what
+    /// follows ("x;=cmd|...") would be a cell of its own that no guard saw.
+    /// </summary>
     private static bool NeedsQuotes(string v, char separator) =>
-        v.Length > 0 && (v.AsSpan().IndexOfAny(separator, '"', '\r') >= 0 || v.Contains('\n', StringComparison.Ordinal) || char.IsWhiteSpace(v[0]) || char.IsWhiteSpace(v[^1]));
+        v.Length > 0 && (v.AsSpan().IndexOfAny(separator, '"', '\r') >= 0 || v.AsSpan().IndexOfAny('\n', ';', '\t') >= 0 || char.IsWhiteSpace(v[0]) || char.IsWhiteSpace(v[^1]));
 
     /// <summary>
     /// Whether a CSV field becomes a number in the workbook: an optional minus, digits without a leading zero (so "007"
