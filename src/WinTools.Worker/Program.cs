@@ -17,7 +17,8 @@ internal static class Program
         WinTools.Worker.Imaging.DecoderDiagnostics.Enable(); // before any codec loads
         using var input = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false), false, 4096);
         using var output = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
-        WorkerLoop.Run(input, output, request => ImageJobs.Run(request));
+        // PDF to images and text, and images to PDF, have their own jobs (ADR-0029); every other command is an image job.
+        WorkerLoop.Run(input, output, request => WinTools.Worker.Pdf.PdfRenderJobs.Runs(request.CapabilityId) ? WinTools.Worker.Pdf.PdfRenderJobs.Run(request) : ImageJobs.Run(request));
         return 0;
     }
 

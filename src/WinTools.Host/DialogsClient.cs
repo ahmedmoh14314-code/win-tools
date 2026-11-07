@@ -13,7 +13,7 @@ internal readonly record struct PickOutcome(PickEnd End, string? Id = null);
 /// <summary>A secret dialog's outcome (V2 PR 2.2); <see cref="Secret"/> is set only for <see cref="PickEnd.Picked"/>. Never logged.</summary>
 internal readonly record struct SecretOutcome(PickEnd End, string? Secret = null);
 
-/// <summary>The rename dialog's outcome (V2 PR 7.2); <see cref="Rule"/> is set only for <see cref="PickEnd.Picked"/>.</summary>
+/// <summary>The rename or form dialog's outcome (V2 PR 7.2); <see cref="Rule"/> (the answer) is set only for <see cref="PickEnd.Picked"/>.</summary>
 internal readonly record struct RenameOutcome(PickEnd End, string? Rule = null);
 
 /// <summary>
@@ -57,6 +57,15 @@ internal sealed class DialogsClient(string dialogsExe)
         if (end != PickEnd.Picked) return new(end);
         return WorkerProtocol.Deserialize<RenameResult>(line)?.Rule is { } rule && WinTools.Core.Files.RenameRule.Parse(rule) is not null
             ? new(PickEnd.Picked, rule) : new(PickEnd.Cancelled);
+    }
+
+    /// <summary>Asks a command's form (Trim, Split, Shift…): only an answer <see cref="Forms.Read"/> takes for that command counts.</summary>
+    public async Task<RenameOutcome> AskFormAsync(FormRequest request, CancellationToken cancellationToken = default)
+    {
+        var (end, line) = await AskAsync(WorkerProtocol.Serialize(request), cancellationToken).ConfigureAwait(false);
+        if (end != PickEnd.Picked) return new(end);
+        return WorkerProtocol.Deserialize<FormResult>(line)?.Answer is { } answer && Forms.Read(request.Form, answer) is not null
+            ? new(PickEnd.Picked, answer) : new(PickEnd.Cancelled);
     }
 
     /// <summary>One dialog: the request line in, the answer line out (Picked means "it answered").</summary>

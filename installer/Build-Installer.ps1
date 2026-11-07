@@ -50,6 +50,7 @@ foreach ($engine in 'qpdf.exe', 'qpdf30.dll', 'msvcp140.dll', 'vcruntime140.dll'
 foreach ($engine in 'ffmpeg.exe', 'ffprobe.exe', 'avcodec-62.dll', 'avdevice-62.dll', 'avfilter-11.dll', 'avformat-62.dll', 'avutil-60.dll', 'swresample-6.dll', 'swscale-9.dll', 'LICENSE.txt') {
     if (-not (Test-Path -LiteralPath (Join-Path $payload "ffmpeg\$engine"))) { throw "The media engine file ffmpeg\$engine is missing from the payload" }
 }
+if (-not (Test-Path -LiteralPath (Join-Path $payload 'pdfium\pdfium.dll'))) { throw 'The PDF rendering engine pdfium\pdfium.dll is missing from the payload' }
 
 # One notices file for everything bundled (V2 plan §8): each component's licence and notices, as its project ships them.
 $notices = [System.Text.StringBuilder]::new()

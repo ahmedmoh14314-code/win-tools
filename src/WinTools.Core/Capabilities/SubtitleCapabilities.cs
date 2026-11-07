@@ -6,7 +6,7 @@ namespace WinTools.Core.Capabilities;
 
 /// <summary>
 /// The Subtitles module (V2 PR 7.1, ADR-0024), run by the text worker: SRT ↔ WebVTT, timing shifts by fixed amounts
-/// from the ring (a custom offset needs the dialog, a later PR), a clean-up that rewrites the file as UTF-8 with uniform
+/// from the ring or by any amount typed in a form (Shift…), a clean-up that rewrites the file as UTF-8 with uniform
 /// line endings, and Subtitle info. Every output is a new file; the source is only read.
 /// </summary>
 public static class SubtitleCapabilities
@@ -15,6 +15,7 @@ public static class SubtitleCapabilities
     public const string ToVttId = "subtitles.to-vtt", ToSrtId = "subtitles.to-srt", CleanUpId = "subtitles.utf8", InfoId = "subtitles.info";
     public const string ShiftEarlier1Id = "subtitles.shift-minus-1000", ShiftEarlierHalfId = "subtitles.shift-minus-500";
     public const string ShiftLaterHalfId = "subtitles.shift-plus-500", ShiftLater1Id = "subtitles.shift-plus-1000";
+    public const string ShiftCustomId = "subtitles.shift-custom";
 
     /// <summary>The largest subtitle file read (a feature film's SRT is well under 1 MB).</summary>
     public const long MaxInputBytes = 20L << 20;
@@ -44,14 +45,17 @@ public static class SubtitleCapabilities
         Shift(ShiftEarlierHalfId, "Earlier 0.5 s", "Shown 0.5 s earlier"),
         Shift(ShiftLaterHalfId, "Later 0.5 s", "Shown 0.5 s later"),
         Shift(ShiftLater1Id, "Later 1 s", "Shown 1 s later"),
+        new(ShiftCustomId, "Shift…", "timing", Module, new InputRule(AnySubtitle), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+            Feedback: Words("Shifting", "shift", "Shifted"), Dialog: Jobs.DialogKinds.Form),
         new(InfoId, "Subtitle info", "tools", Module, new InputRule(AnySubtitle), CapabilityShape.PerFile, CapabilityOutput.Facts, LongRunning: false, Feedback: Words("Reading", "read", "Read")),
         new(CleanUpId, "Clean up (UTF-8)", "tools", Module, new InputRule(AnySubtitle), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: Words("Cleaning up", "clean up", "Saved as UTF-8", "Already clean UTF-8")),
     ];
 
-    /// <summary>The shift of a timing command, or null.</summary>
-    public static TimeSpan? ShiftOf(string id) => id switch
+    /// <summary>The shift of a timing command (Shift…: the form's answer), or null.</summary>
+    public static TimeSpan? ShiftOf(string id, string? answer = null) => id switch
     {
+        ShiftCustomId => Jobs.Forms.Read(id, answer)?.Get(Jobs.Forms.ShiftSeconds) is { } s ? TimeSpan.FromMilliseconds(Math.Round(s * 1000)) : null,
         ShiftEarlier1Id => TimeSpan.FromMilliseconds(-1000),
         ShiftEarlierHalfId => TimeSpan.FromMilliseconds(-500),
         ShiftLaterHalfId => TimeSpan.FromMilliseconds(500),
@@ -70,14 +74,14 @@ public static class SubtitleCapabilities
     public static SubtitleFormat FormatOf(string path) => FileKinds.IdentifyByName(path) == FileKinds.Vtt ? SubtitleFormat.Vtt : SubtitleFormat.Srt;
 
     /// <summary>Output names: "film.vtt" for a conversion, "film (1 s later).srt", "film (UTF-8).srt".</summary>
-    public static IEnumerable<string> Candidates(string id, string source, string? outputDirectory)
+    public static IEnumerable<string> Candidates(string id, string source, string? outputDirectory, string? answer = null)
     {
         var ext = OutputFormat(id, source) == SubtitleFormat.Vtt ? ".vtt" : ".srt";
         string? suffix = id switch
         {
             ToVttId or ToSrtId => null,
             CleanUpId => "UTF-8",
-            _ when ShiftOf(id) is { } by => $"{Math.Abs(by.TotalSeconds).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)} s {(by > TimeSpan.Zero ? "later" : "earlier")}",
+            _ when ShiftOf(id, answer) is { } by => $"{Math.Abs(by.TotalSeconds).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)} s {(by > TimeSpan.Zero ? "later" : "earlier")}",
             _ => throw new ArgumentException($"{id} writes no file.", nameof(id)),
         };
         return Output.OutputNaming.CandidatesWithExtension(source, ext, suffix, outputDirectory);
