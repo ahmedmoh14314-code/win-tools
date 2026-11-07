@@ -109,7 +109,7 @@
 - **No minimum LibreOffice version is enforced,** so an old one ignores the keys it lacks. If the canary shows a gap, a version check belongs here.
 
 ## Evaluator review
-One round (2026-11-07), with the reviewer's own runs of Markdig and qpdf, and LibreOffice's sources. Verdict before fixes: do not merge. Each fix below is a test.
+One round (2026-11-07), with the reviewer's own runs of Markdig and qpdf, and LibreOffice's sources. Verdict before fixes: do not merge. Most fixes below have a test. Three do not: the host's retry after a kill, the corrected reasons (LibreOffice not starting, a full temp disk), and the bomb limit on OpenDocument packages.
 - **Blocker, fixed:** To CSV read shared strings at one exact name and turned a bad index into an empty cell, so a valid package at `xl/SharedStrings.xml` lost all its text and still succeeded.
 - **Majors, fixed:**
   - a table with column alignment, and every grid table, always failed the page check;
