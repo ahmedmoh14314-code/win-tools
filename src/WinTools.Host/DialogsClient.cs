@@ -16,6 +16,10 @@ internal readonly record struct SecretOutcome(PickEnd End, string? Secret = null
 /// <summary>The rename or form dialog's outcome (V2 PR 7.2); <see cref="Rule"/> (the answer) is set only for <see cref="PickEnd.Picked"/>.</summary>
 internal readonly record struct RenameOutcome(PickEnd End, string? Rule = null);
 
+/// <summary>The folder window's outcome (ADR-0032); <see cref="Folder"/>, as the window answered it, only for
+/// <see cref="PickEnd.Picked"/>. The caller checks it before using it.</summary>
+internal readonly record struct FolderOutcome(PickEnd End, string? Folder = null);
+
 /// <summary>
 /// Starts the dialogs process (WinTools.Dialogs.exe) for one dialog and waits for its answer (V2 PR 1.3). The request
 /// goes on its stdin and the answer comes on its stdout, one JSON line each; it never receives file paths, which stay
@@ -78,6 +82,15 @@ internal sealed class DialogsClient(string dialogsExe)
         if (end != PickEnd.Picked) return new(end);
         return WorkerProtocol.Deserialize<OrganizeResult>(line)?.Answer is { } answer && PagePlan.Read(answer, request.Pages) is not null
             ? new(PickEnd.Picked, answer) : new(PickEnd.Cancelled);
+    }
+
+    /// <summary>Asks for a destination folder (Copy to, Move to; ADR-0032). An empty answer counts as cancelled; any other
+    /// is returned as given, for the caller to check (<see cref="WinTools.Core.Files.TransferPlan.Destination"/>).</summary>
+    public async Task<FolderOutcome> AskFolderAsync(FolderRequest request, CancellationToken cancellationToken = default)
+    {
+        var (end, line) = await AskAsync(WorkerProtocol.Serialize(request), cancellationToken).ConfigureAwait(false);
+        if (end != PickEnd.Picked) return new(end);
+        return WorkerProtocol.Deserialize<FolderResult>(line)?.Folder is { Length: > 0 } folder ? new(PickEnd.Picked, folder) : new(PickEnd.Cancelled);
     }
 
     /// <summary>One dialog: the request line in, the answer line out (Picked means "it answered").</summary>
