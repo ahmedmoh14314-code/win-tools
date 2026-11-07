@@ -1,17 +1,17 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace WinTools.Worker.Media;
+namespace WinTools.Worker;
 
 /// <summary>What one FFmpeg or ffprobe run returned: its exit code, what it printed (bounded), and whether it timed out.</summary>
-internal sealed record EngineRun(int ExitCode, string Output, string Errors, bool TimedOut)
+public sealed record EngineRun(int ExitCode, string Output, string Errors, bool TimedOut)
 {
     public bool Ok => !TimedOut && ExitCode == 0;
 }
 
 /// <summary>
-/// Runs the bundled FFmpeg and ffprobe (ADR-0028, LGPL build) as children of the media worker, as qpdf runs for the PDF
-/// worker (ADR-0022): arguments through <see cref="ProcessStartInfo.ArgumentList"/> only, never a shell or a command line
+/// Runs the bundled FFmpeg and ffprobe (ADR-0028, LGPL build) as children of the media worker, and of the image worker for
+/// HEIC and AVIF (ADR-0031), as qpdf runs for the PDF worker (ADR-0022): arguments through <see cref="ProcessStartInfo.ArgumentList"/> only, never a shell or a command line
 /// we assemble; a private environment (only what Windows needs); no window; a standard input closed at once; a time
 /// limit, after which the child and its tree are killed; output read up to <see cref="MaxOutputChars"/>.
 /// <para>
@@ -20,7 +20,7 @@ internal sealed record EngineRun(int ExitCode, string Output, string Errors, boo
 /// (a playlist, a reference) can reach the network. Paths are validated by the worker before they get here.
 /// </para>
 /// </summary>
-internal static class Ffmpeg
+public static class Ffmpeg
 {
     public const int MaxOutputChars = 256 * 1024;
 
