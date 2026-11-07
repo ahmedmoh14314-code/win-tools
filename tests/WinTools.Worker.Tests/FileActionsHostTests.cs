@@ -440,7 +440,7 @@ public sealed partial class FileActionsHostTests : IDisposable
         var dest = Path.Combine(_dir.Path, "dest");
         while (dest.Length < 300) dest = Path.Combine(dest, "وجهة بعيدة 😀 destination");
         Directory.CreateDirectory(dest);
-        Assert.True(src.Length > 300 && dest.Length > 300);
+        Assert.True(src.Length >= 300 && dest.Length >= 300); // well past 260 on any machine; the loops stop at 300 or just above
         var copied = await Run(Request(FilesCapabilities.CopyToId, src, dest));
         Assert.True(copied.Success, copied.Message);
         var moved = await Run(Request(FilesCapabilities.MoveToId, src, dest), new TransferHooks(CrossVolume: true));
