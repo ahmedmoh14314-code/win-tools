@@ -17,6 +17,7 @@ public static class PdfCapabilities
     public const string RotateRightId = "pdf.rotate-right", RotateLeftId = "pdf.rotate-left", Rotate180Id = "pdf.rotate-180";
     public const string OptimizeId = "pdf.optimize", LinearizeId = "pdf.linearize", RepairId = "pdf.repair";
     public const string ProtectId = "pdf.protect", UnprotectId = "pdf.unprotect";
+    public const string OrganizeId = "pdf.organize";
 
     /// <summary>The least an optimized copy must save to be kept: otherwise the PDF is reported as already optimized.</summary>
     public const double MinOptimizeSaving = 0.01;
@@ -42,6 +43,10 @@ public static class PdfCapabilities
     [
         new(MergeId, "Merge", "organize", Module, new InputRule(PdfOnly, MinCount: 2, MaxCount: MaxMergeInputs), CapabilityShape.Selection, CapabilityOutput.File,
             LongRunning: true, Feedback: Words("Merging", "merge", "Merged")),
+        // Organize pages (ADR-0029): thumbnails in a window to reorder, turn, delete, repeat or extract pages; qpdf writes the
+        // new PDF from the plan the window answers. Up to PdfRenderCapabilities.MaxPages pages.
+        new(OrganizeId, "Edit pages…", "organize", Module, new InputRule(PdfOnly, MaxCount: 1), CapabilityShape.PerFile, CapabilityOutput.File,
+            LongRunning: true, Feedback: Words("Saving the pages of", "save the pages of", "Pages saved"), Dialog: Jobs.DialogKinds.Organize),
         new(SplitId, "Split into pages", "organize", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.Folder,
             LongRunning: true, Feedback: Words("Splitting", "split", "Split into pages")),
         // Rotation is part of Organize: the ring keeps six groups now that a PDF also has Convert (ADR-0029).
@@ -69,8 +74,10 @@ public static class PdfCapabilities
     ];
 
     /// <summary>The text added to an output's name ("report (merged).pdf"), or the folder's for Split ("report (pages)").</summary>
-    public static string? NameSuffix(string capabilityId) => capabilityId switch
+    public static string? NameSuffix(string capabilityId, string? dialogAnswer = null) => capabilityId switch
     {
+        // Edit pages: "report (edited).pdf", or "report (selected pages).pdf" for an extract (its plan says which).
+        OrganizeId => dialogAnswer?.StartsWith("extract:", StringComparison.Ordinal) == true ? "selected pages" : "edited",
         MergeId => "merged",
         SplitId => "pages",
         RotateRightId => "rotated right",

@@ -29,7 +29,8 @@ internal static class PdfRenderJobs
         public ErrorCode Code { get; } = code;
     }
 
-    public static bool Runs(string? capabilityId) => PdfRenderCapabilities.Catalog.Any(c => c.Id == capabilityId);
+    public static bool Runs(string? capabilityId) =>
+        capabilityId == PdfRenderCapabilities.ThumbnailsId || PdfRenderCapabilities.Catalog.Any(c => c.Id == capabilityId);
 
     public static JobResult Run(JobRequest request)
     {
@@ -49,6 +50,7 @@ internal static class PdfRenderJobs
         try
         {
             return images ? ImagesToPdf(request)
+                : request.CapabilityId == PdfRenderCapabilities.ThumbnailsId ? Thumbnails(request)
                 : PdfRenderCapabilities.PageFormatOf(request.CapabilityId) is { } format ? ToImages(request, format)
                 : ToText(request, markdown: request.CapabilityId == PdfRenderCapabilities.ToMarkdownId);
         }
@@ -137,6 +139,32 @@ internal static class PdfRenderJobs
         {
             if (!committed) { try { Directory.Delete(staging, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
         }
+    }
+
+    /// <summary>
+    /// Organize pages' thumbnails: every page drawn <see cref="PdfRenderCapabilities.ThumbnailSide"/> pixels on its longer
+    /// side, as "page 001.png" and on, into the empty folder the host made for them in its own temporary folder (never next
+    /// to the user's files). Nothing else is written there; the count is the one fact.
+    /// </summary>
+    private static JobResult Thumbnails(JobRequest request)
+    {
+        var folder = request.OutputDirectory;
+        if (folder is null || !Directory.Exists(folder) || Directory.EnumerateFileSystemEntries(folder).Any())
+            throw new RenderFailure(ErrorCode.InvalidRequest, "Thumbnails go into an empty folder the host made for them.");
+        using var doc = OpenPdf(request.Inputs[0]);
+        if (doc.PageCount > PdfRenderCapabilities.MaxPages)
+            throw new RenderFailure(ErrorCode.LimitExceeded, $"Edit pages takes PDFs of up to {PdfRenderCapabilities.MaxPages} pages; this one has {doc.PageCount:N0}.");
+        for (var i = 0; i < doc.PageCount; i++)
+        {
+            var size = doc.PageSize(i) ?? throw new RenderFailure(ErrorCode.DecodeFailed, $"Page {i + 1} could not be read.");
+            var fit = PdfRenderCapabilities.ThumbnailSide / Math.Max(1, Math.Max(size.Width, size.Height));
+            var (w, h) = (Math.Max(1, (int)Math.Round(size.Width * fit)), Math.Max(1, (int)Math.Round(size.Height * fit)));
+            var pixels = doc.Render(i, w, h) ?? throw new RenderFailure(ErrorCode.DecodeFailed, $"Page {i + 1} could not be drawn.");
+            var bytes = ImagePipeline.Encode(new RasterImage(w, h, pixels, 96, 96), ImageFormat.Png);
+            using var fs = new FileStream(Path.Combine(folder, PdfRenderCapabilities.ThumbnailName(i)), FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            fs.Write(bytes);
+        }
+        return new JobResult(request.Id, true, ErrorCode.None, null, [], [new("Pages", doc.PageCount.ToString(CultureInfo.InvariantCulture))]);
     }
 
     /// <summary>One page as an encoded picture, decoded again to check it; a page larger than the image limits is drawn smaller.</summary>

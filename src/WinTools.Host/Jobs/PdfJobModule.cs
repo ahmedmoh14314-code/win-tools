@@ -38,6 +38,7 @@ internal sealed class PdfJobModule : IJobModule
                 PdfCapabilities.InfoId => request.Inputs.Count == 1 && result.Outputs.Count == 0 && JobFacts.AreShowable(result.Facts) && result.Facts.Any(f => f.Label == "Type"),
                 PdfCapabilities.SplitId => request.Inputs.Count == 1 && SplitHoldsUp(request, result),
                 PdfCapabilities.MergeId => request.Inputs.Count >= 2 && FileHoldsUp(request, result),
+                PdfCapabilities.OrganizeId => request.Inputs.Count == 1 && request.Parameters is { Count: 1 } && FileHoldsUp(request, result),
                 PdfCapabilities.OptimizeId or PdfCapabilities.LinearizeId or PdfCapabilities.RepairId
                     or PdfCapabilities.ProtectId or PdfCapabilities.UnprotectId => request.Inputs.Count == 1 && FileHoldsUp(request, result),
                 _ when PdfCapabilities.RotationOf(request.CapabilityId) is not null => request.Inputs.Count == 1 && FileHoldsUp(request, result),
@@ -53,7 +54,8 @@ internal sealed class PdfJobModule : IJobModule
         // The name first: only a path the naming policy allows is ever opened, whatever the worker claims. Merge is named
         // after the first file in its own order, not the drop's.
         var nameSource = request.CapabilityId == PdfCapabilities.MergeId ? PdfCapabilities.MergeOrder(request.Inputs)[0] : request.Inputs[0];
-        var allowed = OutputNaming.CandidatesWithExtension(nameSource, ".pdf", PdfCapabilities.NameSuffix(request.CapabilityId), request.OutputDirectory);
+        var answer = request.Parameters is { } p && p.TryGetValue(DialogParameters.Name, out var a) ? a : null;
+        var allowed = OutputNaming.CandidatesWithExtension(nameSource, ".pdf", PdfCapabilities.NameSuffix(request.CapabilityId, answer), request.OutputDirectory);
         if (!allowed.Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
         using var file = new FileStream(output.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
         var head = new byte[5];

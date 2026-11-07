@@ -84,6 +84,7 @@ public sealed class DialogsProcessTests
     {
         "secret" => WorkerProtocol.Serialize(new SecretRequest("Test", Confirm: false, 200, 200)),
         "rename" => WorkerProtocol.Serialize(new RenameRequest("Test", ["a.txt", "b.txt"], 200, 200)),
+        "organize" => WorkerProtocol.Serialize(new OrganizeRequest("Test", AppContext.BaseDirectory, 3, 200, 200)), // no pictures there: empty boxes
         _ => WorkerProtocol.Serialize(new FormRequest("Test", what, 200, 200)),
     };
 
@@ -96,6 +97,7 @@ public sealed class DialogsProcessTests
     [InlineData("media.trim")]
     [InlineData("secret")]
     [InlineData("rename")]
+    [InlineData("organize")]
     public async Task Cancel_closes_a_dialog_and_answers_cancelled(string what)
     {
         using var p = Start("en", RequestFor(what));

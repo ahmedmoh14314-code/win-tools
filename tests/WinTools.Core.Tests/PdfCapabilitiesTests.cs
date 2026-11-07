@@ -1,6 +1,7 @@
 using WinTools.Core.Capabilities;
 using WinTools.Core.Files;
 using WinTools.Core.Interaction;
+using WinTools.Core.Jobs;
 using WinTools.Core.Output;
 
 namespace WinTools.Core.Tests;
@@ -28,16 +29,35 @@ public sealed class PdfCapabilitiesTests
     [Fact]
     public void One_pdf_gets_split_optimize_rotate_and_info_but_not_merge()
     {
-        Assert.Equal(["pdfrender.to-png", "pdfrender.to-jpg", "pdfrender.to-txt", "pdfrender.to-md", "pdf.split", "pdf.rotate-right", "pdf.rotate-left", "pdf.rotate-180", "pdf.optimize", "pdf.linearize", "pdf.repair", "pdf.info", "pdf.protect", "pdf.unprotect",
+        Assert.Equal(["pdfrender.to-png", "pdfrender.to-jpg", "pdfrender.to-txt", "pdfrender.to-md", "pdf.organize", "pdf.split", "pdf.rotate-right", "pdf.rotate-left", "pdf.rotate-180", "pdf.optimize", "pdf.linearize", "pdf.repair", "pdf.info", "pdf.protect", "pdf.unprotect",
             "files.sha256", "files.copy-path", "files.copy-name", "files.rename", "files.copy-folder", "archive.zip"], Ids(@"C:\p\a.pdf"));
         var menu = RadialMenu.Build(Resolver, [@"C:\p\a.pdf"]);
         // Protect since V2 PR 2.2; Tools first and Actions since the wheel PR; Convert, and the rotations in Organize, since PDFium (ADR-0029).
         Assert.Equal(["Convert", "Tools", "Organize", "Optimize", "Protect", "Actions"], menu.Select(g => g.Label));
         Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD"], menu[0].Commands.Select(c => c.Label));
-        Assert.Equal(["Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], menu[2].Commands.Select(c => c.Label));
+        Assert.Equal(["Edit pages…", "Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], menu[2].Commands.Select(c => c.Label));
         Assert.Equal(["Smaller (lossless)", "Fast web view", "Repair"], menu[3].Commands.Select(c => c.Label));
         Assert.Equal(["PDF info", "SHA-256", "Folder path"], menu[1].Commands.Select(c => c.Label));
         Assert.Equal(["Copy path", "Copy name", "Rename files", "Add to ZIP"], menu[^1].Commands.Select(c => c.Label));
+    }
+
+    [Fact]
+    public void A_page_plan_has_one_spelling_and_fits_its_pdf()
+    {
+        var plan = PagePlan.Read("organize:3,1@90,1", 3)!;
+        Assert.Equal([new PlannedPage(3, 0), new PlannedPage(1, 90), new PlannedPage(1, 0)], plan.Pages);
+        Assert.False(plan.Extract);
+        Assert.Equal("organize:3,1@90,1", plan.Format());
+        Assert.True(PagePlan.Read("extract:2@270", 2)!.Extract);
+        foreach (var bad in new[] { "organize:4", "organize:0", "organize:01", "organize:1@0", "organize:1@45", "organize:1@-90", "organize:", "organize:1,,2",
+            "organize:1 ,2", "keep:1", "organize:+1", "extract:1@90@90", "Organize:1", null })
+            Assert.Null(PagePlan.Read(bad, 3));
+        Assert.Null(PagePlan.Read("organize:" + string.Join(',', Enumerable.Repeat("1", PagePlan.MaxEntries + 1)), 3));
+        Assert.True(PagePlan.Read("organize:1,2,3", 3)!.KeepsEverything(3));
+        Assert.False(PagePlan.Read("extract:1,2,3", 3)!.KeepsEverything(3));
+        Assert.False(PagePlan.Read("organize:1,2", 3)!.KeepsEverything(3));
+        Assert.Equal("edited", PdfCapabilities.NameSuffix(PdfCapabilities.OrganizeId, "organize:1"));
+        Assert.Equal("selected pages", PdfCapabilities.NameSuffix(PdfCapabilities.OrganizeId, "extract:1"));
     }
 
     [Fact]
