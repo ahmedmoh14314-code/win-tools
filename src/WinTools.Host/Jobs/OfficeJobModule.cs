@@ -22,18 +22,20 @@ internal sealed class OfficeJobModule : IJobModule
     {
         if (result.Outputs is null || result.Facts is null) return false;
         if (!result.Success) return result.Outputs.Count == 0 && result.Facts.Count == 0 && result.Error != ErrorCode.None;
-        if (request.CapabilityId != OfficeCapabilities.ToPdfId || request.Inputs is not [var source]) return false;
+        if (OfficeCapabilities.Catalog.All(c => c.Id != request.CapabilityId) || request.Inputs is not [var source]) return false;
+        var pdf = OfficeCapabilities.OutputExtension(request.CapabilityId) == ".pdf";
         if (result.Outputs is not [{ Sha256: { Length: 64 } claimed } output]) return false;
         if (!JobFacts.AreShowable(result.Facts) || result.Facts.Where(f => !f.Notice).ToArray() is not [{ Label: "Pages" } pages]
             || !int.TryParse(pages.Value, NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var n) || n < 1) return false;
         try
         {
-            if (!OfficeCapabilities.Candidates(source, request.OutputDirectory).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
+            if (!OfficeCapabilities.Candidates(request.CapabilityId, source, request.OutputDirectory).Contains(output.Path, StringComparer.OrdinalIgnoreCase)) return false;
             var info = new FileInfo(output.Path);
             if (!info.Exists || info.LinkTarget is not null || info.Length > OfficeCapabilities.MaxOutputBytes) return false;
             using var file = new FileStream(output.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
-            var head = new byte[5];
-            if (file.ReadAtLeast(head, head.Length, throwOnEndOfStream: false) != head.Length || !head.AsSpan().SequenceEqual("%PDF-"u8)) return false;
+            var expected = pdf ? "%PDF-"u8 : "PK\u0003\u0004"u8;
+            var head = new byte[expected.Length];
+            if (file.ReadAtLeast(head, head.Length, throwOnEndOfStream: false) != head.Length || !head.AsSpan().SequenceEqual(expected)) return false;
             file.Position = 0;
             return string.Equals(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(file)), claimed, StringComparison.OrdinalIgnoreCase);
         }

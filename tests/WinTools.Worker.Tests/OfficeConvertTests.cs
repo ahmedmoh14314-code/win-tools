@@ -379,4 +379,86 @@ public sealed class OfficeConvertTests : IDisposable
         }
         return false;
     }
+
+    // ---- PDF to Word and PowerPoint: LibreOffice's PDF import ----
+
+    private string Pdf(string name = "report.pdf")
+    {
+        var p = Path.Combine(_dir.Path, name);
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "samples", "pages-3.pdf"), p);
+        return p;
+    }
+
+    private static Action<string> Writes(string name, (string, string)[] parts) => work => OoxmlSamples.Write(Path.Combine(work, "out", name), parts);
+
+    [Fact]
+    public void A_pdf_becomes_a_checked_word_document_through_writers_pdf_import()
+    {
+        var pdf = Pdf();
+        var before = Hash.Of(pdf);
+        var office = new FakeOffice(Writes("source.docx", OoxmlSamples.Docx("<w:p><w:r><w:t>hi</w:t></w:r></w:p>")));
+        var request = new JobRequest(Guid.NewGuid().ToString("N"), OfficeCapabilities.PdfToWordId, [pdf]);
+        var r = Run(request, office);
+        Assert.True(r.Success, r.Message);
+        Assert.Equal("report.docx", Path.GetFileName(r.OutputPath));
+        Assert.Equal("3", r.Facts.Single(f => f.Label == "Pages").Value);
+        Assert.Contains("--infilter=writer_pdf_import", office.Arguments!);
+        Assert.Equal(["--convert-to", "docx:MS Word 2007 XML", "--outdir", "out", Path.Combine("in", "source.pdf")], office.Arguments!.TakeLast(5));
+        Assert.Equal(before, Hash.Of(pdf));
+        Assert.Equal(["report.docx", "report.pdf"], _dir.Names());
+    }
+
+    [Fact]
+    public void A_pdf_becomes_a_deck_through_impress_pdf_import()
+    {
+        var office = new FakeOffice(Writes("source.pptx", OoxmlSamples.Pptx("<a:t>one</a:t>")));
+        var request = new JobRequest(Guid.NewGuid().ToString("N"), OfficeCapabilities.PdfToPowerPointId, [Pdf()]);
+        var r = Run(request, office);
+        Assert.True(r.Success, r.Message);
+        Assert.Equal("report.pptx", Path.GetFileName(r.OutputPath));
+        Assert.Contains("--infilter=impress_pdf_import", office.Arguments!);
+        Assert.Contains("pptx:Impress MS PowerPoint 2007 XML", office.Arguments!);
+    }
+
+    [Fact]
+    public void A_word_document_that_does_not_open_as_one_is_not_saved()
+    {
+        var office = new FakeOffice(work => File.WriteAllBytes(Path.Combine(work, "out", "source.docx"), [0x50, 0x4B, 0x03, 0x04, .. new byte[200]]));
+        var r = Run(new JobRequest(Guid.NewGuid().ToString("N"), OfficeCapabilities.PdfToWordId, [Pdf()]), office);
+        Assert.False(r.Success);
+        Assert.Equal(ErrorCode.OutputValidationFailed, r.Error);
+        Assert.Equal(["report.pdf"], _dir.Names());
+    }
+
+    [Fact]
+    public void A_password_protected_pdf_never_reaches_LibreOffice()
+    {
+        var plain = Pdf("plain.pdf");
+        var run = InstalledOfficeEngine.Instance.Qpdf(["--encrypt", "u", "o", "256", "--", "plain.pdf", "locked.pdf"], _dir.Path);
+        Assert.True(run is { ExitCode: 0 }, run?.Output);
+        File.Delete(plain);
+        var office = new FakeOffice(_ => throw new InvalidOperationException("LibreOffice was asked"));
+        var r = OfficeJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), OfficeCapabilities.PdfToWordId, [Path.Combine(_dir.Path, "locked.pdf")]), office, TimeSpan.FromSeconds(30));
+        Assert.Equal(ErrorCode.PasswordRequired, r.Error);
+        Assert.Null(office.Arguments);
+    }
+
+    [Fact]
+    public void A_file_named_pdf_that_is_not_one_never_reaches_LibreOffice()
+    {
+        var fake = Path.Combine(_dir.Path, "fake.pdf");
+        File.WriteAllText(fake, "not a pdf at all, just text");
+        var office = new FakeOffice(_ => throw new InvalidOperationException("LibreOffice was asked"));
+        var r = OfficeJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), OfficeCapabilities.PdfToWordId, [fake]), office, TimeSpan.FromSeconds(30));
+        Assert.Equal(ErrorCode.ContentMismatch, r.Error);
+        Assert.Null(office.Arguments);
+    }
+
+    [Fact]
+    public void To_pdf_never_takes_a_pdf_and_to_word_takes_nothing_else()
+    {
+        var office = new FakeOffice(WritesPdf);
+        Assert.Equal(ErrorCode.UnsupportedContent, OfficeJobs.Run(Request(Pdf()), office, TimeSpan.FromSeconds(30)).Error);
+        Assert.Equal(ErrorCode.UnsupportedContent, OfficeJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), OfficeCapabilities.PdfToWordId, [Docx()]), office, TimeSpan.FromSeconds(30)).Error);
+    }
 }

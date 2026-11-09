@@ -35,8 +35,22 @@ internal static class Soffice
     /// <summary>The input's fixed name in the work folder ("source.docx"): the extension the kind gives, lower case.</summary>
     public static string InputName(string extension) => "source" + extension.ToLowerInvariant();
 
-    /// <summary>The PDF LibreOffice writes for that input: "out\source.pdf".</summary>
-    public static string OutputName => Path.Combine(OutputFolder, "source.pdf");
+    /// <summary>The file LibreOffice writes for that input: "out\source.pdf" (or ".docx", ".pptx").</summary>
+    public static string OutputName(string extension = ".pdf") => Path.Combine(OutputFolder, "source" + extension);
+
+    /// <summary>
+    /// What "--convert-to" asks for: "pdf", or for a PDF's import the export filter named outright, so Writer or Impress
+    /// never guesses it: "docx:MS Word 2007 XML", "pptx:Impress MS PowerPoint 2007 XML".
+    /// </summary>
+    public static string ConvertTo(string capabilityId) => capabilityId switch
+    {
+        WinTools.Core.Capabilities.OfficeCapabilities.PdfToWordId => "docx:MS Word 2007 XML",
+        WinTools.Core.Capabilities.OfficeCapabilities.PdfToPowerPointId => "pptx:Impress MS PowerPoint 2007 XML",
+        _ => "pdf",
+    };
+
+    /// <summary>The import filter of a PDF: Writer's PDF import for To Word, Impress's for To PowerPoint.</summary>
+    public static string PdfImportFilter(string capabilityId) => "--infilter=" + (capabilityId == WinTools.Core.Capabilities.OfficeCapabilities.PdfToPowerPointId ? "impress_pdf_import" : "writer_pdf_import");
 
     /// <summary>
     /// The import filter of an input's extension: the node names in LibreOffice's filter/source/config/fragments/filters.
@@ -64,7 +78,7 @@ internal static class Soffice
     public static string ProfileUrl(string workFolder) =>
         new Uri(Path.Combine(workFolder, ProfileFolder) + Path.DirectorySeparatorChar).AbsoluteUri.TrimEnd('/').Replace("$", "%24", StringComparison.Ordinal);
 
-    public static IReadOnlyList<string> Arguments(string workFolder, string inputName, string inputFilter)
+    public static IReadOnlyList<string> Arguments(string workFolder, string inputName, string inputFilter, string convertTo = "pdf")
     {
         List<string> args =
         [
@@ -72,7 +86,7 @@ internal static class Soffice
             "--headless", "--invisible", "--nologo", "--nodefault", "--nofirststartwizard", "--norestore", "--nolockcheck",
         ];
         args.Add(inputFilter);
-        args.AddRange(["--convert-to", "pdf", "--outdir", OutputFolder, Path.Combine(InputFolder, inputName)]);
+        args.AddRange(["--convert-to", convertTo, "--outdir", OutputFolder, Path.Combine(InputFolder, inputName)]);
         return args;
     }
 

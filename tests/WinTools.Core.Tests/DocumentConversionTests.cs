@@ -50,6 +50,17 @@ public sealed class DocumentConversionTests
     }
 
     [Fact]
+    public void A_pdf_offers_to_word_and_to_powerpoint_only_when_LibreOffice_was_found()
+    {
+        Assert.DoesNotContain(OfficeCapabilities.PdfToWordId, Ids(CapabilityResolver.For(null), @"C:\p\a.pdf"));
+        var r = CapabilityResolver.For(null, WithLibreOffice);
+        Assert.Contains(OfficeCapabilities.PdfToWordId, Ids(r, @"C:\p\a.pdf"));
+        Assert.Contains(OfficeCapabilities.PdfToPowerPointId, Ids(r, @"C:\p\a.pdf", @"C:\p\b.pdf"));
+        Assert.DoesNotContain(OfficeCapabilities.PdfToWordId, Ids(r, @"C:\p\a.docx"));
+        Assert.DoesNotContain(OfficeCapabilities.PdfToWordId, Ids(r, @"C:\p\a.pdf", @"C:\p\b.docx"));
+    }
+
+    [Fact]
     public void To_pdf_is_never_offered_for_markdown_pdf_or_images_and_works_on_mixed_documents()
     {
         var r = CapabilityResolver.For(null, WithLibreOffice);

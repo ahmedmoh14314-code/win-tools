@@ -15,6 +15,9 @@ public static class OfficeCapabilities
     public const string Module = "office";
     public const string ToPdfId = "office.to-pdf";
 
+    /// <summary>A PDF opened by LibreOffice's PDF import and saved as a Word document or a PowerPoint deck.</summary>
+    public const string PdfToWordId = "office.pdf-to-word", PdfToPowerPointId = "office.pdf-to-powerpoint";
+
     /// <summary>The largest document handed to LibreOffice.</summary>
     public const long MaxInputBytes = 200L << 20;
 
@@ -37,16 +40,40 @@ public static class OfficeCapabilities
         [Jobs.ErrorCode.OutputValidationFailed] = "LibreOffice did not produce a readable PDF. Nothing was saved.",
     };
 
+    /// <summary>What a failed PDF import says.</summary>
+    private static readonly IReadOnlyDictionary<Jobs.ErrorCode, string> FromPdfReasons = new Dictionary<Jobs.ErrorCode, string>
+    {
+        [Jobs.ErrorCode.UnsupportedOperation] = "LibreOffice was not found. Install it (it is free), then try again.",
+        [Jobs.ErrorCode.EncodeFailed] = "LibreOffice could not convert this PDF. Nothing was saved.",
+        [Jobs.ErrorCode.OutputValidationFailed] = "LibreOffice did not produce a readable document. Nothing was saved.",
+    };
+
+    private static readonly InputRule PdfInput = new(new HashSet<string>(StringComparer.Ordinal) { FileKinds.Pdf.Id });
+
     public static IReadOnlyList<CapabilityDescriptor> Catalog { get; } =
     [
+        new(PdfToWordId, "To Word", "convert", Module, PdfInput, CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+            Feedback: new("Converting", "convert", "Converted to Word", "Nothing needed doing", "PDF", "PDFs", Reasons: FromPdfReasons),
+            Requires: ExternalPrograms.LibreOffice),
+        new(PdfToPowerPointId, "To PowerPoint", "convert", Module, PdfInput, CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+            Feedback: new("Converting", "convert", "Converted to PowerPoint", "Nothing needed doing", "PDF", "PDFs", Reasons: FromPdfReasons),
+            Requires: ExternalPrograms.LibreOffice),
         new(ToPdfId, "To PDF", "convert", Module, new InputRule(Inputs), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Converting", "convert", "Converted to PDF", "Nothing needed doing", "document", "documents", Reasons: OwnReasons),
             Requires: ExternalPrograms.LibreOffice),
     ];
 
-    /// <summary>To PDF's output names: "report.pdf", "report (1).pdf"...</summary>
-    public static IEnumerable<string> Candidates(string source, string? outputDirectory) =>
-        Output.OutputNaming.CandidatesWithExtension(source, ".pdf", null, outputDirectory);
+    /// <summary>The extension a command writes: ".pdf", ".docx" or ".pptx".</summary>
+    public static string OutputExtension(string capabilityId) => capabilityId switch
+    {
+        PdfToWordId => ".docx",
+        PdfToPowerPointId => ".pptx",
+        _ => ".pdf",
+    };
+
+    /// <summary>A command's output names: "report.pdf", "report (1).pdf"... ("report.docx" for To Word).</summary>
+    public static IEnumerable<string> Candidates(string capabilityId, string source, string? outputDirectory) =>
+        Output.OutputNaming.CandidatesWithExtension(source, OutputExtension(capabilityId), null, outputDirectory);
 
     /// <summary>The start of every conversion's private folder, which the host also sweeps when it starts.</summary>
     public const string WorkFolderPrefix = "wintools-office-";
