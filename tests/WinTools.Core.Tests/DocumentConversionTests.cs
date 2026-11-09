@@ -50,6 +50,32 @@ public sealed class DocumentConversionTests
     }
 
     [Fact]
+    public void Microsoft_office_alone_offers_to_pdf_and_word_alone_offers_pdf_to_word_but_never_to_powerpoint()
+    {
+        var r = CapabilityResolver.For(null, ExternalPrograms.Set(null, [ExternalPrograms.PowerPoint]));
+        Assert.Contains(OfficeCapabilities.ToPdfId, Ids(r, @"C:\p\a.pptx"));
+        Assert.DoesNotContain(OfficeCapabilities.PdfToWordId, Ids(r, @"C:\p\a.pdf"));
+        var w = CapabilityResolver.For(null, ExternalPrograms.Set(null, [ExternalPrograms.Word]));
+        Assert.Contains(OfficeCapabilities.PdfToWordId, Ids(w, @"C:\p\a.pdf"));
+        Assert.DoesNotContain(OfficeCapabilities.PdfToPowerPointId, Ids(w, @"C:\p\a.pdf"));
+        Assert.Empty(ExternalPrograms.Set(null, ["notepad"]));
+    }
+
+    [Fact]
+    public void Microsoft_office_is_found_by_its_app_paths_entries_only_as_a_local_program()
+    {
+        var keys = new Dictionary<(RegistryRoot, bool, string), string>
+        {
+            [(RegistryRoot.LocalMachine, false, MicrosoftOfficeLocator.AppPathKey("powerpnt.exe"))] = @"C:\Program Files\Microsoft Office\Root\Office16\POWERPNT.EXE",
+            [(RegistryRoot.LocalMachine, false, MicrosoftOfficeLocator.AppPathKey("winword.exe"))] = @"\\server\share\WINWORD.EXE",
+            [(RegistryRoot.CurrentUser, false, MicrosoftOfficeLocator.AppPathKey("excel.exe"))] = @"C:\Tools\notexcel.exe",
+        };
+        var found = MicrosoftOfficeLocator.Find((root, wow, key) => keys.GetValueOrDefault((root, wow, key)), _ => true);
+        Assert.Equal([ExternalPrograms.PowerPoint], found);
+        Assert.Empty(MicrosoftOfficeLocator.Find((root, wow, key) => keys.GetValueOrDefault((root, wow, key)), _ => false));
+    }
+
+    [Fact]
     public void A_pdf_offers_to_word_and_to_powerpoint_only_when_LibreOffice_was_found()
     {
         Assert.DoesNotContain(OfficeCapabilities.PdfToWordId, Ids(CapabilityResolver.For(null), @"C:\p\a.pdf"));
@@ -96,12 +122,12 @@ public sealed class DocumentConversionTests
             UiText.Use("ar");
             var toPdf = r.Catalog.Single(c => c.Id == OfficeCapabilities.ToPdfId);
             var words = LocalWords.For(toPdf);
-            Assert.Equal("لم يُعثر على LibreOffice. ثبّته (مجاني) ثم حاول مرة أخرى.", FeedbackText.Reason(Jobs.ErrorCode.UnsupportedOperation, words));
+            Assert.Equal("لا يوجد في هذا الجهاز برنامج يفتح هذا المستند: ثبّت Microsoft Office أو LibreOffice (مجاني).", FeedbackText.Reason(Jobs.ErrorCode.UnsupportedOperation, words));
             Assert.Equal("جداول", LocalWords.For(r.Catalog.Single(c => c.Id == DocumentCapabilities.ToXlsxId)).Nouns);
             Assert.Equal("أُضيفت ' قبل الخلايا التي تبدأ بـ = + - @ ليعرضها Excel نصًا ولا ينفّذها.",
                 UiText.Say("Cells starting with = + - @ got a leading ' so Excel shows them as text and does not run them."));
             UiText.Use("en");
-            Assert.Equal("LibreOffice was not found. Install it (it is free), then try again.", FeedbackText.Reason(Jobs.ErrorCode.UnsupportedOperation, LocalWords.For(toPdf)));
+            Assert.Equal("No program on this PC can open this document: install Microsoft Office or LibreOffice (free).", FeedbackText.Reason(Jobs.ErrorCode.UnsupportedOperation, LocalWords.For(toPdf)));
         }
         finally { UiText.Use("en"); }
     }

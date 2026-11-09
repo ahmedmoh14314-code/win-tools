@@ -35,17 +35,17 @@ public static class OfficeCapabilities
     /// <summary>What a failed conversion says, in the module's own words.</summary>
     private static readonly IReadOnlyDictionary<Jobs.ErrorCode, string> OwnReasons = new Dictionary<Jobs.ErrorCode, string>
     {
-        [Jobs.ErrorCode.UnsupportedOperation] = "LibreOffice was not found. Install it (it is free), then try again.",
-        [Jobs.ErrorCode.EncodeFailed] = "LibreOffice could not turn this document into a PDF. Nothing was saved.",
-        [Jobs.ErrorCode.OutputValidationFailed] = "LibreOffice did not produce a readable PDF. Nothing was saved.",
+        [Jobs.ErrorCode.UnsupportedOperation] = "No program on this PC can open this document: install Microsoft Office or LibreOffice (free).",
+        [Jobs.ErrorCode.EncodeFailed] = "The document could not be turned into a PDF. Nothing was saved.",
+        [Jobs.ErrorCode.OutputValidationFailed] = "The PDF written was not readable. Nothing was saved.",
     };
 
     /// <summary>What a failed PDF import says.</summary>
     private static readonly IReadOnlyDictionary<Jobs.ErrorCode, string> FromPdfReasons = new Dictionary<Jobs.ErrorCode, string>
     {
-        [Jobs.ErrorCode.UnsupportedOperation] = "LibreOffice was not found. Install it (it is free), then try again.",
-        [Jobs.ErrorCode.EncodeFailed] = "LibreOffice could not convert this PDF. Nothing was saved.",
-        [Jobs.ErrorCode.OutputValidationFailed] = "LibreOffice did not produce a readable document. Nothing was saved.",
+        [Jobs.ErrorCode.UnsupportedOperation] = "No program on this PC can open this PDF: install Microsoft Word or LibreOffice (free).",
+        [Jobs.ErrorCode.EncodeFailed] = "This PDF could not be converted. Nothing was saved.",
+        [Jobs.ErrorCode.OutputValidationFailed] = "The document written was not readable. Nothing was saved.",
     };
 
     private static readonly InputRule PdfInput = new(new HashSet<string>(StringComparer.Ordinal) { FileKinds.Pdf.Id });
@@ -54,13 +54,13 @@ public static class OfficeCapabilities
     [
         new(PdfToWordId, "To Word", "convert", Module, PdfInput, CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Converting", "convert", "Converted to Word", "Nothing needed doing", "PDF", "PDFs", Reasons: FromPdfReasons),
-            Requires: ExternalPrograms.LibreOffice),
+            Requires: ExternalPrograms.PdfImporter),
         new(PdfToPowerPointId, "To PowerPoint", "convert", Module, PdfInput, CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Converting", "convert", "Converted to PowerPoint", "Nothing needed doing", "PDF", "PDFs", Reasons: FromPdfReasons),
             Requires: ExternalPrograms.LibreOffice),
         new(ToPdfId, "To PDF", "convert", Module, new InputRule(Inputs), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Converting", "convert", "Converted to PDF", "Nothing needed doing", "document", "documents", Reasons: OwnReasons),
-            Requires: ExternalPrograms.LibreOffice),
+            Requires: ExternalPrograms.AnyOffice),
     ];
 
     /// <summary>The extension a command writes: ".pdf", ".docx" or ".pptx".</summary>

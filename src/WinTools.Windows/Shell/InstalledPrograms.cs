@@ -14,7 +14,10 @@ public static class InstalledPrograms
         [Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)]);
 
     /// <summary>What the resolver takes: the names of the programs found.</summary>
-    public static IReadOnlySet<string> Found() => ExternalPrograms.Set(LibreOffice());
+    public static IReadOnlySet<string> Found() => ExternalPrograms.Set(LibreOffice(), MicrosoftOffice());
+
+    /// <summary>The Microsoft Office programs found (Word, Excel, PowerPoint).</summary>
+    public static IReadOnlySet<string> MicrosoftOffice() => MicrosoftOfficeLocator.Find(ReadDefault, File.Exists);
 
     /// <summary>A key's default value, read only; null when there is no such key or it cannot be read.</summary>
     public static string? ReadDefault(RegistryRoot root, bool wow32, string key)

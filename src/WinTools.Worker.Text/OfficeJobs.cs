@@ -19,6 +19,12 @@ internal interface IOfficeEngine
 
     ProgramRun Convert(string soffice, IReadOnlyList<string> arguments, string workFolder, IReadOnlyDictionary<string, string> environment, TimeSpan timeout);
 
+    /// <summary>The Microsoft Office programs installed (<see cref="ExternalPrograms.Word"/> and the others).</summary>
+    IReadOnlySet<string> Microsoft();
+
+    /// <summary>One conversion through Word, Excel or PowerPoint (<see cref="MsOffice"/>): exit code 0 is done.</summary>
+    ProgramRun ConvertWithMicrosoft(string program, string input, string output, bool toPdf, TimeSpan timeout);
+
     /// <summary>qpdf on the PDF LibreOffice wrote (the bundled one, ADR-0022), or null when it is not there.</summary>
     ProgramRun? Qpdf(IReadOnlyList<string> arguments, string workFolder);
 }
@@ -31,6 +37,11 @@ internal sealed class InstalledOfficeEngine : IOfficeEngine
     private static readonly string QpdfPath = Path.Combine(AppContext.BaseDirectory, "qpdf", "qpdf.exe");
 
     public string? Locate() => InstalledLibreOffice.Find();
+
+    public IReadOnlySet<string> Microsoft() => InstalledLibreOffice.MicrosoftOffice();
+
+    public ProgramRun ConvertWithMicrosoft(string program, string input, string output, bool toPdf, TimeSpan timeout) =>
+        MsOffice.Convert(program, input, output, toPdf, timeout);
 
     public ProgramRun Convert(string soffice, IReadOnlyList<string> arguments, string workFolder, IReadOnlyDictionary<string, string> environment, TimeSpan timeout) =>
         ChildProcess.Run(soffice, arguments, workFolder, environment, timeout);
@@ -106,9 +117,13 @@ internal static class OfficeJobs
         var atDestination = false; // past this point an IO failure is the destination's, not the temp folder's
         try
         {
-            var soffice = engine.Locate();
-            if (soffice is null) return JobResult.Fail(id, ErrorCode.UnsupportedOperation, "LibreOffice was not found on this PC.");
             var fromPdf = kind == FileKinds.Pdf;
+            // The user's Microsoft Office first, for what it opens; LibreOffice otherwise. PDF to PowerPoint is LibreOffice's alone.
+            var microsoft = capability.Id == OfficeCapabilities.PdfToPowerPointId ? null : MsOffice.ProgramFor(kind == FileKinds.Csv ? ".xlsx" : kind.Extensions[0], fromPdf);
+            if (microsoft is not null && !engine.Microsoft().Contains(microsoft)) microsoft = null;
+            var soffice = microsoft is null ? engine.Locate() : null;
+            if (microsoft is null && soffice is null) return JobResult.Fail(id, ErrorCode.UnsupportedOperation, "Neither Microsoft Office nor LibreOffice was found on this PC.");
+            var who = microsoft is null ? "LibreOffice" : "Microsoft Office";
             var outExtension = OfficeCapabilities.OutputExtension(capability.Id);
             var source = Check(path, kind, out var text);
             switch (ExclusiveDirectory.Create(work))
@@ -140,14 +155,16 @@ internal static class OfficeJobs
             if (fromPdf) sourcePages = CheckPdf(engine, work, Path.Combine(Soffice.InputFolder, inputName));
 
             var filter = fromPdf ? Soffice.PdfImportFilter(capability.Id) : Soffice.InputFilter(extension);
-            var run = engine.Convert(soffice, Soffice.Arguments(work, inputName, filter, Soffice.ConvertTo(capability.Id)), work,
-                Soffice.Environment(work, System.Environment.GetEnvironmentVariable), timeout);
-            if (run.TimedOut) throw new OfficeFailure(ErrorCode.WorkerTimeout, "LibreOffice took too long and was stopped.");
-            if (run.ExitCode != 0) throw new OfficeFailure(ErrorCode.EncodeFailed, $"LibreOffice stopped with code {run.ExitCode}.");
+            var run = microsoft is not null
+                ? engine.ConvertWithMicrosoft(microsoft, input, Path.Combine(work, Soffice.OutputName(outExtension)), toPdf: !fromPdf, timeout)
+                : engine.Convert(soffice!, Soffice.Arguments(work, inputName, filter, Soffice.ConvertTo(capability.Id)), work,
+                    Soffice.Environment(work, System.Environment.GetEnvironmentVariable), timeout);
+            if (run.TimedOut) throw new OfficeFailure(ErrorCode.WorkerTimeout, $"{who} took too long and was stopped.");
+            if (run.ExitCode != 0) throw new OfficeFailure(ErrorCode.EncodeFailed, $"{who} could not convert it ({run.ExitCode} {run.Output}).");
             var pdf = Path.Combine(work, Soffice.OutputName(outExtension));
             var written = Directory.GetFileSystemEntries(Path.Combine(work, Soffice.OutputFolder));
-            if (written.Length == 0) throw new OfficeFailure(ErrorCode.EncodeFailed, fromPdf ? "LibreOffice did not write a document (the PDF may be damaged)." : "LibreOffice did not write a PDF (the document may be damaged or protected).");
-            if (written is not [var only] || !string.Equals(only, pdf, StringComparison.OrdinalIgnoreCase)) throw new OfficeFailure(ErrorCode.OutputValidationFailed, "LibreOffice wrote something unexpected; nothing was saved.");
+            if (written.Length == 0) throw new OfficeFailure(ErrorCode.EncodeFailed, fromPdf ? $"{who} did not write a document (the PDF may be damaged)." : $"{who} did not write a PDF (the document may be damaged or protected).");
+            if (written is not [var only] || !string.Equals(only, pdf, StringComparison.OrdinalIgnoreCase)) throw new OfficeFailure(ErrorCode.OutputValidationFailed, $"{who} wrote something unexpected; nothing was saved.");
             var pages = fromPdf ? ValidatePackage(pdf, outExtension, sourcePages) : Validate(engine, work, pdf);
             var hash = Sha256Of(pdf);
             atDestination = true;
@@ -165,7 +182,7 @@ internal static class OfficeJobs
         catch (Csv.Problem ex) { return JobResult.Fail(id, ex.Limit ? ErrorCode.LimitExceeded : ErrorCode.DecodeFailed, ex.Message); }
         catch (Exception ex) when (ex is InvalidDataException or System.Xml.XmlException) { return JobResult.Fail(id, ErrorCode.DecodeFailed, "The document's package is damaged."); }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return JobResult.Fail(id, ErrorCode.SourceNotFound, "The file is no longer there."); }
-        catch (System.ComponentModel.Win32Exception) { return JobResult.Fail(id, ErrorCode.EncodeFailed, "LibreOffice is installed but could not be started."); }
+        catch (System.ComponentModel.Win32Exception) { return JobResult.Fail(id, ErrorCode.EncodeFailed, "The office program is installed but could not be started."); }
         catch (Exception ex) when (!atDestination && ex is UnauthorizedAccessException or IOException) { return JobResult.Fail(id, ex.HResult == DiskFull ? ErrorCode.DiskFull : ErrorCode.Internal, "The temporary folder could not be used."); }
         catch (UnauthorizedAccessException) { return JobResult.Fail(id, ErrorCode.OutputDirectoryNotWritable, "The destination folder is not writable."); }
         catch (IOException ex) { return JobResult.Fail(id, ex.HResult == DiskFull ? ErrorCode.DiskFull : ErrorCode.OutputDirectoryNotWritable, $"Writing failed (0x{ex.HResult:X8})."); }

@@ -13,6 +13,9 @@ public static class InstalledLibreOffice
     public static string? Find() => LibreOfficeLocator.Find(ReadDefault, File.Exists,
         [Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)]);
 
+    /// <summary>The Microsoft Office programs found, by the same reads as the host's.</summary>
+    public static IReadOnlySet<string> MicrosoftOffice() => MicrosoftOfficeLocator.Find(ReadDefault, File.Exists);
+
     private static string? ReadDefault(RegistryRoot root, bool wow32, string key)
     {
         try

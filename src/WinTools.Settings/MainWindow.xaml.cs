@@ -210,11 +210,12 @@ public partial class MainWindow : Window
     private void BuildFeatures()
     {
         var libreOffice = WinTools.Windows.Shell.InstalledPrograms.LibreOffice();
-        var catalog = CapabilityResolver.For(null, ExternalPrograms.Set(libreOffice)).Catalog;
+        var programs = ExternalPrograms.Set(libreOffice, WinTools.Windows.Shell.InstalledPrograms.MicrosoftOffice());
+        var catalog = CapabilityResolver.For(null, programs).Catalog;
         foreach (var group in catalog.GroupBy(c => c.Module))
         {
             FeatureList.Children.Add(new TextBlock { Text = UiText.TOr("module." + group.Key, group.Key), Style = (Style)FindResource("SectionTitle") });
-            if (group.Key == DocumentCapabilities.Module && libreOffice is null)
+            if (group.Key == DocumentCapabilities.Module && !programs.Contains(ExternalPrograms.AnyOffice))
                 FeatureList.Children.Add(new TextBlock { Text = UiText.T("features.libreOfficeMissing"), Style = (Style)FindResource("Hint"), Margin = new Thickness(0, 0, 0, 6) });
             var wrap = new WrapPanel();
             foreach (var c in group)

@@ -7,12 +7,56 @@ namespace WinTools.Core.Capabilities;
 /// </summary>
 public static class ExternalPrograms
 {
-    /// <summary>LibreOffice (MPL-2.0), for Office documents to PDF.</summary>
+    /// <summary>LibreOffice (MPL-2.0), for Office documents to PDF and a PDF's import.</summary>
     public const string LibreOffice = "libreoffice";
 
-    /// <summary>The set the resolver takes, from what was found.</summary>
-    public static IReadOnlySet<string> Set(string? libreOffice) =>
-        libreOffice is null ? new HashSet<string>(StringComparer.Ordinal) : new HashSet<string>(StringComparer.Ordinal) { LibreOffice };
+    /// <summary>The user's Microsoft Word, Excel and PowerPoint, run through their own automation (ADR-0033 addendum).</summary>
+    public const string Word = "msword", Excel = "msexcel", PowerPoint = "mspowerpoint";
+
+    /// <summary>To PDF: LibreOffice or any Microsoft Office program.</summary>
+    public const string AnyOffice = "office-any";
+
+    /// <summary>PDF to Word: LibreOffice or Microsoft Word.</summary>
+    public const string PdfImporter = "pdf-importer";
+
+    /// <summary>The set the resolver takes, from what was found: the programs, and what they make possible together.</summary>
+    public static IReadOnlySet<string> Set(string? libreOffice, IEnumerable<string>? microsoft = null)
+    {
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        if (libreOffice is not null) set.Add(LibreOffice);
+        foreach (var app in microsoft ?? []) if (app is Word or Excel or PowerPoint) set.Add(app);
+        if (set.Count > 0) set.Add(AnyOffice);
+        if (set.Contains(LibreOffice) || set.Contains(Word)) set.Add(PdfImporter);
+        return set;
+    }
+}
+
+/// <summary>
+/// Which Microsoft Office programs the user has: each one's App Paths entry (the current user's, then the machine's; 64-
+/// then 32-bit view), counted only as a fully qualified local path to that program that exists. A few reads, no search.
+/// </summary>
+public static class MicrosoftOfficeLocator
+{
+    public static IReadOnlyDictionary<string, string> Executables { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        [ExternalPrograms.Word] = "winword.exe",
+        [ExternalPrograms.Excel] = "excel.exe",
+        [ExternalPrograms.PowerPoint] = "powerpnt.exe",
+    };
+
+    public static string AppPathKey(string executable) => @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\" + executable;
+
+    public static IReadOnlySet<string> Find(Func<RegistryRoot, bool, string, string?> readDefault, Func<string, bool> exists)
+    {
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (app, exe) in Executables)
+            foreach (var root in new[] { RegistryRoot.CurrentUser, RegistryRoot.LocalMachine })
+                foreach (var wow32 in new[] { false, true })
+                    if (readDefault(root, wow32, AppPathKey(exe)) is { } value && LibreOfficeLocator.Unquoted(value) is { } path
+                        && LibreOfficeLocator.IsLocalProgram(path, exe) && exists(path))
+                        found.Add(app);
+        return found;
+    }
 }
 
 /// <summary>A registry root the locator reads (the reading itself is Windows code outside Core).</summary>
@@ -59,12 +103,15 @@ public static class LibreOfficeLocator
     }
 
     /// <summary>A fully qualified local path (a drive letter, no share, no device path, no "..") named soffice.exe.</summary>
-    public static bool IsAcceptable(string path) =>
+    public static bool IsAcceptable(string path) => IsLocalProgram(path, "soffice.exe");
+
+    /// <summary>A fully qualified local path (a drive letter, no share, no device path, no "..") named <paramref name="executable"/>.</summary>
+    public static bool IsLocalProgram(string path, string executable) =>
         path.Length is > 3 and < 260 && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] == '\\'
         && path.IndexOfAny([.. Path.GetInvalidPathChars(), '*', '?', '"', '/']) < 0 && !path.Contains(@"\..\", StringComparison.Ordinal)
-        && !path.Contains(@"\.\", StringComparison.Ordinal) && string.Equals(Path.GetFileName(path), "soffice.exe", StringComparison.OrdinalIgnoreCase);
+        && !path.Contains(@"\.\", StringComparison.Ordinal) && string.Equals(Path.GetFileName(path), executable, StringComparison.OrdinalIgnoreCase);
 
-    private static string? Unquoted(string value)
+    internal static string? Unquoted(string value)
     {
         var v = value.Trim();
         if (v.Length >= 2 && v[0] == '"' && v[^1] == '"') v = v[1..^1].Trim();

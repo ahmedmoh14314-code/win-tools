@@ -21,8 +21,25 @@ public sealed class OfficeConvertTests : IDisposable
     public void Dispose() => _dir.Dispose();
 
     /// <summary>A stand-in for LibreOffice: what it was asked, and what it does in the work folder.</summary>
-    private sealed class FakeOffice(Action<string>? act, string? soffice = @"C:\Program Files\LibreOffice\program\soffice.exe", bool timeOut = false, int exitCode = 0) : IOfficeEngine
+    private sealed class FakeOffice(Action<string>? act, string? soffice = @"C:\Program Files\LibreOffice\program\soffice.exe", bool timeOut = false, int exitCode = 0, string[]? microsoft = null) : IOfficeEngine
     {
+        public string? MicrosoftProgram { get; private set; }
+        public bool? MicrosoftToPdf { get; private set; }
+
+        public IReadOnlySet<string> Microsoft() => new HashSet<string>(microsoft ?? []);
+
+        public ProgramRun ConvertWithMicrosoft(string program, string input, string output, bool toPdf, TimeSpan timeout)
+        {
+            (MicrosoftProgram, MicrosoftToPdf) = (program, toPdf);
+            WorkerFolderOf(input);
+            Input = File.ReadAllBytes(input);
+            if (timeOut) return new ProgramRun(-1, "", TimedOut: true);
+            act?.Invoke(WorkFolder!);
+            return new ProgramRun(exitCode, "", TimedOut: false);
+        }
+
+        private void WorkerFolderOf(string input) => WorkFolder = Path.GetDirectoryName(Path.GetDirectoryName(input));
+
         public IReadOnlyList<string>? Arguments { get; private set; }
         public IReadOnlyDictionary<string, string>? Environment { get; private set; }
         public string? Profile { get; private set; }
@@ -460,5 +477,66 @@ public sealed class OfficeConvertTests : IDisposable
         var office = new FakeOffice(WritesPdf);
         Assert.Equal(ErrorCode.UnsupportedContent, OfficeJobs.Run(Request(Pdf()), office, TimeSpan.FromSeconds(30)).Error);
         Assert.Equal(ErrorCode.UnsupportedContent, OfficeJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), OfficeCapabilities.PdfToWordId, [Docx()]), office, TimeSpan.FromSeconds(30)).Error);
+    }
+
+    // ---- Microsoft Office first, when it is installed ----
+
+    [Theory]
+    [InlineData("deck.pptx", "mspowerpoint")]
+    [InlineData("report.docx", "msword")]
+    public void Microsoft_office_converts_what_it_opens_and_LibreOffice_is_not_asked(string name, string program)
+    {
+        var path = Path.Combine(_dir.Path, name);
+        OoxmlSamples.Write(path, name.EndsWith(".pptx", StringComparison.Ordinal) ? OoxmlSamples.Pptx("<a:t>one</a:t>") : OoxmlSamples.Docx("<w:p/>"));
+        var office = new FakeOffice(WritesPdf, soffice: null, microsoft: ["msword", "msexcel", "mspowerpoint"]);
+        var r = Run(Request(path), office);
+        Assert.True(r.Success, r.Message);
+        Assert.Equal(program, office.MicrosoftProgram);
+        Assert.True(office.MicrosoftToPdf);
+        Assert.Null(office.Arguments); // LibreOffice was never run
+        Assert.Equal(File.ReadAllBytes(path), office.Input); // the work folder's copy, not the original
+        Assert.Equal(Path.ChangeExtension(name, ".pdf"), Path.GetFileName(r.OutputPath));
+    }
+
+    [Fact]
+    public void Word_turns_a_pdf_into_a_word_document()
+    {
+        var office = new FakeOffice(Writes("source.docx", OoxmlSamples.Docx("<w:p/>")), soffice: null, microsoft: ["msword"]);
+        var r = Run(new JobRequest(Guid.NewGuid().ToString("N"), OfficeCapabilities.PdfToWordId, [Pdf()]), office);
+        Assert.True(r.Success, r.Message);
+        Assert.Equal("msword", office.MicrosoftProgram);
+        Assert.False(office.MicrosoftToPdf);
+    }
+
+    [Fact]
+    public void Without_the_program_for_its_kind_LibreOffice_is_used_and_without_either_nothing_runs()
+    {
+        var withLibre = new FakeOffice(WritesPdf, microsoft: ["msword"]);
+        var deck = Path.Combine(_dir.Path, "deck.pptx");
+        OoxmlSamples.Write(deck, OoxmlSamples.Pptx("<a:t>one</a:t>"));
+        Assert.True(Run(Request(deck), withLibre).Success);
+        Assert.Null(withLibre.MicrosoftProgram);
+        Assert.NotNull(withLibre.Arguments);
+
+        var none = new FakeOffice(WritesPdf, soffice: null, microsoft: ["msword"]);
+        Assert.Equal(ErrorCode.UnsupportedOperation, OfficeJobs.Run(Request(deck), none, TimeSpan.FromSeconds(30)).Error);
+    }
+
+    [Fact]
+    public void Pdf_to_powerpoint_is_never_given_to_microsoft_office()
+    {
+        var office = new FakeOffice(Writes("source.pptx", OoxmlSamples.Pptx("<a:t>one</a:t>")), soffice: null, microsoft: ["msword", "mspowerpoint"]);
+        var r = OfficeJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), OfficeCapabilities.PdfToPowerPointId, [Pdf()]), office, TimeSpan.FromSeconds(30));
+        Assert.Equal(ErrorCode.UnsupportedOperation, r.Error);
+        Assert.Null(office.MicrosoftProgram);
+    }
+
+    [Fact]
+    public void A_microsoft_office_run_past_its_limit_saves_nothing()
+    {
+        var office = new FakeOffice(WritesPdf, soffice: null, timeOut: true, microsoft: ["msword"]);
+        var r = Run(Request(Docx()), office);
+        Assert.Equal(ErrorCode.WorkerTimeout, r.Error);
+        Assert.Equal(["report.docx"], _dir.Names());
     }
 }
