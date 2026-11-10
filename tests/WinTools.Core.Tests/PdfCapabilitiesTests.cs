@@ -29,13 +29,13 @@ public sealed class PdfCapabilitiesTests
     [Fact]
     public void One_pdf_gets_split_optimize_rotate_and_info_but_not_merge()
     {
-        Assert.Equal(["pdfrender.to-png", "pdfrender.to-jpg", "pdfrender.to-txt", "pdfrender.to-md", "pdf.organize", "pdf.split", "pdf.rotate-right", "pdf.rotate-left", "pdf.rotate-180", "pdf.optimize", "pdf.linearize", "pdf.repair", "pdf.info", "pdf.protect", "pdf.unprotect",
+        Assert.Equal(["pdfrender.to-png", "pdfrender.to-jpg", "pdfrender.to-txt", "pdfrender.to-md", "pdfrender.to-powerpoint", "pdf.organize", "pdf.split", "pdf.rotate-right", "pdf.rotate-left", "pdf.rotate-180", "pdf.optimize", "pdf.linearize", "pdf.repair", "pdf.info", "pdf.protect", "pdf.unprotect",
             "files.sha256", "files.copy-path", "files.move-to", "files.rename", "files.copy-to", "files.copy-name", "files.copy-folder", "files.show-in-folder", "files.terminal",
             "archive.zip"], Ids(@"C:\p\a.pdf"));
         var menu = RadialMenu.Build(Resolver, [@"C:\p\a.pdf"]);
         // Protect since V2 PR 2.2; Tools first and Actions since the wheel PR; Convert, and the rotations in Organize, since PDFium (ADR-0029).
         Assert.Equal(["Convert", "Tools", "Organize", "Optimize", "Protect", "Actions"], menu.Select(g => g.Label));
-        Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD"], menu[0].Commands.Select(c => c.Label));
+        Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD", "To PowerPoint"], menu[0].Commands.Select(c => c.Label));
         Assert.Equal(["Edit pages…", "Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], menu[2].Commands.Select(c => c.Label));
         Assert.Equal(["Smaller (lossless)", "Fast web view", "Repair"], menu[3].Commands.Select(c => c.Label));
         Assert.Equal(["PDF info", "SHA-256", "Folder path"], menu[1].Commands.Select(c => c.Label));

@@ -272,7 +272,7 @@ public sealed class PdfRenderTests : IDisposable
         var resolver = CapabilityResolver.For(null);
         var menu = RadialMenu.Build(resolver, [@"C:\p\a.pdf"]);
         Assert.Equal(["Convert", "Tools", "Organize", "Optimize", "Protect", "Actions"], menu.Select(g => g.Label));
-        Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD"], menu[0].Commands.Select(c => c.Label));
+        Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD", "To PowerPoint"], menu[0].Commands.Select(c => c.Label));
         Assert.Equal(["Edit pages…", "Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], menu.Single(g => g.Label == "Organize").Commands.Select(c => c.Label));
         Assert.Contains("To PDF", RadialMenu.Build(resolver, [@"C:\p\a.jpg", @"C:\p\b.png"])[0].Commands.Select(c => c.Label));
     }
@@ -285,5 +285,57 @@ public sealed class PdfRenderTests : IDisposable
         var results = await client.RunAsync([Request(PdfRenderCapabilities.ToTextId, pdf), Request(PdfRenderCapabilities.ToPngId, pdf)], CancellationToken.None);
         Assert.All(results, r => Assert.True(r.Success, r.Message));
         Assert.Equal(["doc (PNG)", "doc.pdf", "doc.txt"], Names());
+    }
+
+    // ---- PDF to PowerPoint ----
+
+    [Fact]
+    public void A_pdf_becomes_a_deck_of_one_picture_slide_per_page_and_the_original_is_untouched()
+    {
+        var pdf = _dir.Write("report.pdf", TextPdf(["Hello page 1"], ["Hello page 2"], ["Hello page 3"]));
+        var before = Hash(pdf);
+        var r = RunBelieved(Request(PdfRenderCapabilities.ToPowerPointId, pdf));
+        Assert.Equal("report.pptx", Path.GetFileName(r.OutputPath));
+        Assert.Equal(before, Hash(pdf));
+        Assert.Equal(["report.pdf", "report.pptx"], Names());
+        using var zip = System.IO.Compression.ZipFile.OpenRead(r.OutputPath!);
+        Assert.Equal(SlideDeckWriter.PartNames(3).Order(StringComparer.Ordinal), zip.Entries.Select(e => e.FullName).Order(StringComparer.Ordinal));
+        var presentation = new StreamReader(zip.GetEntry("ppt/presentation.xml")!.Open()).ReadToEnd();
+        Assert.Contains("<p:sldSz cx=\"7772400\" cy=\"10058400\"/>", presentation, StringComparison.Ordinal); // 8.5 × 11 in
+        Assert.Equal(3, System.Text.RegularExpressions.Regex.Count(presentation, "<p:sldId "));
+        using var picture = zip.GetEntry("ppt/media/image2.jpeg")!.Open();
+        using var copy = new MemoryStream();
+        picture.CopyTo(copy);
+        var (image, _) = ImagePipeline.Decode(copy.ToArray(), Core.Files.ImageFormat.Jpeg);
+        Assert.Equal((1275, 1650), (image.Width, image.Height));
+        foreach (var e in zip.Entries.Where(e => e.FullName.EndsWith(".rels", StringComparison.Ordinal)))
+            Assert.DoesNotContain("External", new StreamReader(e.Open()).ReadToEnd(), StringComparison.Ordinal); // nothing outside the file
+    }
+
+    [Fact]
+    public void A_deck_the_host_cannot_find_as_written_is_not_believed()
+    {
+        var pdf = _dir.Write("report.pdf", TextPdf(["one"]));
+        var request = Request(PdfRenderCapabilities.ToPowerPointId, pdf);
+        var r = RunBelieved(request);
+        File.WriteAllBytes(r.OutputPath!, [0x50, 0x4B, 0x03, 0x04, 1, 2, 3]);
+        Assert.False(PdfRenderJobModule.Instance.IsBelievable(request, r));
+    }
+
+    [Theory]
+    [InlineData(612, 792, 7772400, 10058400)] // Letter, as it is
+    [InlineData(20, 20, 914400, 914400)] // too small: grown to PowerPoint's 1 inch
+    [InlineData(14400, 7200, 51206400, 25603200)] // too large: shrunk to 56 inches, in proportion
+    public void The_slide_is_the_first_pages_size_within_powerpoints_limits(double w, double h, long cx, long cy) =>
+        Assert.Equal((cx, cy), SlideDeckWriter.SlideSize(w, h));
+
+    [Fact]
+    public void A_page_of_another_shape_is_centred_on_the_slide_at_its_own_proportions()
+    {
+        var (x, y, cx, cy) = SlideDeckWriter.Fit(7772400, 10058400, 792, 612); // landscape page on a portrait slide
+        Assert.Equal(7772400, cx);
+        Assert.Equal(0, x);
+        Assert.Equal((10058400 - cy) / 2, y);
+        Assert.Equal(612.0 / 792, (double)cy / cx, 3);
     }
 }

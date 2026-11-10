@@ -51,6 +51,7 @@ internal static class PdfRenderJobs
         {
             return images ? ImagesToPdf(request)
                 : request.CapabilityId == PdfRenderCapabilities.ThumbnailsId ? Thumbnails(request)
+                : request.CapabilityId == PdfRenderCapabilities.ToPowerPointId ? ToPowerPoint(request)
                 : PdfRenderCapabilities.PageFormatOf(request.CapabilityId) is { } format ? ToImages(request, format)
                 : ToText(request, markdown: request.CapabilityId == PdfRenderCapabilities.ToMarkdownId);
         }
@@ -180,6 +181,56 @@ internal static class PdfRenderJobs
         var bytes = ImagePipeline.Encode(new RasterImage(pw, ph, pixels, dpi, dpi), format);
         ImagePipeline.Validate(bytes, format, pw, ph);
         return bytes;
+    }
+
+    // ---- PDF to PowerPoint ----
+
+    /// <summary>
+    /// Every page drawn as a JPEG (as To JPG draws it) and placed on a slide of its own (<see cref="SlideDeckWriter"/>). The
+    /// deck is read back before it is kept: every part it should hold and nothing else, each picture a JPEG of the page.
+    /// </summary>
+    private static JobResult ToPowerPoint(JobRequest request)
+    {
+        var path = request.Inputs[0];
+        using var doc = OpenPdf(path);
+        var pages = Math.Min(doc.PageCount, PdfRenderCapabilities.MaxPages);
+        var slides = new List<SlideDeckWriter.Slide>(pages);
+        long total = 0;
+        for (var i = 0; i < pages; i++)
+        {
+            var size = doc.PageSize(i) ?? throw new RenderFailure(ErrorCode.DecodeFailed, $"Page {i + 1} could not be read.");
+            var jpeg = RenderPage(doc, i, ImageFormat.Jpeg);
+            if ((total += jpeg.Length) > MaxDeckBytes) throw new RenderFailure(ErrorCode.LimitExceeded, $"The deck would be larger than {MaxDeckBytes >> 20} MB.");
+            slides.Add(new(jpeg, size.Width, size.Height));
+        }
+        var bytes = SlideDeckWriter.Write(slides);
+        var notices = new List<JobFact> { new("Pages", pages.ToString("N0", CultureInfo.InvariantCulture), Notice: true) };
+        if (doc.PageCount > pages) notices.Add(new("Pages", $"The first {pages} of {doc.PageCount}", Notice: true));
+        return CommitFile(request, path, bytes, PdfRenderCapabilities.Candidates(request.CapabilityId, path, request.OutputDirectory),
+            check: b => CheckDeck(b, slides), notices);
+    }
+
+    /// <summary>The most picture bytes one deck holds (it is built in memory).</summary>
+    private const long MaxDeckBytes = 600L << 20;
+
+    private static void CheckDeck(byte[] bytes, List<SlideDeckWriter.Slide> slides)
+    {
+        try
+        {
+            using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(bytes), System.IO.Compression.ZipArchiveMode.Read);
+            var expected = SlideDeckWriter.PartNames(slides.Count);
+            if (zip.Entries.Count != expected.Count || zip.Entries.Any(e => !expected.Contains(e.FullName)))
+                throw new RenderFailure(ErrorCode.OutputValidationFailed, "The deck did not check out; nothing was saved.");
+            for (var i = 0; i < slides.Count; i++)
+            {
+                using var s = zip.GetEntry($"ppt/media/image{i + 1}.jpeg")!.Open();
+                using var copy = new MemoryStream();
+                s.CopyTo(copy);
+                if (!copy.ToArray().AsSpan().SequenceEqual(slides[i].Jpeg))
+                    throw new RenderFailure(ErrorCode.OutputValidationFailed, "The deck did not check out; nothing was saved.");
+            }
+        }
+        catch (InvalidDataException) { throw new RenderFailure(ErrorCode.OutputValidationFailed, "The deck did not check out; nothing was saved."); }
     }
 
     // ---- PDF to text ----

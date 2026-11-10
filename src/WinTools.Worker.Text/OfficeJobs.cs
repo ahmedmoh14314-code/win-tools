@@ -118,8 +118,8 @@ internal static class OfficeJobs
         try
         {
             var fromPdf = kind == FileKinds.Pdf;
-            // The user's Microsoft Office first, for what it opens; LibreOffice otherwise. PDF to PowerPoint is LibreOffice's alone.
-            var microsoft = capability.Id == OfficeCapabilities.PdfToPowerPointId ? null : MsOffice.ProgramFor(kind == FileKinds.Csv ? ".xlsx" : kind.Extensions[0], fromPdf);
+            // The user's Microsoft Office first, for what it opens; LibreOffice otherwise.
+            var microsoft = MsOffice.ProgramFor(kind == FileKinds.Csv ? ".xlsx" : kind.Extensions[0], fromPdf);
             if (microsoft is not null && !engine.Microsoft().Contains(microsoft)) microsoft = null;
             var soffice = microsoft is null ? engine.Locate() : null;
             if (microsoft is null && soffice is null) return JobResult.Fail(id, ErrorCode.UnsupportedOperation, "Neither Microsoft Office nor LibreOffice was found on this PC.");

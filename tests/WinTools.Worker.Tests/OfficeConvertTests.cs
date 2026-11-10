@@ -426,18 +426,6 @@ public sealed class OfficeConvertTests : IDisposable
     }
 
     [Fact]
-    public void A_pdf_becomes_a_deck_through_impress_pdf_import()
-    {
-        var office = new FakeOffice(Writes("source.pptx", OoxmlSamples.Pptx("<a:t>one</a:t>")));
-        var request = new JobRequest(Guid.NewGuid().ToString("N"), OfficeCapabilities.PdfToPowerPointId, [Pdf()]);
-        var r = Run(request, office);
-        Assert.True(r.Success, r.Message);
-        Assert.Equal("report.pptx", Path.GetFileName(r.OutputPath));
-        Assert.Contains("--infilter=impress_pdf_import", office.Arguments!);
-        Assert.Contains("pptx:Impress MS PowerPoint 2007 XML", office.Arguments!);
-    }
-
-    [Fact]
     public void A_word_document_that_does_not_open_as_one_is_not_saved()
     {
         var office = new FakeOffice(work => File.WriteAllBytes(Path.Combine(work, "out", "source.docx"), [0x50, 0x4B, 0x03, 0x04, .. new byte[200]]));
@@ -520,15 +508,6 @@ public sealed class OfficeConvertTests : IDisposable
 
         var none = new FakeOffice(WritesPdf, soffice: null, microsoft: ["msword"]);
         Assert.Equal(ErrorCode.UnsupportedOperation, OfficeJobs.Run(Request(deck), none, TimeSpan.FromSeconds(30)).Error);
-    }
-
-    [Fact]
-    public void Pdf_to_powerpoint_is_never_given_to_microsoft_office()
-    {
-        var office = new FakeOffice(Writes("source.pptx", OoxmlSamples.Pptx("<a:t>one</a:t>")), soffice: null, microsoft: ["msword", "mspowerpoint"]);
-        var r = OfficeJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), OfficeCapabilities.PdfToPowerPointId, [Pdf()]), office, TimeSpan.FromSeconds(30));
-        Assert.Equal(ErrorCode.UnsupportedOperation, r.Error);
-        Assert.Null(office.MicrosoftProgram);
     }
 
     [Fact]
