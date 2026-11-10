@@ -13,6 +13,9 @@ public static class ExternalPrograms
     /// <summary>The user's Microsoft Word, Excel and PowerPoint, run through their own automation (ADR-0033 addendum).</summary>
     public const string Word = "msword", Excel = "msexcel", PowerPoint = "mspowerpoint";
 
+    /// <summary>Microsoft Edge, part of Windows: prints a web page to PDF, headless, with scripts and the network off.</summary>
+    public const string Edge = "msedge";
+
     /// <summary>To PDF: LibreOffice or any Microsoft Office program.</summary>
     public const string AnyOffice = "office-any";
 
@@ -24,8 +27,8 @@ public static class ExternalPrograms
     {
         var set = new HashSet<string>(StringComparer.Ordinal);
         if (libreOffice is not null) set.Add(LibreOffice);
-        foreach (var app in microsoft ?? []) if (app is Word or Excel or PowerPoint) set.Add(app);
-        if (set.Count > 0) set.Add(AnyOffice);
+        foreach (var app in microsoft ?? []) if (app is Word or Excel or PowerPoint or Edge) set.Add(app);
+        if (set.Contains(LibreOffice) || set.Contains(Word) || set.Contains(Excel) || set.Contains(PowerPoint)) set.Add(AnyOffice);
         if (set.Contains(LibreOffice) || set.Contains(Word)) set.Add(PdfImporter);
         return set;
     }
@@ -42,6 +45,7 @@ public static class MicrosoftOfficeLocator
         [ExternalPrograms.Word] = "winword.exe",
         [ExternalPrograms.Excel] = "excel.exe",
         [ExternalPrograms.PowerPoint] = "powerpnt.exe",
+        [ExternalPrograms.Edge] = "msedge.exe",
     };
 
     public static string AppPathKey(string executable) => @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\" + executable;

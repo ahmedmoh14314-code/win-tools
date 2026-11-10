@@ -22,6 +22,9 @@ internal interface IOfficeEngine
     /// <summary>The Microsoft Office programs installed (<see cref="ExternalPrograms.Word"/> and the others).</summary>
     IReadOnlySet<string> Microsoft();
 
+    /// <summary>Edge's msedge.exe, or null.</summary>
+    string? Edge();
+
     /// <summary>One conversion through Word, Excel or PowerPoint (<see cref="MsOffice"/>): exit code 0 is done.</summary>
     ProgramRun ConvertWithMicrosoft(string program, string input, string output, bool toPdf, TimeSpan timeout);
 
@@ -39,6 +42,8 @@ internal sealed class InstalledOfficeEngine : IOfficeEngine
     public string? Locate() => InstalledLibreOffice.Find();
 
     public IReadOnlySet<string> Microsoft() => InstalledLibreOffice.MicrosoftOffice();
+
+    public string? Edge() => InstalledLibreOffice.Edge();
 
     public ProgramRun ConvertWithMicrosoft(string program, string input, string output, bool toPdf, TimeSpan timeout) =>
         MsOffice.Convert(program, input, output, toPdf, timeout);
@@ -111,7 +116,8 @@ internal static class OfficeJobs
             return JobResult.Fail(id, ErrorCode.InvalidRequest, "The output folder must be a canonical, fully qualified path.");
         var kind = FileKinds.IdentifyByName(path);
         if (kind is null || !capability.Input.Accepts(kind))
-            return JobResult.Fail(id, ErrorCode.UnsupportedContent, "LibreOffice is not used for this kind of file.");
+            return JobResult.Fail(id, ErrorCode.UnsupportedContent, "This command does not take this kind of file.");
+        if (capability.Id == OfficeCapabilities.HtmlToPdfId) return HtmlToPdf(request, path, engine, timeout);
         var work = WorkFolderOf(id);
         var workCreated = false;
         var atDestination = false; // past this point an IO failure is the destination's, not the temp folder's
@@ -295,6 +301,64 @@ internal static class OfficeJobs
             throw new OfficeFailure(ErrorCode.OutputValidationFailed, "LibreOffice did not produce a readable document; nothing was saved.");
         }
         return pages;
+    }
+
+    /// <summary>The largest web page printed (Edge reads it, and what it links to beside it, itself).</summary>
+    public const long MaxHtmlBytes = 50L << 20;
+
+    /// <summary>
+    /// A web page printed to PDF by the Edge of Windows (<see cref="EdgePrint"/>): a fresh profile in the work folder,
+    /// scripts off, every host name unresolvable and every proxy a closed port, so the page cannot run code or fetch
+    /// anything; its own pictures and styles beside it on this PC still load. The PDF is checked as To PDF's is.
+    /// </summary>
+    private static JobResult HtmlToPdf(JobRequest request, string path, IOfficeEngine engine, TimeSpan timeout)
+    {
+        var id = request.Id;
+        var work = WorkFolderOf(id);
+        var created = false;
+        var atDestination = false;
+        try
+        {
+            var edge = engine.Edge();
+            if (edge is null) return JobResult.Fail(id, ErrorCode.UnsupportedOperation, "Microsoft Edge was not found on this PC.");
+            if (Directory.Exists(path)) return JobResult.Fail(id, ErrorCode.IsAFolder, "It is a folder.");
+            var info = new FileInfo(path);
+            if (!info.Exists) return JobResult.Fail(id, ErrorCode.SourceNotFound, "The file is no longer there.");
+            if ((info.Attributes & (FileAttributes.Offline | RecallOnOpen | RecallOnDataAccess)) != 0) return JobResult.Fail(id, ErrorCode.OnlineOnly, "The file is online only; reading it would download it.");
+            if (info.Length == 0) return JobResult.Fail(id, ErrorCode.NothingToDo, "The file is empty.");
+            if (info.Length > MaxHtmlBytes) return JobResult.Fail(id, ErrorCode.LimitExceeded, $"The file is larger than {MaxHtmlBytes >> 20} MB.");
+            switch (ExclusiveDirectory.Create(work))
+            {
+                case CreateOutcome.Created: created = true; break;
+                case CreateOutcome.NotWritable: return JobResult.Fail(id, ErrorCode.Internal, "The temporary folder cannot be written to.");
+                default: return JobResult.Fail(id, ErrorCode.Internal, "Something else is using this job's temporary folder.");
+            }
+            foreach (var sub in new[] { Soffice.OutputFolder, Soffice.TempFolder, Path.Combine(Soffice.ProfileFolder, "Default") }) Directory.CreateDirectory(Path.Combine(work, sub));
+            File.WriteAllText(Path.Combine(work, Soffice.ProfileFolder, "Default", "Preferences"), EdgePrint.Preferences, new UTF8Encoding(false));
+            var pdf = Path.Combine(work, Soffice.OutputName());
+            var run = engine.Convert(edge, EdgePrint.Arguments(work, new Uri(info.FullName).AbsoluteUri), work, Soffice.Environment(work, System.Environment.GetEnvironmentVariable), timeout);
+            if (run.TimedOut) throw new OfficeFailure(ErrorCode.WorkerTimeout, "Edge took too long and was stopped.");
+            if (!File.Exists(pdf)) throw new OfficeFailure(ErrorCode.EncodeFailed, $"Edge did not print the page (code {run.ExitCode}).");
+            if (Directory.GetFileSystemEntries(Path.Combine(work, Soffice.OutputFolder)) is not [var only] || !string.Equals(only, pdf, StringComparison.OrdinalIgnoreCase))
+                throw new OfficeFailure(ErrorCode.OutputValidationFailed, "Edge wrote something unexpected; nothing was saved.");
+            var pages = Validate(engine, work, pdf);
+            var hash = Sha256Of(pdf);
+            atDestination = true;
+            return DocumentJobs.Commit(request, path, OfficeCapabilities.Candidates(request.CapabilityId, path, request.OutputDirectory),
+                s => { using var from = new FileStream(pdf, FileMode.Open, FileAccess.Read, FileShare.Read); from.CopyTo(s); },
+                temp => string.Equals(Sha256Of(temp), hash, StringComparison.Ordinal),
+                [new JobFact("Pages", pages.ToString("N0", CultureInfo.InvariantCulture))]);
+        }
+        catch (OfficeFailure ex) { return JobResult.Fail(id, ex.Code, ex.Message); }
+        catch (DocumentJobs.DocFailure ex) { return JobResult.Fail(id, ex.Code, ex.Message); }
+        catch (System.ComponentModel.Win32Exception) { return JobResult.Fail(id, ErrorCode.EncodeFailed, "Edge is installed but could not be started."); }
+        catch (Exception ex) when (!atDestination && ex is UnauthorizedAccessException or IOException) { return JobResult.Fail(id, ex.HResult == DiskFull ? ErrorCode.DiskFull : ErrorCode.Internal, "The temporary folder could not be used."); }
+        catch (UnauthorizedAccessException) { return JobResult.Fail(id, ErrorCode.OutputDirectoryNotWritable, "The destination folder is not writable."); }
+        catch (IOException ex) { return JobResult.Fail(id, ex.HResult == DiskFull ? ErrorCode.DiskFull : ErrorCode.OutputDirectoryNotWritable, $"Writing failed (0x{ex.HResult:X8})."); }
+        finally
+        {
+            if (created) DeleteFolder(work);
+        }
     }
 
     private static readonly byte[] Zip = [0x50, 0x4B, 0x03, 0x04], CompoundFile = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1], RtfHeader = "{\\rtf"u8.ToArray(), PdfHeader = "%PDF-"u8.ToArray();

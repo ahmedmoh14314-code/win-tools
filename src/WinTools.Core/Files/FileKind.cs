@@ -63,6 +63,9 @@ public static class FileKinds
     public static FileKind Markdown { get; } = new("md", FileFamily.Document, "Markdown", [".md", ".markdown"]);
     public static FileKind Text { get; } = new("txt", FileFamily.Document, "Text file", [".txt"]);
 
+    /// <summary>A web page saved as a file: only To PDF takes it, printed by Edge with scripts and the network off.</summary>
+    public static FileKind Html { get; } = new("html", FileFamily.Document, "Web page", [".html", ".htm"]);
+
     /// <summary>
     /// Office formats only the user's own LibreOffice opens (To PDF, ADR-0033). The worker checks each one's signature
     /// (a compound file, a ZIP package, an RTF header) before LibreOffice sees it.
@@ -76,7 +79,7 @@ public static class FileKinds
     public static FileKind Odp { get; } = new("odp", FileFamily.Document, "OpenDocument presentation", [".odp"]);
 
     /// <summary>Every document kind, in the order above.</summary>
-    public static IReadOnlyList<FileKind> Documents { get; } = [Docx, Xlsx, Pptx, Csv, Tsv, Markdown, Text, Doc, Rtf, Odt, Xls, Ods, Ppt, Odp];
+    public static IReadOnlyList<FileKind> Documents { get; } = [Docx, Xlsx, Pptx, Csv, Tsv, Markdown, Text, Doc, Rtf, Odt, Xls, Ods, Ppt, Odp, Html];
 
     /// <summary>Video (V2 media sprint, ADR-0028): the media worker probes the content with ffprobe before any work.</summary>
     public static FileKind Mp4 { get; } = new("mp4", FileFamily.Video, "MP4 video", [".mp4", ".m4v"]);

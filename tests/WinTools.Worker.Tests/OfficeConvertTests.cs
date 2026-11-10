@@ -21,8 +21,11 @@ public sealed class OfficeConvertTests : IDisposable
     public void Dispose() => _dir.Dispose();
 
     /// <summary>A stand-in for LibreOffice: what it was asked, and what it does in the work folder.</summary>
-    private sealed class FakeOffice(Action<string>? act, string? soffice = @"C:\Program Files\LibreOffice\program\soffice.exe", bool timeOut = false, int exitCode = 0, string[]? microsoft = null) : IOfficeEngine
+    private sealed class FakeOffice(Action<string>? act, string? soffice = @"C:\Program Files\LibreOffice\program\soffice.exe", bool timeOut = false, int exitCode = 0, string[]? microsoft = null, string? edge = null) : IOfficeEngine
     {
+        public string? Edge() => edge;
+        public string? EdgePreferences { get; private set; }
+
         public string? MicrosoftProgram { get; private set; }
         public bool? MicrosoftToPdf { get; private set; }
 
@@ -52,8 +55,12 @@ public sealed class OfficeConvertTests : IDisposable
         public ProgramRun Convert(string executable, IReadOnlyList<string> arguments, string workFolder, IReadOnlyDictionary<string, string> environment, TimeSpan timeout)
         {
             (Executable, Arguments, WorkFolder, Environment) = (executable, arguments, workFolder, environment);
-            Profile = File.ReadAllText(Path.Combine(workFolder, "profile", "user", "registrymodifications.xcu"));
-            Input = File.ReadAllBytes(Path.Combine(workFolder, arguments[^1]));
+            var prefs = Path.Combine(workFolder, "profile", "Default", "Preferences");
+            EdgePreferences = File.Exists(prefs) ? File.ReadAllText(prefs) : null;
+            var xcu = Path.Combine(workFolder, "profile", "user", "registrymodifications.xcu");
+            Profile = File.Exists(xcu) ? File.ReadAllText(xcu) : null; // Edge has no LibreOffice profile
+            var input = Path.Combine(workFolder, arguments[^1]);
+            Input = File.Exists(input) ? File.ReadAllBytes(input) : null;
             if (timeOut) return new ProgramRun(-1, "", TimedOut: true);
             act?.Invoke(workFolder);
             return new ProgramRun(exitCode, "", TimedOut: false);
@@ -517,5 +524,36 @@ public sealed class OfficeConvertTests : IDisposable
         var r = Run(Request(Docx()), office);
         Assert.Equal(ErrorCode.WorkerTimeout, r.Error);
         Assert.Equal(["report.docx"], _dir.Names());
+    }
+
+    // ---- HTML to PDF through Edge ----
+
+    [Fact]
+    public void A_web_page_is_printed_by_edge_with_scripts_and_the_network_off_and_a_fresh_profile()
+    {
+        var page = Path.Combine(_dir.Path, "page.html");
+        File.WriteAllText(page, "<html><body><h1>Hi</h1></body></html>");
+        var office = new FakeOffice(WritesPdf, soffice: null, edge: @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe");
+        var request = new JobRequest(Guid.NewGuid().ToString("N"), OfficeCapabilities.HtmlToPdfId, [page]);
+        var r = Run(request, office);
+        Assert.True(r.Success, r.Message);
+        Assert.Equal("page.pdf", Path.GetFileName(r.OutputPath));
+        var args = office.Arguments!;
+        Assert.Equal(@"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", office.Executable);
+        Assert.Contains("\"javascript\":2", office.EdgePreferences, StringComparison.Ordinal); // scripts blocked by the fresh profile
+        foreach (var flag in new[] { "--headless", "--host-resolver-rules=MAP * ~NOTFOUND", "--proxy-server=127.0.0.1:9", "--disable-extensions", "--no-pdf-header-footer" })
+            Assert.Contains(flag, args);
+        Assert.Contains("--user-data-dir=" + Path.Combine(office.WorkFolder!, "profile"), args);
+        Assert.Contains("--print-to-pdf=" + Path.Combine(office.WorkFolder!, "out", "source.pdf"), args);
+        Assert.Equal(new Uri(page).AbsoluteUri, args[^1]);
+        Assert.Equal(["page.html", "page.pdf"], _dir.Names());
+    }
+
+    [Fact]
+    public void Without_edge_a_web_page_is_not_printed()
+    {
+        var page = Path.Combine(_dir.Path, "page.html");
+        File.WriteAllText(page, "<p>x</p>");
+        Assert.Equal(ErrorCode.UnsupportedOperation, OfficeJobs.Run(new JobRequest(Guid.NewGuid().ToString("N"), OfficeCapabilities.HtmlToPdfId, [page]), new FakeOffice(WritesPdf), TimeSpan.FromSeconds(30)).Error);
     }
 }
