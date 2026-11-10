@@ -23,6 +23,14 @@ internal static partial class Pdfium
     [LibraryImport(Lib)] public static partial int FPDFPage_GenerateContent(nint page);
     [LibraryImport(Lib)] public static unsafe partial int FPDF_SaveAsCopy(nint document, FileWrite* write, uint flags);
     [LibraryImport(Lib)] public static partial void FPDFFont_Close(nint font);
+    [LibraryImport(Lib)] public static partial nint FPDFPageObj_CreateNewPath(float x, float y);
+    [LibraryImport(Lib)] public static partial int FPDFPath_MoveTo(nint path, float x, float y);
+    [LibraryImport(Lib)] public static partial int FPDFPath_LineTo(nint path, float x, float y);
+    [LibraryImport(Lib)] public static partial int FPDFPath_SetDrawMode(nint path, int fillMode, int stroke);
+    [LibraryImport(Lib)] public static partial int FPDFPageObj_SetStrokeColor(nint pageObject, uint r, uint g, uint b, uint a);
+    [LibraryImport(Lib)] public static partial int FPDFPageObj_SetStrokeWidth(nint pageObject, float width);
+    [LibraryImport(Lib)] public static partial int FPDFPageObj_SetLineJoin(nint pageObject, int lineJoin);
+    [LibraryImport(Lib)] public static partial int FPDFPageObj_SetLineCap(nint pageObject, int lineCap);
 
     public const int BitmapBgra = 4;
     public const uint SaveNoIncremental = 2;
@@ -153,6 +161,51 @@ internal sealed unsafe partial class PdfDocument
                 if (bitmap != 0) Pdfium.FPDFBitmap_Destroy(bitmap);
                 Pdfium.FPDF_ClosePage(page);
             }
+        }
+    }
+
+    /// <summary>
+    /// Draws a signature's strokes as one vector path (round joins and caps) on a page: points in a box of
+    /// <paramref name="boxWidth"/> × <paramref name="boxHeight"/> (y down) scaled to the asked width, centred on a shown
+    /// point, upright as the page is shown.
+    /// </summary>
+    public bool StampInk(int index, IReadOnlyList<WinTools.Core.Jobs.InkStroke> strokes, int boxWidth, int boxHeight,
+        Func<PageFrame, (double U, double V, double Width)> where, (byte R, byte G, byte B) color)
+    {
+        lock (Pdfium.Gate)
+        {
+            var page = Pdfium.FPDF_LoadPage(_doc, index);
+            if (page == 0) return false;
+            try
+            {
+                var frame = FrameOf(page);
+                var (u, v, width) = where(frame);
+                var scale = width / boxWidth;
+                var path = Pdfium.FPDFPageObj_CreateNewPath(0, 0);
+                if (path == 0) return false;
+                foreach (var stroke in strokes)
+                {
+                    if (stroke.Points.Count == 0) continue;
+                    var (x0, y0) = stroke.Points[0];
+                    _ = Pdfium.FPDFPath_MoveTo(path, (float)((x0 - boxWidth / 2.0) * scale), (float)((boxHeight / 2.0 - y0) * scale));
+                    // A single point is a dot: a line of no length, drawn with round caps.
+                    if (stroke.Points.Count == 1) _ = Pdfium.FPDFPath_LineTo(path, (float)((x0 - boxWidth / 2.0) * scale + 0.01), (float)((boxHeight / 2.0 - y0) * scale));
+                    for (var i = 1; i < stroke.Points.Count; i++)
+                    {
+                        var (x, y) = stroke.Points[i];
+                        _ = Pdfium.FPDFPath_LineTo(path, (float)((x - boxWidth / 2.0) * scale), (float)((boxHeight / 2.0 - y) * scale));
+                    }
+                }
+                _ = Pdfium.FPDFPath_SetDrawMode(path, 0, 1); // no fill, stroked
+                _ = Pdfium.FPDFPageObj_SetStrokeColor(path, color.R, color.G, color.B, 255);
+                _ = Pdfium.FPDFPageObj_SetStrokeWidth(path, (float)Math.Clamp(width / 120, 0.6, 4));
+                _ = Pdfium.FPDFPageObj_SetLineJoin(path, 1); // round
+                _ = Pdfium.FPDFPageObj_SetLineCap(path, 1); // round
+                Place(path, frame, u, v, 0, 0, 0);
+                Pdfium.FPDFPage_InsertObject(page, path);
+                return Pdfium.FPDFPage_GenerateContent(page) != 0;
+            }
+            finally { Pdfium.FPDF_ClosePage(page); }
         }
     }
 

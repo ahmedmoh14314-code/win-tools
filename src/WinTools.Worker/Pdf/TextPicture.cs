@@ -16,13 +16,17 @@ internal static partial class TextPicture
     public const int MaxWidth = 12_000;
 
     /// <summary>BGRA rows, not premultiplied, and the size; the grey is <paramref name="grey"/>, the opacity 1 to 100.</summary>
-    public static (byte[] Bgra, int Width, int Height) Draw(string text, int opacityPercent, byte grey = 128)
+    public static (byte[] Bgra, int Width, int Height) Draw(string text, int opacityPercent, byte grey = 128) =>
+        Draw(text, opacityPercent, (grey, grey, grey), "Segoe UI", 700);
+
+    /// <summary>The same in a colour, face and weight of the caller's (a typed signature: Segoe Script).</summary>
+    public static (byte[] Bgra, int Width, int Height) Draw(string text, int opacityPercent, (byte R, byte G, byte B) color, string face, int weight)
     {
         var rtl = text.Any(c => c is >= '֐' and <= 'ࣿ' or >= 'יִ' and <= '﷿' or >= 'ﹰ' and <= '﻿');
         var flags = DtSingleLine | DtNoPrefix | DtCenter | DtVCenter | (rtl ? DtRtlReading : 0u);
         var dc = CreateCompatibleDC(0);
         if (dc == 0) throw new InvalidOperationException("GDI could not start.");
-        var font = CreateFontW(-FontPixels, 0, 0, 0, 700, 0, 0, 0, 1 /* DEFAULT_CHARSET */, 0, 0, 4 /* ANTIALIASED_QUALITY */, 0, "Segoe UI");
+        var font = CreateFontW(-FontPixels, 0, 0, 0, weight, 0, 0, 0, 1 /* DEFAULT_CHARSET */, 0, 0, 4 /* ANTIALIASED_QUALITY */, 0, face);
         nint bitmap = 0, oldFont = 0, oldBitmap = 0;
         try
         {
@@ -49,7 +53,7 @@ internal static partial class TextPicture
             for (var i = 0; i < pixels.Length; i += 4)
             {
                 var coverage = Math.Max(pixels[i], Math.Max(pixels[i + 1], pixels[i + 2]));
-                pixels[i] = pixels[i + 1] = pixels[i + 2] = grey;
+                (pixels[i], pixels[i + 1], pixels[i + 2]) = (color.B, color.G, color.R);
                 pixels[i + 3] = (byte)(coverage * opacity / 100);
             }
             return (pixels, width, height);

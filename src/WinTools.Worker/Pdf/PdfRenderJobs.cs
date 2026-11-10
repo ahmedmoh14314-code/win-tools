@@ -38,7 +38,14 @@ internal static class PdfRenderJobs
         if (id is not { Length: > 0 and <= 64 } || id.Any(c => !char.IsAsciiLetterOrDigit(c)))
             return JobResult.Fail("invalid", ErrorCode.InvalidRequest, "Request id must be 1-64 ASCII letters or digits.");
         FormValues? form = null;
-        if (request.CapabilityId == PdfRenderCapabilities.WatermarkId)
+        string? signAnswer = null;
+        if (request.CapabilityId == PdfRenderCapabilities.SignId)
+        {
+            // The window's plan, read against the page count once the PDF is open, and nothing else.
+            if (request.Parameters is not { Count: 1 } sp || !sp.TryGetValue(DialogParameters.Name, out signAnswer))
+                return JobResult.Fail(id, ErrorCode.InvalidRequest, "Sign needs its signature and place, and nothing else.");
+        }
+        else if (request.CapabilityId == PdfRenderCapabilities.WatermarkId)
         {
             // The form's answer, read again here the way the window and the host read it, and nothing else.
             if (request.Parameters is not { Count: 1 } p || !p.TryGetValue(DialogParameters.Name, out var answer) || Forms.Read(request.CapabilityId, answer) is not { } read)
@@ -61,6 +68,7 @@ internal static class PdfRenderJobs
                 : request.CapabilityId == PdfRenderCapabilities.ThumbnailsId ? Thumbnails(request)
                 : request.CapabilityId == PdfRenderCapabilities.ToPowerPointId ? ToPowerPoint(request)
                 : request.CapabilityId == PdfRenderCapabilities.WatermarkId ? Watermark(request, form!)
+                : request.CapabilityId == PdfRenderCapabilities.SignId ? Sign(request, signAnswer!)
                 : request.CapabilityId == PdfRenderCapabilities.PageNumbersId ? PageNumbers(request)
                 : request.CapabilityId == PdfRenderCapabilities.CropMarginsId ? CropMargins(request)
                 : PdfRenderCapabilities.PageFormatOf(request.CapabilityId) is { } format ? ToImages(request, format)
@@ -262,6 +270,36 @@ internal static class PdfRenderJobs
             return (sw / 2.0, sh / 2.0, width, Math.Atan2(sh, sw) * 180 / Math.PI);
         }));
     }
+
+    /// <summary>
+    /// The Sign window's plan, read again against the page count: a drawn signature as dark blue vector strokes, a typed
+    /// one drawn by Windows in a handwriting face as a picture, on the chosen page or every page, centred where the window
+    /// put it and as wide as it said, upright as the page is shown.
+    /// </summary>
+    private static JobResult Sign(JobRequest request, string answer)
+    {
+        using (var probe = OpenPdf(request.Inputs[0]))
+            if (SignPlan.Read(answer, probe.PageCount) is null) return JobResult.Fail(request.Id, ErrorCode.InvalidRequest, "The signature does not fit this PDF.");
+        byte[]? picture = null;
+        int pw = 0, ph = 0;
+        var plan = SignPlan.Read(answer, int.MaxValue)!;
+        if (plan.Text is { } text) (picture, pw, ph) = TextPicture.Draw(text, 100, Ink, "Segoe Script", 400);
+        (double U, double V, double Width) Where(PageFrame frame)
+        {
+            var (sw, sh) = frame.Shown;
+            return (plan.X * sw, (1 - plan.Y) * sh, plan.Width * sw);
+        }
+        return EditPages(request, (doc, i) =>
+        {
+            if (plan.Page is { } only && only != i + 1) return true;
+            return picture is not null
+                ? doc.StampImage(i, picture, pw, ph, f => { var (u, v, w) = Where(f); return (u, v, w, 0); })
+                : doc.StampInk(i, plan.Ink!, SignPlan.BoxWidth, SignPlan.BoxHeight, f => Where(f), Ink);
+        });
+    }
+
+    /// <summary>A signature's colour: dark blue, as ink.</summary>
+    private static readonly (byte R, byte G, byte B) Ink = (0x1A, 0x2B, 0x6D);
 
     /// <summary>"1", "2"… centred at the bottom of every page as it is shown, in Helvetica, 10 pt, dark grey.</summary>
     private static JobResult PageNumbers(JobRequest request) =>

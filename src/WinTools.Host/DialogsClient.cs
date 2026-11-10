@@ -84,6 +84,15 @@ internal sealed class DialogsClient(string dialogsExe)
             ? new(PickEnd.Picked, answer) : new(PickEnd.Cancelled);
     }
 
+    /// <summary>Asks the Sign window for its plan: only a plan that fits the PDF's page count counts as an answer.</summary>
+    public async Task<RenameOutcome> AskSignAsync(SignRequest request, CancellationToken cancellationToken = default)
+    {
+        var (end, line) = await AskAsync(WorkerProtocol.Serialize(request), cancellationToken, OrganizePatience).ConfigureAwait(false);
+        if (end != PickEnd.Picked) return new(end);
+        return WorkerProtocol.Deserialize<SignResult>(line)?.Answer is { } answer && SignPlan.Read(answer, request.Pages) is not null
+            ? new(PickEnd.Picked, answer) : new(PickEnd.Cancelled);
+    }
+
     /// <summary>Asks for a destination folder (Copy to, Move to; ADR-0032). An empty answer counts as cancelled; any other
     /// is returned as given, for the caller to check (<see cref="WinTools.Core.Files.TransferPlan.Destination"/>).</summary>
     public async Task<FolderOutcome> AskFolderAsync(FolderRequest request, CancellationToken cancellationToken = default)

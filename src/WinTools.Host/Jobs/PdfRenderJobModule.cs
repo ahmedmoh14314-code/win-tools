@@ -85,7 +85,7 @@ internal sealed class PdfRenderJobModule : IJobModule
         {
             PdfRenderCapabilities.ToPngId => bytes.AsSpan().StartsWith((ReadOnlySpan<byte>)[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
             PdfRenderCapabilities.ToJpgId => bytes.AsSpan().StartsWith((ReadOnlySpan<byte>)[0xFF, 0xD8, 0xFF]),
-            PdfRenderCapabilities.ImagesToPdfId or PdfRenderCapabilities.WatermarkId or PdfRenderCapabilities.PageNumbersId
+            PdfRenderCapabilities.ImagesToPdfId or PdfRenderCapabilities.WatermarkId or PdfRenderCapabilities.SignId or PdfRenderCapabilities.PageNumbersId
                 or PdfRenderCapabilities.CropMarginsId => bytes.AsSpan().StartsWith("%PDF-"u8),
             PdfRenderCapabilities.ToPowerPointId => bytes.AsSpan().StartsWith("PK\u0003\u0004"u8),
             _ => System.Text.Unicode.Utf8.IsValid(bytes),

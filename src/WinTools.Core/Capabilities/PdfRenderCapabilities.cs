@@ -24,6 +24,9 @@ public static class PdfRenderCapabilities
     public const string ToPowerPointId = "pdfrender.to-powerpoint";
 
     /// <summary>Changes to every page, drawn by PDFium into a new PDF: a watermark, page numbers, white margins cropped.</summary>
+    /// <summary>A drawn or typed signature placed on one page or every page, from the Sign window.</summary>
+    public const string SignId = "pdfrender.sign";
+
     public const string WatermarkId = "pdfrender.watermark", PageNumbersId = "pdfrender.page-numbers", CropMarginsId = "pdfrender.crop-margins";
 
     /// <summary>
@@ -52,7 +55,7 @@ public static class PdfRenderCapabilities
     /// <summary>The largest PDF read (it is read whole: PDFium needs random access).</summary>
     public const long MaxPdfBytes = 512L << 20;
 
-    public static IReadOnlyList<CapabilityCategory> Categories { get; } = [new("convert", "Convert", "convert", 10), new("tools", "Tools", "tools", 11)];
+    public static IReadOnlyList<CapabilityCategory> Categories { get; } = [new("convert", "Convert", "convert", 10), new("tools", "Tools", "tools", 11), new("protect", "Protect", "protect", 60)];
 
     private static readonly IReadOnlySet<string> PdfOnly = new HashSet<string>(StringComparer.Ordinal) { FileKinds.Pdf.Id };
     private static readonly IReadOnlySet<string> Images = FileKinds.All.Select(k => k.Id).ToHashSet(StringComparer.Ordinal);
@@ -69,6 +72,8 @@ public static class PdfRenderCapabilities
             Feedback: new("Reading the text of", "read the text of", "Saved as Markdown", "The PDF has no text (a scan has only pictures)", "PDF", "PDFs")),
         new(ToPowerPointId, "To PPTX", "convert", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Converting", "convert", "Saved as PowerPoint", "Nothing needed doing", "PDF", "PDFs")),
+        new(SignId, "Sign…", "protect", Module, new InputRule(PdfOnly, MaxCount: 1), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+            Feedback: new("Signing", "sign", "Signed", "Nothing needed doing", "PDF", "PDFs"), Dialog: Jobs.DialogKinds.Sign),
         new(WatermarkId, "Stamp text…", "tools", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Adding a watermark to", "add a watermark to", "Watermark added", "Nothing needed doing", "PDF", "PDFs"), Dialog: Jobs.DialogKinds.Form),
         new(PageNumbersId, "Page numbers", "tools", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
@@ -103,6 +108,7 @@ public static class PdfRenderCapabilities
         ToMarkdownId => OutputNaming.CandidatesWithExtension(source, ".md", null, outputDirectory),
         ToPowerPointId => OutputNaming.CandidatesWithExtension(source, ".pptx", null, outputDirectory),
         WatermarkId => OutputNaming.CandidatesWithExtension(source, ".pdf", "watermarked", outputDirectory),
+        SignId => OutputNaming.CandidatesWithExtension(source, ".pdf", "signed", outputDirectory),
         PageNumbersId => OutputNaming.CandidatesWithExtension(source, ".pdf", "numbered", outputDirectory),
         CropMarginsId => OutputNaming.CandidatesWithExtension(source, ".pdf", "cropped", outputDirectory),
         ImagesToPdfId => OutputNaming.CandidatesWithExtension(source, ".pdf", null, outputDirectory),

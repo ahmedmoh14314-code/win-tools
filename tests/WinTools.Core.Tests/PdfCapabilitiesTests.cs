@@ -29,7 +29,7 @@ public sealed class PdfCapabilitiesTests
     [Fact]
     public void One_pdf_gets_split_optimize_rotate_and_info_but_not_merge()
     {
-        Assert.Equal(["pdfrender.to-png", "pdfrender.to-jpg", "pdfrender.to-txt", "pdfrender.to-md", "pdfrender.to-powerpoint", "pdfrender.watermark", "pdfrender.page-numbers", "pdfrender.crop-margins", "pdf.organize", "pdf.split", "pdf.rotate-right", "pdf.rotate-left", "pdf.rotate-180", "pdf.optimize", "pdf.linearize", "pdf.repair", "pdf.info", "pdf.protect", "pdf.unprotect",
+        Assert.Equal(["pdfrender.to-png", "pdfrender.to-jpg", "pdfrender.to-txt", "pdfrender.to-md", "pdfrender.to-powerpoint", "pdfrender.sign", "pdfrender.watermark", "pdfrender.page-numbers", "pdfrender.crop-margins", "pdf.organize", "pdf.split", "pdf.rotate-right", "pdf.rotate-left", "pdf.rotate-180", "pdf.optimize", "pdf.linearize", "pdf.repair", "pdf.info", "pdf.protect", "pdf.unprotect",
             "files.sha256", "files.copy-path", "files.move-to", "files.rename", "files.copy-to", "files.copy-name", "files.copy-folder", "files.show-in-folder", "files.terminal",
             "archive.zip"], Ids(@"C:\p\a.pdf"));
         var menu = RadialMenu.Build(Resolver, [@"C:\p\a.pdf"]);

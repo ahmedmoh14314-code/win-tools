@@ -32,6 +32,20 @@ public partial class App : Application
             Present(window);
             return;
         }
+        if (WorkerProtocol.Deserialize<DialogEnvelope>(line)?.Kind == DialogKinds.Sign)
+        {
+            var sign = WorkerProtocol.Deserialize<SignRequest>(line);
+            if (sign is not { Title.Length: > 0, Thumbnails.Length: > 0, Pages: > 0 and <= Core.Capabilities.PdfRenderCapabilities.MaxPages }
+                || !Path.IsPathFullyQualified(sign.Thumbnails))
+            {
+                Answer(new SignResult(null));
+                return;
+            }
+            var window = new SignWindow(sign);
+            window.Closed += (_, _) => Answer(new SignResult(window.Answer));
+            Present(window);
+            return;
+        }
         if (WorkerProtocol.Deserialize<DialogEnvelope>(line)?.Kind == DialogKinds.Form)
         {
             var form = WorkerProtocol.Deserialize<FormRequest>(line);

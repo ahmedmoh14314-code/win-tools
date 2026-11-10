@@ -1,0 +1,56 @@
+<Window x:Class="WinTools.Dialogs.SignWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:WinTools.Dialogs"
+        Width="860" Height="540" MinWidth="700" MinHeight="460" ResizeMode="CanResize" WindowStyle="ToolWindow"
+        ShowInTaskbar="False" Topmost="True" WindowStartupLocation="Manual" Background="{StaticResource Base}"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
+  <Border Padding="14" Background="{StaticResource Surface}" BorderBrush="{StaticResource Edge}" BorderThickness="1">
+    <DockPanel>
+      <TextBlock x:Name="Heading" DockPanel.Dock="Top" Foreground="{StaticResource Text}" FontFamily="Segoe UI" FontSize="15" Margin="0,0,0,10" />
+      <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0" LastChildFill="False">
+        <TextBlock x:Name="Status" DockPanel.Dock="Left" VerticalAlignment="Center" Foreground="{StaticResource TextSecondary}"
+                   FontFamily="Segoe UI" FontSize="12" Text="{l:T sign.hint}" AutomationProperties.LiveSetting="Polite" />
+        <Button DockPanel.Dock="Right" Content="{l:T dialog.cancel}" IsCancel="True" MinWidth="80" Padding="10,4" />
+        <Button x:Name="Ok" DockPanel.Dock="Right" Content="{l:T sign.ok}" IsDefault="True" MinWidth="96" Padding="10,4" Margin="0,0,8,0" Click="OnOk" />
+      </DockPanel>
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <DockPanel Grid.Column="0" Margin="0,0,14,0">
+          <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8" LastChildFill="False">
+            <Button x:Name="Previous" DockPanel.Dock="Left" Content="‹" MinWidth="32" Click="OnPrevious" AutomationProperties.Name="{l:T sign.previous}" />
+            <TextBlock x:Name="PageLabel" DockPanel.Dock="Left" Margin="10,0" VerticalAlignment="Center" Foreground="{StaticResource Text}" FontFamily="Segoe UI" FontSize="12" />
+            <Button x:Name="Next" DockPanel.Dock="Left" Content="›" MinWidth="32" Click="OnNext" AutomationProperties.Name="{l:T sign.next}" />
+            <CheckBox x:Name="AllPages" DockPanel.Dock="Right" VerticalAlignment="Center" Content="{l:T sign.allPages}" Foreground="{StaticResource Text}" />
+          </DockPanel>
+          <Border Background="{StaticResource Raised}" BorderBrush="{StaticResource Edge}" BorderThickness="1">
+            <!-- A page is never mirrored, in either language. -->
+            <Grid x:Name="Sheet" FlowDirection="LeftToRight" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="8"
+                  MouseLeftButtonDown="OnPlace" Cursor="Cross">
+              <Image x:Name="PageImage" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+              <Canvas x:Name="Overlay" IsHitTestVisible="False">
+                <Border x:Name="Mark" BorderBrush="#1A2B6D" BorderThickness="2" Background="#331A2B6D" CornerRadius="2" />
+              </Canvas>
+            </Grid>
+          </Border>
+        </DockPanel>
+        <StackPanel Grid.Column="1" Width="330">
+          <TextBlock Text="{l:T sign.draw}" Foreground="{StaticResource TextSecondary}" FontFamily="Segoe UI" FontSize="12" Margin="0,0,0,4" />
+          <Border BorderBrush="{StaticResource Edge}" BorderThickness="1" Background="White" FlowDirection="LeftToRight">
+            <InkCanvas x:Name="Pad" Width="325" Height="130" Background="White" StrokeCollected="OnInkChanged" />
+          </Border>
+          <Button x:Name="Clear" Content="{l:T sign.clear}" HorizontalAlignment="Left" Margin="0,6,0,14" Padding="10,2" Click="OnClear" />
+          <TextBlock Text="{l:T sign.type}" Foreground="{StaticResource TextSecondary}" FontFamily="Segoe UI" FontSize="12" Margin="0,0,0,4" />
+          <TextBox x:Name="Typed" FontFamily="Segoe Script" FontSize="18" Padding="6,4" MaxLength="60" TextChanged="OnTypedChanged"
+                   AutomationProperties.Name="{l:T sign.type}" />
+          <TextBlock Text="{l:T sign.size}" Foreground="{StaticResource TextSecondary}" FontFamily="Segoe UI" FontSize="12" Margin="0,14,0,4" />
+          <Slider x:Name="Size" Minimum="0.08" Maximum="0.6" Value="0.3" SmallChange="0.02" LargeChange="0.05" ValueChanged="OnSizeChanged"
+                  AutomationProperties.Name="{l:T sign.size}" />
+        </StackPanel>
+      </Grid>
+    </DockPanel>
+  </Border>
+</Window>

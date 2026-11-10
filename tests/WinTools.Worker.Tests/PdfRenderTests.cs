@@ -423,4 +423,39 @@ public sealed class PdfRenderTests : IDisposable
         px[(5 * 10 + 7) * 4 + 1] = 100;
         Assert.Equal((2, 3, 7, 5), PdfRenderJobs.InkBounds(px, 10, 8));
     }
+
+    // ---- Sign ----
+
+    [Fact]
+    public void A_drawn_signature_goes_on_the_chosen_page_only_as_vector_ink()
+    {
+        var pdf = _dir.Write("contract.pdf", TextPdf(["one"], ["two"]));
+        var before = Hash(pdf);
+        var plan = new SignPlan(2, 0.7, 0.85, 0.35, [new InkStroke([(50, 300), (300, 80), (550, 320), (950, 60)])], null).Format();
+        var r = RunBelieved(WithForm(PdfRenderCapabilities.SignId, pdf, plan));
+        Assert.Equal("contract (signed).pdf", Path.GetFileName(r.OutputPath));
+        Assert.Equal(before, Hash(pdf));
+        Assert.True(Darkness(r.OutputPath!, 1) > Darkness(pdf, 1) + 0.3, "page 2 has no signature");
+        Assert.Equal(Darkness(pdf, 0), Darkness(r.OutputPath!, 0), 3); // page 1 untouched
+    }
+
+    [Fact]
+    public void A_typed_signature_goes_on_every_page()
+    {
+        var pdf = _dir.Write("contract.pdf", TextPdf(["one"], ["two"]));
+        var plan = new SignPlan(null, 0.5, 0.5, 0.5, null, "أحمد علي").Format();
+        var r = RunBelieved(WithForm(PdfRenderCapabilities.SignId, pdf, plan));
+        Assert.True(Darkness(r.OutputPath!, 0) > Darkness(pdf, 0) + 0.3);
+        Assert.True(Darkness(r.OutputPath!, 1) > Darkness(pdf, 1) + 0.3);
+    }
+
+    [Fact]
+    public void A_signature_plan_for_a_page_the_pdf_does_not_have_signs_nothing()
+    {
+        var pdf = _dir.Write("contract.pdf", TextPdf(["one"]));
+        var plan = new SignPlan(3, 0.5, 0.5, 0.3, [new InkStroke([(1, 1), (2, 2)])], null).Format();
+        Assert.Equal(ErrorCode.InvalidRequest, PdfRenderJobs.Run(WithForm(PdfRenderCapabilities.SignId, pdf, plan)).Error);
+        Assert.Equal(ErrorCode.InvalidRequest, PdfRenderJobs.Run(Request(PdfRenderCapabilities.SignId, pdf)).Error);
+        Assert.Equal(["contract.pdf"], Names());
+    }
 }

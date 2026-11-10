@@ -396,6 +396,11 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             _ = AskFolderAndRunAsync(capability, paths, x, y);
             return;
         }
+        if (capability.Dialog == DialogKinds.Sign)
+        {
+            _ = AskSignAndRunAsync(capability, paths, x, y);
+            return;
+        }
         if (capability.Prompt is { WhenRequired: false } first)
         {
             Ask(capability, first, paths, x, y);
@@ -537,12 +542,28 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _log.Event("organize.cleanup", new { type = ex.GetType().Name }); }
     }
 
-    private async Task AskOrganizeAndRunAsync(CapabilityDescriptor capability, IReadOnlyList<string> paths, int x, int y)
+    private Task AskOrganizeAndRunAsync(CapabilityDescriptor capability, IReadOnlyList<string> paths, int x, int y) =>
+        AskPagesAndRunAsync(capability, paths, "organize", "toast.organizeWindow",
+            (pdf, folder, pages) => DialogsClient.Default.AskOrganizeAsync(new OrganizeRequest(UiText.F("dialog.organize", Path.GetFileName(pdf)), folder, pages, x, y)),
+            (answer, pages) => PagePlan.Read(answer, pages) is not null);
+
+    private Task AskSignAndRunAsync(CapabilityDescriptor capability, IReadOnlyList<string> paths, int x, int y) =>
+        AskPagesAndRunAsync(capability, paths, "sign", "toast.signWindow",
+            (pdf, folder, pages) => DialogsClient.Default.AskSignAsync(new SignRequest(UiText.F("dialog.sign", Path.GetFileName(pdf)), folder, pages, x, y)),
+            (answer, pages) => SignPlan.Read(answer, pages) is not null);
+
+    /// <summary>
+    /// A window that shows a PDF's pages (Edit pages, ADR-0029; Sign): the image worker draws the pages into a folder of
+    /// the host's own, the window answers with its plan, and only a plan that fits the page count runs. The folder is
+    /// removed whatever happens.
+    /// </summary>
+    private async Task AskPagesAndRunAsync(CapabilityDescriptor capability, IReadOnlyList<string> paths, string name, string windowKey,
+        Func<string, string, int, Task<RenameOutcome>> ask, Func<string?, int, bool> fits)
     {
         // Fire and forget from Drop: nothing here may throw unobserved.
         if (paths is not [var pdf] || Thumbnails is not { } draw)
         {
-            _feedback.DialogUnavailable(UiText.T("toast.organizeWindow"));
+            _feedback.DialogUnavailable(UiText.T(windowKey));
             return;
         }
         var folder = Path.Combine(PagesFolder, Guid.NewGuid().ToString("N"));
@@ -552,30 +573,29 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
             _feedback.Started(capability, paths);
             var request = new JobRequest(Guid.NewGuid().ToString("N"), PdfRenderCapabilities.ThumbnailsId, [pdf], OutputDirectory: folder);
             var drawn = await draw(request, CancellationToken.None).ConfigureAwait(false);
-            _log.Event("organize.thumbnails", new { ok = drawn.Success, error = drawn.Error.ToString() });
+            _log.Event(name + ".thumbnails", new { ok = drawn.Success, error = drawn.Error.ToString() });
             if (!drawn.Success || drawn.Facts is not [{ Label: "Pages" } count] || !int.TryParse(count.Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var pages))
             {
                 _feedback.Finished(capability, [new JobItem(Path.GetFileName(pdf), drawn.Success ? JobResult.Fail(request.Id, ErrorCode.Internal, "The pages could not be shown.") : drawn)]);
                 return;
             }
             _feedback.HandedOver();
-            var title = UiText.F("dialog.organize", Path.GetFileName(pdf));
-            var outcome = await DialogsClient.Default.AskOrganizeAsync(new OrganizeRequest(title, folder, pages, x, y)).ConfigureAwait(false);
-            _log.Event("organize.ask", new { end = outcome.End.ToString(), pages });
-            if (outcome.End == PickEnd.Unavailable) { _feedback.DialogUnavailable(UiText.T("toast.organizeWindow")); return; }
-            if (outcome.End != PickEnd.Picked || PagePlan.Read(outcome.Rule, pages) is null) return;
+            var outcome = await ask(pdf, folder, pages).ConfigureAwait(false);
+            _log.Event(name + ".ask", new { end = outcome.End.ToString(), pages });
+            if (outcome.End == PickEnd.Unavailable) { _feedback.DialogUnavailable(UiText.T(windowKey)); return; }
+            if (outcome.End != PickEnd.Picked || !fits(outcome.Rule, pages)) return;
             if (_jobs.Enqueue(capability, paths, new Dictionary<string, string>(StringComparer.Ordinal) { [DialogParameters.Name] = outcome.Rule! }) is null)
                 _log.Event("job.refused", new { op = capability.Id, module = capability.Module });
         }
         catch (Exception ex)
         {
-            _log.Event("organize.error", new { type = ex.GetType().Name });
-            _feedback.DialogUnavailable(UiText.T("toast.organizeWindow"));
+            _log.Event(name + ".error", new { type = ex.GetType().Name });
+            _feedback.DialogUnavailable(UiText.T(windowKey));
         }
         finally
         {
             try { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _log.Event("organize.cleanup", new { type = ex.GetType().Name }); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _log.Event(name + ".cleanup", new { type = ex.GetType().Name }); }
         }
     }
 
