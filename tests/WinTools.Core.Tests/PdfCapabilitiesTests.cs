@@ -38,7 +38,7 @@ public sealed class PdfCapabilitiesTests
         Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD", "To PPTX"], menu[0].Commands.Select(c => c.Label));
         Assert.Equal(["Edit pages…", "Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], menu[2].Commands.Select(c => c.Label));
         Assert.Equal(["Smaller (lossless)", "Fast web view", "Repair"], menu[3].Commands.Select(c => c.Label));
-        Assert.Equal(["Watermark…", "Page numbers", "Crop margins", "PDF info", "SHA-256", "Folder path"], menu[1].Commands.Select(c => c.Label));
+        Assert.Equal(["Stamp text…", "Page numbers", "Crop margins", "PDF info", "SHA-256", "Folder path"], menu[1].Commands.Select(c => c.Label));
         Assert.Equal(["Copy path", "Move to…", "Rename files", "More…"], menu[^1].Commands.Select(c => c.Label)); // ADR-0032
     }
 

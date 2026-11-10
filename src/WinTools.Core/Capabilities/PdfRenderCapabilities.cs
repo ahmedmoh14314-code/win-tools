@@ -69,7 +69,7 @@ public static class PdfRenderCapabilities
             Feedback: new("Reading the text of", "read the text of", "Saved as Markdown", "The PDF has no text (a scan has only pictures)", "PDF", "PDFs")),
         new(ToPowerPointId, "To PPTX", "convert", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Converting", "convert", "Saved as PowerPoint", "Nothing needed doing", "PDF", "PDFs")),
-        new(WatermarkId, "Watermark…", "tools", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+        new(WatermarkId, "Stamp text…", "tools", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Adding a watermark to", "add a watermark to", "Watermark added", "Nothing needed doing", "PDF", "PDFs"), Dialog: Jobs.DialogKinds.Form),
         new(PageNumbersId, "Page numbers", "tools", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Numbering", "number", "Pages numbered", "Nothing needed doing", "PDF", "PDFs")),

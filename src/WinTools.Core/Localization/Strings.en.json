@@ -189,7 +189,7 @@
   "form.endBeforeStart": "The end must come after the start.",
   "form.zero": "A shift of 0 seconds changes nothing.",
   "form.invalid": "This form cannot be read.",
-  "cmd.pdfrender.watermark": "Watermark…",
+  "cmd.pdfrender.watermark": "Stamp text…",
   "cmd.pdfrender.page-numbers": "Page numbers",
   "cmd.pdfrender.crop-margins": "Crop margins",
   "form.watermark.text": "Text",
