@@ -99,7 +99,13 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     private IReadOnlySet<string> Programs()
     {
         var found = WinTools.Windows.Shell.InstalledPrograms.Found();
-        _log.Event("programs", new { libreOffice = found.Contains(ExternalPrograms.LibreOffice) });
+        _log.Event("programs", new
+        {
+            libreOffice = found.Contains(ExternalPrograms.LibreOffice),
+            word = found.Contains(ExternalPrograms.Word),
+            excel = found.Contains(ExternalPrograms.Excel),
+            powerPoint = found.Contains(ExternalPrograms.PowerPoint),
+        });
         return found;
     }
 
