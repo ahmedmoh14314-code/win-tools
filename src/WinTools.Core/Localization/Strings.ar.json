@@ -232,6 +232,7 @@
   "cmd.pdfrender.to-png": "إلى PNG",
   "cmd.pdfrender.to-jpg": "إلى JPG",
   "cmd.pdfrender.to-powerpoint": "إلى PPTX",
+  "cmd.pdfrender.to-excel": "إلى XLSX",
   "cmd.pdfrender.to-txt": "إلى TXT",
   "cmd.pdfrender.to-md": "إلى MD",
   "cmd.pdfrender.images-to-pdf": "إلى PDF",

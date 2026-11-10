@@ -23,6 +23,9 @@ public static class PdfRenderCapabilities
     /// <summary>A PDF as a PowerPoint deck: each page a slide holding the page's picture (not editable text).</summary>
     public const string ToPowerPointId = "pdfrender.to-powerpoint";
 
+    /// <summary>A PDF's text laid out again as rows and columns in one Excel sheet (a scan has no text).</summary>
+    public const string ToExcelId = "pdfrender.to-excel";
+
     /// <summary>
     /// The page thumbnails Organize pages shows (ADR-0029): not a command of the ring, a job the host runs itself, into an
     /// empty folder of its own. Pages are drawn <see cref="ThumbnailSide"/> pixels on their longer side.
@@ -66,6 +69,8 @@ public static class PdfRenderCapabilities
             Feedback: new("Reading the text of", "read the text of", "Saved as Markdown", "The PDF has no text (a scan has only pictures)", "PDF", "PDFs")),
         new(ToPowerPointId, "To PPTX", "convert", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Converting", "convert", "Saved as PowerPoint", "Nothing needed doing", "PDF", "PDFs")),
+        new(ToExcelId, "To XLSX", "convert", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+            Feedback: new("Reading the tables of", "read the tables of", "Saved as Excel", "The PDF has no text (a scan has only pictures)", "PDF", "PDFs")),
         new(ImagesToPdfId, "To PDF", "convert", Module, new InputRule(Images, MaxCount: MaxImages), CapabilityShape.Selection, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Making a PDF of", "make a PDF of", "PDF made", "Nothing needed doing", "image", "images")),
     ];
@@ -93,6 +98,7 @@ public static class PdfRenderCapabilities
         ToTextId => OutputNaming.CandidatesWithExtension(source, ".txt", null, outputDirectory),
         ToMarkdownId => OutputNaming.CandidatesWithExtension(source, ".md", null, outputDirectory),
         ToPowerPointId => OutputNaming.CandidatesWithExtension(source, ".pptx", null, outputDirectory),
+        ToExcelId => OutputNaming.CandidatesWithExtension(source, ".xlsx", null, outputDirectory),
         ImagesToPdfId => OutputNaming.CandidatesWithExtension(source, ".pdf", null, outputDirectory),
         _ => throw new ArgumentException($"{capabilityId} is not a {Module} command.", nameof(capabilityId)),
     };

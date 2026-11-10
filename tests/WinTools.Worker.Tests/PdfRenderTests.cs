@@ -272,7 +272,7 @@ public sealed class PdfRenderTests : IDisposable
         var resolver = CapabilityResolver.For(null);
         var menu = RadialMenu.Build(resolver, [@"C:\p\a.pdf"]);
         Assert.Equal(["Convert", "Tools", "Organize", "Optimize", "Protect", "Actions"], menu.Select(g => g.Label));
-        Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD", "To PPTX"], menu[0].Commands.Select(c => c.Label));
+        Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD", "To PPTX", "To XLSX"], menu[0].Commands.Select(c => c.Label));
         Assert.Equal(["Edit pages…", "Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], menu.Single(g => g.Label == "Organize").Commands.Select(c => c.Label));
         Assert.Contains("To PDF", RadialMenu.Build(resolver, [@"C:\p\a.jpg", @"C:\p\b.png"])[0].Commands.Select(c => c.Label));
     }
@@ -337,5 +337,71 @@ public sealed class PdfRenderTests : IDisposable
         Assert.Equal(0, x);
         Assert.Equal((10058400 - cy) / 2, y);
         Assert.Equal(612.0 / 792, (double)cy / cx, 3);
+    }
+
+    // ---- PDF to Excel ----
+
+    /// <summary>Glyphs of a word laid left to right from x, 6 points wide each, on a line whose baseline is y (letters 10 high).</summary>
+    private static IEnumerable<Glyph> Word(string text, double x, double y, bool rtl = false)
+    {
+        var chars = rtl ? text.Reverse().ToArray() : text.ToCharArray(); // a right-to-left word is drawn from its last letter on the left
+        for (var i = 0; i < chars.Length; i++) yield return new Glyph(chars[i], x + i * 6, x + i * 6 + 5.5, y, y + 10);
+    }
+
+    private static List<Glyph> Line(params IEnumerable<Glyph>[] words)
+    {
+        var all = new List<Glyph>();
+        foreach (var w in words) { all.AddRange(w); all.Add(new Glyph(' ', 0, 0, 0, 0, Generated: true)); }
+        all.Add(new Glyph('\r', 0, 0, 0, 0, true));
+        all.Add(new Glyph('\n', 0, 0, 0, 0, true));
+        return all;
+    }
+
+    [Fact]
+    public void A_ruled_table_keeps_its_columns_even_when_numbers_sit_against_the_next_cell()
+    {
+        List<Glyph> glyphs = [.. Line(Word("Item", 10, 700), Word("Qty", 100, 700)), .. Line(Word("Apples", 10, 680), Word("12", 82, 680), Word("x", 100, 680))];
+        List<Rule> rules = [new(5, 670, 715), new(96, 670, 715), new(150, 670, 715)];
+        var rows = PdfTables.Rows(glyphs, rules);
+        Assert.Equal(["Item", "Qty"], rows[0]);
+        Assert.Equal(["Apples 12", "x"], rows[1]); // 12 is left of the border at 96: it stays with Apples' cell
+    }
+
+    [Fact]
+    public void An_unruled_table_is_split_into_columns_by_the_empty_channels_between_them()
+    {
+        List<Glyph> glyphs = [.. Line(Word("Name", 10, 700), Word("Price", 120, 700)), .. Line(Word("Tea", 10, 680), Word("3.5", 126, 680)), .. Line(Word("Coffee", 10, 660), Word("12", 132, 660))];
+        var rows = PdfTables.Rows(glyphs);
+        Assert.Equal([["Name", "Price"], ["Tea", "3.5"], ["Coffee", "12"]], rows);
+    }
+
+    [Fact]
+    public void Arabic_words_read_right_to_left_with_their_marks_and_pieces_joined()
+    {
+        // "عمّان" with its shadda drawn over the م, and "المدينة" drawn as two touching pieces; an Arabic page runs right to left.
+        List<Glyph> glyphs =
+        [
+            .. Line(Word("نة", 300, 700, rtl: true), Word("المدي", 312, 700, rtl: true), Word("الكمية", 100, 700, rtl: true)),
+            .. Line(Word("عمان", 300, 680, rtl: true), Word("150", 100, 680)),
+        ];
+        var shaddaOverMeem = glyphs.FindIndex(g => g.Char == 'م' && g.Bottom == 680);
+        var meem = glyphs[shaddaOverMeem];
+        glyphs.Insert(shaddaOverMeem, new Glyph('\u0651', meem.Left + 1, meem.Right - 1, 692, 695));
+        List<Rule> rules = [new(90, 670, 715), new(200, 670, 715), new(360, 670, 715)];
+        var rows = PdfTables.Rows(glyphs, rules);
+        Assert.Equal(["المدينة", "الكمية"], rows[0]);
+        Assert.Equal(["عمّان", "150"], rows[1]);
+    }
+
+    [Fact]
+    public void A_pdf_with_text_becomes_a_workbook_and_a_scan_has_nothing_to_read()
+    {
+        var pdf = _dir.Write("report.pdf", TextPdf(["Hello page 1"], ["Hello page 2"]));
+        var r = RunBelieved(Request(PdfRenderCapabilities.ToExcelId, pdf));
+        Assert.Equal("report.xlsx", Path.GetFileName(r.OutputPath));
+        using var zip = System.IO.Compression.ZipFile.OpenRead(r.OutputPath!);
+        Assert.NotNull(zip.GetEntry("xl/workbook.xml"));
+        var blank = _dir.Write("scan.pdf", TextPdf([" "]));
+        Assert.Equal(ErrorCode.NothingToDo, PdfRenderJobs.Run(Request(PdfRenderCapabilities.ToExcelId, blank)).Error);
     }
 }

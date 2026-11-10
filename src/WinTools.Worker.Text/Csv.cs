@@ -162,23 +162,6 @@ internal static class Csv
     private static bool NeedsQuotes(string v, char separator) =>
         v.Length > 0 && (v.AsSpan().IndexOfAny(separator, '"', '\r') >= 0 || v.AsSpan().IndexOfAny('\n', ';', '\t') >= 0 || char.IsWhiteSpace(v[0]) || char.IsWhiteSpace(v[^1]));
 
-    /// <summary>
-    /// Whether a CSV field becomes a number in the workbook: an optional minus, digits without a leading zero (so "007"
-    /// and postcodes stay text), an optional point and digits, and at most 15 significant digits (Excel keeps no more, so
-    /// a card or ID number stays text). Thousands separators, exponents, currency and dates stay text: nothing is guessed.
-    /// </summary>
-    public static bool IsPlainNumber(string v)
-    {
-        if (v.Length is 0 or > 32) return false;
-        var s = v.AsSpan();
-        if (s[0] == '-') s = s[1..];
-        if (s.Length == 0 || !char.IsAsciiDigit(s[0])) return false;
-        var dot = s.IndexOf('.');
-        var whole = dot < 0 ? s : s[..dot];
-        var fraction = dot < 0 ? [] : s[(dot + 1)..];
-        if (whole.Length == 0 || (whole.Length > 1 && whole[0] == '0') || whole.ContainsAnyExceptInRange('0', '9')) return false;
-        if (dot >= 0 && (fraction.Length == 0 || fraction.ContainsAnyExceptInRange('0', '9'))) return false;
-        var digits = (whole.TrimStart('0').ToString() + fraction.ToString()).TrimStart('0').TrimEnd('0').Length;
-        return digits <= 15 && double.TryParse(v, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var d) && double.IsFinite(d);
-    }
+    /// <summary>See <see cref="WinTools.Worker.Common.XlsxWriter.IsPlainNumber"/>.</summary>
+    public static bool IsPlainNumber(string v) => WinTools.Worker.Common.XlsxWriter.IsPlainNumber(v);
 }

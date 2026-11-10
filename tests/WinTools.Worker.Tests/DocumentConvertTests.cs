@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using WinTools.Worker.Common;
 using WinTools.Core.Capabilities;
 using WinTools.Core.Jobs;
 using WinTools.Host.Jobs;
