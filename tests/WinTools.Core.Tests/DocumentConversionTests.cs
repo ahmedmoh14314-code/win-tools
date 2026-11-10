@@ -75,6 +75,17 @@ public sealed class DocumentConversionTests
     }
 
     [Fact]
+    public void A_web_page_offers_to_pdf_only_when_edge_was_found_and_edge_alone_offers_no_office_command()
+    {
+        Assert.DoesNotContain(OfficeCapabilities.HtmlToPdfId, Ids(CapabilityResolver.For(null), @"C:\p\a.html"));
+        var edge = CapabilityResolver.For(null, ExternalPrograms.Set(null, [ExternalPrograms.Edge]));
+        Assert.Contains(OfficeCapabilities.HtmlToPdfId, Ids(edge, @"C:\p\a.html"));
+        Assert.Contains(OfficeCapabilities.HtmlToPdfId, Ids(edge, @"C:\p\a.htm"));
+        Assert.DoesNotContain(OfficeCapabilities.ToPdfId, Ids(edge, @"C:\p\a.docx"));
+        Assert.DoesNotContain(OfficeCapabilities.HtmlToPdfId, Ids(edge, @"C:\p\a.md"));
+    }
+
+    [Fact]
     public void A_pdf_offers_to_word_and_to_powerpoint_only_when_LibreOffice_was_found()
     {
         Assert.DoesNotContain(OfficeCapabilities.PdfToWordId, Ids(CapabilityResolver.For(null), @"C:\p\a.pdf"));

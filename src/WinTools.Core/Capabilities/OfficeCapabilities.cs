@@ -15,6 +15,9 @@ public static class OfficeCapabilities
     public const string Module = "office";
     public const string ToPdfId = "office.to-pdf";
 
+    /// <summary>A web page printed to PDF by Edge.</summary>
+    public const string HtmlToPdfId = "office.html-to-pdf";
+
     /// <summary>A PDF opened by Word or by LibreOffice's PDF import and saved as a Word document.</summary>
     public const string PdfToWordId = "office.pdf-to-word";
 
@@ -55,6 +58,10 @@ public static class OfficeCapabilities
         new(PdfToWordId, "To Word", "convert", Module, PdfInput, CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Converting", "convert", "Converted to Word", "Nothing needed doing", "PDF", "PDFs", Reasons: FromPdfReasons),
             Requires: ExternalPrograms.PdfImporter),
+        new(HtmlToPdfId, "To PDF", "convert", Module, new InputRule(new HashSet<string>(StringComparer.Ordinal) { FileKinds.Html.Id }), CapabilityShape.PerFile,
+            CapabilityOutput.File, LongRunning: true,
+            Feedback: new("Converting", "convert", "Converted to PDF", "Nothing needed doing", "web page", "web pages", Reasons: OwnReasons),
+            Requires: ExternalPrograms.Edge),
         new(ToPdfId, "To PDF", "convert", Module, new InputRule(Inputs), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Converting", "convert", "Converted to PDF", "Nothing needed doing", "document", "documents", Reasons: OwnReasons),
             Requires: ExternalPrograms.AnyOffice),

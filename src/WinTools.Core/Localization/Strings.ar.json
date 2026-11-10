@@ -260,6 +260,7 @@
   "cmd.documents.to-csv": "إلى CSV",
   "cmd.documents.to-html": "إلى HTML",
   "cmd.office.to-pdf": "إلى PDF",
+  "cmd.office.html-to-pdf": "إلى PDF",
   "cmd.office.pdf-to-word": "إلى Word",
   "cmd.media.video-to-mp4": "إلى MP4",
   "cmd.media.video-to-webm": "إلى WebM",

@@ -16,6 +16,17 @@ public static class InstalledLibreOffice
     /// <summary>The Microsoft Office programs found, by the same reads as the host's.</summary>
     public static IReadOnlySet<string> MicrosoftOffice() => MicrosoftOfficeLocator.Find(ReadDefault, File.Exists);
 
+    /// <summary>Edge's msedge.exe from its App Paths entry, as a local program that exists; null otherwise.</summary>
+    public static string? Edge()
+    {
+        foreach (var root in new[] { RegistryRoot.CurrentUser, RegistryRoot.LocalMachine })
+            foreach (var wow32 in new[] { false, true })
+                if (ReadDefault(root, wow32, MicrosoftOfficeLocator.AppPathKey("msedge.exe")) is { } value
+                    && value.Trim().Trim('"') is var p && LibreOfficeLocator.IsLocalProgram(p, "msedge.exe") && File.Exists(p))
+                    return p;
+        return null;
+    }
+
     private static string? ReadDefault(RegistryRoot root, bool wow32, string key)
     {
         try
