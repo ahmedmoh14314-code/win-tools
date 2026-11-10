@@ -57,7 +57,6 @@ public sealed class DocumentConversionTests
         Assert.DoesNotContain(OfficeCapabilities.PdfToWordId, Ids(r, @"C:\p\a.pdf"));
         var w = CapabilityResolver.For(null, ExternalPrograms.Set(null, [ExternalPrograms.Word]));
         Assert.Contains(OfficeCapabilities.PdfToWordId, Ids(w, @"C:\p\a.pdf"));
-        Assert.DoesNotContain(OfficeCapabilities.PdfToPowerPointId, Ids(w, @"C:\p\a.pdf"));
         Assert.Empty(ExternalPrograms.Set(null, ["notepad"]));
     }
 
@@ -81,7 +80,10 @@ public sealed class DocumentConversionTests
         Assert.DoesNotContain(OfficeCapabilities.PdfToWordId, Ids(CapabilityResolver.For(null), @"C:\p\a.pdf"));
         var r = CapabilityResolver.For(null, WithLibreOffice);
         Assert.Contains(OfficeCapabilities.PdfToWordId, Ids(r, @"C:\p\a.pdf"));
-        Assert.Contains(OfficeCapabilities.PdfToPowerPointId, Ids(r, @"C:\p\a.pdf", @"C:\p\b.pdf"));
+        Assert.Contains(OfficeCapabilities.PdfToWordId, Ids(r, @"C:\p\a.pdf", @"C:\p\b.pdf"));
+        // To PowerPoint needs nothing installed: it is WinTools' own (pictures of the pages).
+        Assert.Contains(PdfRenderCapabilities.ToPowerPointId, Ids(CapabilityResolver.For(null), @"C:\p\a.pdf"));
+        Assert.DoesNotContain(PdfRenderCapabilities.ToPowerPointId, Ids(CapabilityResolver.For(null), @"C:\p\a.docx"));
         Assert.DoesNotContain(OfficeCapabilities.PdfToWordId, Ids(r, @"C:\p\a.docx"));
         Assert.DoesNotContain(OfficeCapabilities.PdfToWordId, Ids(r, @"C:\p\a.pdf", @"C:\p\b.docx"));
     }

@@ -40,17 +40,16 @@ internal static class Soffice
 
     /// <summary>
     /// What "--convert-to" asks for: "pdf", or for a PDF's import the export filter named outright, so Writer or Impress
-    /// never guesses it: "docx:MS Word 2007 XML", "pptx:Impress MS PowerPoint 2007 XML".
+    /// never guesses it: "docx:MS Word 2007 XML".
     /// </summary>
     public static string ConvertTo(string capabilityId) => capabilityId switch
     {
         WinTools.Core.Capabilities.OfficeCapabilities.PdfToWordId => "docx:MS Word 2007 XML",
-        WinTools.Core.Capabilities.OfficeCapabilities.PdfToPowerPointId => "pptx:Impress MS PowerPoint 2007 XML",
         _ => "pdf",
     };
 
-    /// <summary>The import filter of a PDF: Writer's PDF import for To Word, Impress's for To PowerPoint.</summary>
-    public static string PdfImportFilter(string capabilityId) => "--infilter=" + (capabilityId == WinTools.Core.Capabilities.OfficeCapabilities.PdfToPowerPointId ? "impress_pdf_import" : "writer_pdf_import");
+    /// <summary>The import filter of a PDF: Writer's PDF import, for To Word.</summary>
+    public static string PdfImportFilter(string capabilityId) => "--infilter=writer_pdf_import";
 
     /// <summary>
     /// The import filter of an input's extension: the node names in LibreOffice's filter/source/config/fragments/filters.

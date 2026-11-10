@@ -15,8 +15,8 @@ public static class OfficeCapabilities
     public const string Module = "office";
     public const string ToPdfId = "office.to-pdf";
 
-    /// <summary>A PDF opened by LibreOffice's PDF import and saved as a Word document or a PowerPoint deck.</summary>
-    public const string PdfToWordId = "office.pdf-to-word", PdfToPowerPointId = "office.pdf-to-powerpoint";
+    /// <summary>A PDF opened by Word or by LibreOffice's PDF import and saved as a Word document.</summary>
+    public const string PdfToWordId = "office.pdf-to-word";
 
     /// <summary>The largest document handed to LibreOffice.</summary>
     public const long MaxInputBytes = 200L << 20;
@@ -55,9 +55,6 @@ public static class OfficeCapabilities
         new(PdfToWordId, "To Word", "convert", Module, PdfInput, CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Converting", "convert", "Converted to Word", "Nothing needed doing", "PDF", "PDFs", Reasons: FromPdfReasons),
             Requires: ExternalPrograms.PdfImporter),
-        new(PdfToPowerPointId, "To PowerPoint", "convert", Module, PdfInput, CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
-            Feedback: new("Converting", "convert", "Converted to PowerPoint", "Nothing needed doing", "PDF", "PDFs", Reasons: FromPdfReasons),
-            Requires: ExternalPrograms.LibreOffice),
         new(ToPdfId, "To PDF", "convert", Module, new InputRule(Inputs), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Converting", "convert", "Converted to PDF", "Nothing needed doing", "document", "documents", Reasons: OwnReasons),
             Requires: ExternalPrograms.AnyOffice),
@@ -67,7 +64,6 @@ public static class OfficeCapabilities
     public static string OutputExtension(string capabilityId) => capabilityId switch
     {
         PdfToWordId => ".docx",
-        PdfToPowerPointId => ".pptx",
         _ => ".pdf",
     };
 
