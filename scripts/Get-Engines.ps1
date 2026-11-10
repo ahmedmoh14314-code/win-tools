@@ -107,9 +107,11 @@ Get-Engine -Name "qpdf-$qpdfVersion" -Archive $QpdfArchive `
     })
 
 # FFmpeg: the two programs, their shared libraries and the licence (ffplay is not shipped).
+# The archive is BtbN's autobuild-2026-10-24-13-02, unmodified. Upstream removes autobuilds after a few weeks, so the same
+# archive (same hash) is kept as an asset of this repository's engines-ffmpeg-8.1.3 prerelease.
 $ffmpegBuild = 'ffmpeg-n8.1.3-24-g92611900bb-win64-lgpl-shared-8.1'
 Get-Engine -Name 'ffmpeg-8.1.3' `
-    -Url "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-24-13-02/$ffmpegBuild.zip" `
+    -Url "https://github.com/ahmedmoh14314-code/win-tools/releases/download/engines-ffmpeg-8.1.3/$ffmpegBuild.zip" `
     -ArchiveName "$ffmpegBuild.zip" -ArchiveSha256 '0c2e70f180ae48a748acf2308229ae19eafc734515e9876c75cfe36998981c53' `
     -Prefix $ffmpegBuild -Files ([ordered]@{
         'bin/ffmpeg.exe'       = 'ad567b69484cde6ebaacf6ed3e5ae591e3624a5d853dd9e9969e104d3cdaa4b5'
