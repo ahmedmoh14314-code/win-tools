@@ -52,6 +52,7 @@ internal static class PdfRenderJobs
             return images ? ImagesToPdf(request)
                 : request.CapabilityId == PdfRenderCapabilities.ThumbnailsId ? Thumbnails(request)
                 : request.CapabilityId == PdfRenderCapabilities.ToPowerPointId ? ToPowerPoint(request)
+                : request.CapabilityId == PdfRenderCapabilities.ToExcelId ? ToExcel(request)
                 : PdfRenderCapabilities.PageFormatOf(request.CapabilityId) is { } format ? ToImages(request, format)
                 : ToText(request, markdown: request.CapabilityId == PdfRenderCapabilities.ToMarkdownId);
         }
@@ -232,6 +233,51 @@ internal static class PdfRenderJobs
         }
         catch (InvalidDataException) { throw new RenderFailure(ErrorCode.OutputValidationFailed, "The deck did not check out; nothing was saved."); }
     }
+
+    // ---- PDF to Excel ----
+
+    /// <summary>
+    /// Every page's text laid out as rows and columns (<see cref="PdfTables"/>) in one sheet, pages one after another with
+    /// an empty row between them, written by the same writer as CSV to Excel: every cell is text or a plain number, never a
+    /// formula. The workbook is opened again before it is kept.
+    /// </summary>
+    private static JobResult ToExcel(JobRequest request)
+    {
+        var path = request.Inputs[0];
+        using var doc = OpenPdf(path);
+        var pages = Math.Min(doc.PageCount, PdfRenderCapabilities.MaxPages);
+        var rows = new List<string[]>();
+        for (var i = 0; i < pages; i++)
+        {
+            var glyphs = doc.Glyphs(i, MaxCharsPerPage) ?? throw new RenderFailure(ErrorCode.DecodeFailed, $"Page {i + 1} could not be read.");
+            var table = PdfTables.Rows(glyphs, doc.VerticalRules(i));
+            if (table.Count == 0) continue;
+            if (rows.Count > 0) rows.Add([]);
+            rows.AddRange(table);
+            if (rows.Count > MaxExcelRows) throw new RenderFailure(ErrorCode.LimitExceeded, $"More than {MaxExcelRows:N0} rows.");
+        }
+        if (rows.Count == 0) throw new RenderFailure(ErrorCode.NothingToDo, "The PDF has no text; a scan has only pictures.");
+        var width = rows.Max(r => r.Length);
+        var (bytes, replaced) = WinTools.Worker.Common.XlsxWriter.Build([.. rows.Select(r => r.Length == width ? r : [.. r, .. Enumerable.Repeat("", width - r.Length)])],
+            WinTools.Worker.Common.XlsxWriter.SheetName(Path.GetFileNameWithoutExtension(path)));
+        var notices = new List<JobFact>();
+        if (doc.PageCount > pages) notices.Add(new("Pages", $"The first {pages} of {doc.PageCount}", Notice: true));
+        if (replaced > 0) notices.Add(new("Changed", $"{replaced} characters Excel cannot hold were replaced", Notice: true));
+        return CommitFile(request, path, bytes, PdfRenderCapabilities.Candidates(request.CapabilityId, path, request.OutputDirectory),
+            check: b =>
+            {
+                try
+                {
+                    using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(b), System.IO.Compression.ZipArchiveMode.Read);
+                    if (zip.GetEntry("xl/workbook.xml") is null) throw new RenderFailure(ErrorCode.OutputValidationFailed, "The workbook did not check out; nothing was saved.");
+                }
+                catch (InvalidDataException) { throw new RenderFailure(ErrorCode.OutputValidationFailed, "The workbook did not check out; nothing was saved."); }
+            },
+            notices);
+    }
+
+    /// <summary>The most rows one workbook gets from a PDF.</summary>
+    private const int MaxExcelRows = 200_000;
 
     // ---- PDF to text ----
 
