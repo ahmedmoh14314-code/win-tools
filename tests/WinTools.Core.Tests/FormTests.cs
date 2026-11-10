@@ -98,7 +98,7 @@ public sealed class FormTests
     {
         var resolver = CapabilityResolver.For(null);
         var withForms = resolver.Catalog.Where(c => c.Dialog == DialogKinds.Form).ToArray();
-        Assert.Equal(5, withForms.Length);
+        Assert.Equal(6, withForms.Length);
         foreach (var c in withForms)
         {
             Assert.EndsWith("…", c.Label, StringComparison.Ordinal);
@@ -136,5 +136,32 @@ public sealed class FormTests
         var c = Forms.Check(id, texts);
         Assert.Null(c.Answer);
         return (c.ProblemKey, c.Field);
+    }
+
+    [Fact]
+    public void A_watermark_text_is_one_line_of_any_script_escaped_in_the_answer_and_read_back_only_in_that_spelling()
+    {
+        var check = Forms.Check(PdfRenderCapabilities.WatermarkId, ["  سري; =draft  ", "30"]);
+        Assert.Equal("text=%D8%B3%D8%B1%D9%8A%3B%20%3Ddraft;opacity=30", check.Answer);
+        var read = Forms.Read(PdfRenderCapabilities.WatermarkId, check.Answer)!;
+        Assert.Equal("سري; =draft", read.Text(Forms.WatermarkText));
+        Assert.Equal(30, read.Get(Forms.WatermarkOpacity));
+        Assert.Null(Forms.Read(PdfRenderCapabilities.WatermarkId, "text=سري;opacity=30")); // not the canonical spelling
+        Assert.Null(Forms.Read(PdfRenderCapabilities.WatermarkId, "text=a%3Bb;opacity=30;x=1"));
+    }
+
+    [Theory]
+    [InlineData("a\u202Eb", "form.badText")] // a direction override would show something else than was typed
+    [InlineData("line\nbreak", "form.badText")]
+    [InlineData("", "form.required")]
+    public void A_watermark_text_that_is_not_plain_is_refused(string text, string problem) =>
+        Assert.Equal(problem, Forms.Check(PdfRenderCapabilities.WatermarkId, [text, "30"]).ProblemKey);
+
+    [Fact]
+    public void A_watermark_text_or_opacity_out_of_bounds_is_refused()
+    {
+        Assert.Equal("form.range", Forms.Check(PdfRenderCapabilities.WatermarkId, [new string('x', 61), "30"]).ProblemKey);
+        Assert.Equal("form.range", Forms.Check(PdfRenderCapabilities.WatermarkId, ["draft", "4"]).ProblemKey);
+        Assert.Equal("form.range", Forms.Check(PdfRenderCapabilities.WatermarkId, ["draft", "101"]).ProblemKey);
     }
 }

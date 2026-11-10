@@ -37,7 +37,15 @@ internal static class PdfRenderJobs
         var id = request.Id;
         if (id is not { Length: > 0 and <= 64 } || id.Any(c => !char.IsAsciiLetterOrDigit(c)))
             return JobResult.Fail("invalid", ErrorCode.InvalidRequest, "Request id must be 1-64 ASCII letters or digits.");
-        if (request.Parameters is { Count: > 0 }) return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters.");
+        FormValues? form = null;
+        if (request.CapabilityId == PdfRenderCapabilities.WatermarkId)
+        {
+            // The form's answer, read again here the way the window and the host read it, and nothing else.
+            if (request.Parameters is not { Count: 1 } p || !p.TryGetValue(DialogParameters.Name, out var answer) || Forms.Read(request.CapabilityId, answer) is not { } read)
+                return JobResult.Fail(id, ErrorCode.InvalidRequest, "Watermark needs its text and opacity, and nothing else.");
+            form = read;
+        }
+        else if (request.Parameters is { Count: > 0 }) return JobResult.Fail(id, ErrorCode.InvalidRequest, "This command takes no parameters.");
         if (!Runs(request.CapabilityId)) return JobResult.Fail(id, ErrorCode.UnsupportedOperation, "This worker does not run that command.");
         if (request.Inputs.Count == 0 || !request.Inputs.All(PathPolicy.IsSupported) || request.Inputs.Any(Path.EndsInDirectorySeparator))
             return JobResult.Fail(id, ErrorCode.InvalidRequest, "Every input must be a supported file path.");
@@ -52,6 +60,9 @@ internal static class PdfRenderJobs
             return images ? ImagesToPdf(request)
                 : request.CapabilityId == PdfRenderCapabilities.ThumbnailsId ? Thumbnails(request)
                 : request.CapabilityId == PdfRenderCapabilities.ToPowerPointId ? ToPowerPoint(request)
+                : request.CapabilityId == PdfRenderCapabilities.WatermarkId ? Watermark(request, form!)
+                : request.CapabilityId == PdfRenderCapabilities.PageNumbersId ? PageNumbers(request)
+                : request.CapabilityId == PdfRenderCapabilities.CropMarginsId ? CropMargins(request)
                 : PdfRenderCapabilities.PageFormatOf(request.CapabilityId) is { } format ? ToImages(request, format)
                 : ToText(request, markdown: request.CapabilityId == PdfRenderCapabilities.ToMarkdownId);
         }
@@ -231,6 +242,103 @@ internal static class PdfRenderJobs
             }
         }
         catch (InvalidDataException) { throw new RenderFailure(ErrorCode.OutputValidationFailed, "The deck did not check out; nothing was saved."); }
+    }
+
+    // ---- Watermark, page numbers, crop margins ----
+
+    /// <summary>
+    /// The form's text, drawn by Windows (any script) as a grey picture at the asked opacity, across the middle of every
+    /// page along its shown diagonal, about two thirds of the diagonal long.
+    /// </summary>
+    private static JobResult Watermark(JobRequest request, FormValues form)
+    {
+        var text = form.Text(Forms.WatermarkText)!;
+        var (bgra, w, h) = TextPicture.Draw(text, (int)form.Get(Forms.WatermarkOpacity)!.Value);
+        return EditPages(request, (doc, i) => doc.StampImage(i, bgra, w, h, frame =>
+        {
+            var (sw, sh) = frame.Shown;
+            var diagonal = Math.Sqrt((double)sw * sw + (double)sh * sh);
+            var width = Math.Min(diagonal * 0.66, diagonal * 0.9 * w / Math.Max(w, h * 4.0)); // a short word does not grow tall
+            return (sw / 2.0, sh / 2.0, width, Math.Atan2(sh, sw) * 180 / Math.PI);
+        }));
+    }
+
+    /// <summary>"1", "2"… centred at the bottom of every page as it is shown, in Helvetica, 10 pt, dark grey.</summary>
+    private static JobResult PageNumbers(JobRequest request) =>
+        EditPages(request, (doc, i) => doc.StampText(i, (i + 1).ToString(CultureInfo.InvariantCulture), 10, frame => (frame.Shown.Width / 2.0, 24), (64, 64, 64)));
+
+    /// <summary>
+    /// Every page's crop box set to what is drawn on it plus a small border: the page is drawn small, the box of what is not
+    /// white is found and turned back into the page's own coordinates. A blank page keeps its box; a PDF with no white
+    /// margin anywhere is "nothing to crop".
+    /// </summary>
+    private static JobResult CropMargins(JobRequest request)
+    {
+        var any = false;
+        var result = EditPages(request, (doc, i) =>
+        {
+            if (doc.Frame(i) is not { } frame) return false;
+            var (sw, sh) = frame.Shown;
+            var scale = Math.Min(1.0, 1600 / Math.Max(1, Math.Max(sw, sh))); // about 1 pixel a point, at most 1600 pixels
+            var (pw, ph) = (Math.Max(1, (int)(sw * scale)), Math.Max(1, (int)(sh * scale)));
+            var pixels = doc.Render(i, pw, ph);
+            if (pixels is null) return false;
+            if (InkBounds(pixels, pw, ph) is not { } ink) return true; // blank: left as it is
+            const double Border = 8; // points
+            double u0 = Math.Max(0, ink.Left / scale - Border), u1 = Math.Min(sw, (ink.Right + 1) / scale + Border);
+            double v0 = Math.Max(0, (ph - ink.Bottom - 1) / scale - Border), v1 = Math.Min(sh, (ph - ink.Top) / scale + Border);
+            if (u1 - u0 > sw - 2 && v1 - v0 > sh - 2) return true; // nothing worth cropping on this page
+            var (x0, y0) = frame.FromShown(u0, v0);
+            var (x1, y1) = frame.FromShown(u1, v1);
+            any = true;
+            return doc.SetCropBox(i, (float)Math.Min(x0, x1), (float)Math.Min(y0, y1), (float)Math.Max(x0, x1), (float)Math.Max(y0, y1));
+        }, skipWhenUnchanged: () => !any);
+        return result;
+    }
+
+    /// <summary>The pixel box of what is not near-white on a page drawn on white (BGRA rows), or null for a blank page.</summary>
+    internal static (int Left, int Top, int Right, int Bottom)? InkBounds(byte[] bgra, int width, int height)
+    {
+        int left = width, top = height, right = -1, bottom = -1;
+        for (var y = 0; y < height; y++)
+        {
+            var row = y * width * 4;
+            for (var x = 0; x < width; x++)
+            {
+                var p = row + x * 4;
+                if (bgra[p] >= 245 && bgra[p + 1] >= 245 && bgra[p + 2] >= 245) continue;
+                if (x < left) left = x;
+                if (x > right) right = x;
+                if (y < top) top = y;
+                bottom = y;
+            }
+        }
+        return right < 0 ? null : (left, top, right, bottom);
+    }
+
+    /// <summary>
+    /// Opens the PDF, changes every page with <paramref name="change"/> (up to the module's page limit; a longer PDF is
+    /// refused rather than half changed), saves it whole, opens what was saved again to check it has every page, and keeps
+    /// it under the command's name.
+    /// </summary>
+    private static JobResult EditPages(JobRequest request, Func<PdfDocument, int, bool> change, Func<bool>? skipWhenUnchanged = null)
+    {
+        var path = request.Inputs[0];
+        using var doc = OpenPdf(path);
+        if (doc.PageCount > PdfRenderCapabilities.MaxPages)
+            throw new RenderFailure(ErrorCode.LimitExceeded, $"This takes PDFs of up to {PdfRenderCapabilities.MaxPages} pages; this one has {doc.PageCount:N0}.");
+        for (var i = 0; i < doc.PageCount; i++)
+            if (!change(doc, i)) throw new RenderFailure(ErrorCode.DecodeFailed, $"Page {i + 1} could not be changed.");
+        if (skipWhenUnchanged?.Invoke() == true) throw new RenderFailure(ErrorCode.NothingToDo, "There is no white margin to crop.");
+        var bytes = doc.Save() ?? throw new RenderFailure(ErrorCode.EncodeFailed, "The changed PDF could not be written.");
+        var pages = doc.PageCount;
+        return CommitFile(request, path, bytes, PdfRenderCapabilities.Candidates(request.CapabilityId, path, request.OutputDirectory),
+            check: b =>
+            {
+                using var again = PdfDocument.Open(b, out _) ?? throw new RenderFailure(ErrorCode.OutputValidationFailed, "The changed PDF does not open; nothing was saved.");
+                if (again.PageCount != pages) throw new RenderFailure(ErrorCode.OutputValidationFailed, "The changed PDF lost pages; nothing was saved.");
+            },
+            [new("Pages", pages.ToString("N0", CultureInfo.InvariantCulture), Notice: true)]);
     }
 
     // ---- PDF to text ----

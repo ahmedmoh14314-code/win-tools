@@ -35,7 +35,9 @@ public partial class FormWindow : Window
                 Text = label, Foreground = (System.Windows.Media.Brush)FindResource("TextSecondary"), FontFamily = new("Segoe UI"), FontSize = 12,
                 Margin = new(0, _boxes.Count == 0 ? 0 : 10, 0, 4),
             });
-            var box = new TextBox { Text = f.Default, FontSize = 14, Padding = new(6, 4, 6, 4), MaxLength = 12, FlowDirection = FlowDirection.LeftToRight, ToolTip = UiText.T(f.LabelKey + ".tip") };
+            var text = f.Kind == FormFieldKind.Text; // a line of text keeps the window's direction; numbers read left to right
+            var box = new TextBox { Text = f.Default, FontSize = 14, Padding = new(6, 4, 6, 4), MaxLength = text ? (int)f.Max : 12, ToolTip = UiText.T(f.LabelKey + ".tip") };
+            if (!text) box.FlowDirection = FlowDirection.LeftToRight;
             System.Windows.Automation.AutomationProperties.SetName(box, label);
             System.Windows.Automation.AutomationProperties.SetHelpText(box, UiText.T(f.LabelKey + ".tip"));
             box.TextChanged += (_, _) => Refresh();

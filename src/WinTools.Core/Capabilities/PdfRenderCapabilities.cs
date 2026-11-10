@@ -23,6 +23,9 @@ public static class PdfRenderCapabilities
     /// <summary>A PDF as a PowerPoint deck: each page a slide holding the page's picture (not editable text).</summary>
     public const string ToPowerPointId = "pdfrender.to-powerpoint";
 
+    /// <summary>Changes to every page, drawn by PDFium into a new PDF: a watermark, page numbers, white margins cropped.</summary>
+    public const string WatermarkId = "pdfrender.watermark", PageNumbersId = "pdfrender.page-numbers", CropMarginsId = "pdfrender.crop-margins";
+
     /// <summary>
     /// The page thumbnails Organize pages shows (ADR-0029): not a command of the ring, a job the host runs itself, into an
     /// empty folder of its own. Pages are drawn <see cref="ThumbnailSide"/> pixels on their longer side.
@@ -49,7 +52,7 @@ public static class PdfRenderCapabilities
     /// <summary>The largest PDF read (it is read whole: PDFium needs random access).</summary>
     public const long MaxPdfBytes = 512L << 20;
 
-    public static IReadOnlyList<CapabilityCategory> Categories { get; } = [new("convert", "Convert", "convert", 10)];
+    public static IReadOnlyList<CapabilityCategory> Categories { get; } = [new("convert", "Convert", "convert", 10), new("tools", "Tools", "tools", 11)];
 
     private static readonly IReadOnlySet<string> PdfOnly = new HashSet<string>(StringComparer.Ordinal) { FileKinds.Pdf.Id };
     private static readonly IReadOnlySet<string> Images = FileKinds.All.Select(k => k.Id).ToHashSet(StringComparer.Ordinal);
@@ -66,6 +69,12 @@ public static class PdfRenderCapabilities
             Feedback: new("Reading the text of", "read the text of", "Saved as Markdown", "The PDF has no text (a scan has only pictures)", "PDF", "PDFs")),
         new(ToPowerPointId, "To PPTX", "convert", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Converting", "convert", "Saved as PowerPoint", "Nothing needed doing", "PDF", "PDFs")),
+        new(WatermarkId, "Watermark…", "tools", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+            Feedback: new("Adding a watermark to", "add a watermark to", "Watermark added", "Nothing needed doing", "PDF", "PDFs"), Dialog: Jobs.DialogKinds.Form),
+        new(PageNumbersId, "Page numbers", "tools", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+            Feedback: new("Numbering", "number", "Pages numbered", "Nothing needed doing", "PDF", "PDFs")),
+        new(CropMarginsId, "Crop margins", "tools", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+            Feedback: new("Cropping", "crop", "Margins cropped", "No white margin to crop", "PDF", "PDFs")),
         new(ImagesToPdfId, "To PDF", "convert", Module, new InputRule(Images, MaxCount: MaxImages), CapabilityShape.Selection, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Making a PDF of", "make a PDF of", "PDF made", "Nothing needed doing", "image", "images")),
     ];
@@ -93,6 +102,9 @@ public static class PdfRenderCapabilities
         ToTextId => OutputNaming.CandidatesWithExtension(source, ".txt", null, outputDirectory),
         ToMarkdownId => OutputNaming.CandidatesWithExtension(source, ".md", null, outputDirectory),
         ToPowerPointId => OutputNaming.CandidatesWithExtension(source, ".pptx", null, outputDirectory),
+        WatermarkId => OutputNaming.CandidatesWithExtension(source, ".pdf", "watermarked", outputDirectory),
+        PageNumbersId => OutputNaming.CandidatesWithExtension(source, ".pdf", "numbered", outputDirectory),
+        CropMarginsId => OutputNaming.CandidatesWithExtension(source, ".pdf", "cropped", outputDirectory),
         ImagesToPdfId => OutputNaming.CandidatesWithExtension(source, ".pdf", null, outputDirectory),
         _ => throw new ArgumentException($"{capabilityId} is not a {Module} command.", nameof(capabilityId)),
     };

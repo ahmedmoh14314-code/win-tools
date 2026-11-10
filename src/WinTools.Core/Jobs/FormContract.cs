@@ -3,8 +3,11 @@ using System.Text;
 
 namespace WinTools.Core.Jobs;
 
-/// <summary>What a form field holds: a time in a file ("1:23.5"), a whole number, or a number of seconds that may be negative.</summary>
-public enum FormFieldKind { Time, Count, Seconds }
+/// <summary>
+/// What a form field holds: a time in a file ("1:23.5"), a whole number, a number of seconds that may be negative, or a
+/// line of text (its bounds are its length).
+/// </summary>
+public enum FormFieldKind { Time, Count, Seconds, Text }
 
 /// <summary>
 /// One field of a command's form: its key in the answer, the <see cref="Localization.UiText"/> key of its label (and of
@@ -22,9 +25,12 @@ public sealed record FormRequest(string Title, string Form, int X, int Y, string
 public sealed record FormResult(string? Answer);
 
 /// <summary>The values a form answered, by field key; an optional field left empty is absent.</summary>
-public sealed record FormValues(IReadOnlyDictionary<string, double> Values)
+public sealed record FormValues(IReadOnlyDictionary<string, double> Values, IReadOnlyDictionary<string, string>? Texts = null)
 {
     public double? Get(string key) => Values.TryGetValue(key, out var v) ? v : null;
+
+    /// <summary>A text field's line, or null.</summary>
+    public string? Text(string key) => Texts is not null && Texts.TryGetValue(key, out var t) ? t : null;
 }
 
 /// <summary>What the typed texts read as: the canonical answer, or the first problem (a UiText key) and its field's index.</summary>
@@ -38,6 +44,7 @@ public sealed record FormCheck(string? Answer, string? ProblemKey = null, int Fi
 public static class Forms
 {
     public const string TrimStart = "start", TrimEnd = "end", SplitParts = "parts", ShiftSeconds = "seconds";
+    public const string WatermarkText = "text", WatermarkOpacity = "opacity";
 
     /// <summary>The longest time a field takes (the media module's longest file).</summary>
     public const double MaxTime = 12 * 3600;
@@ -49,6 +56,11 @@ public static class Forms
         [Capabilities.MediaCapabilities.SplitVideoId] = Split,
         [Capabilities.MediaCapabilities.SplitAudioId] = Split,
         [Capabilities.SubtitleCapabilities.ShiftCustomId] = [new(ShiftSeconds, "form.shift.seconds", FormFieldKind.Seconds, "1.5", -3600, 3600)],
+        [Capabilities.PdfRenderCapabilities.WatermarkId] =
+        [
+            new(WatermarkText, "form.watermark.text", FormFieldKind.Text, "CONFIDENTIAL", 1, 60),
+            new(WatermarkOpacity, "form.watermark.opacity", FormFieldKind.Count, "30", 5, 100),
+        ],
     };
 
     private static IReadOnlyList<FormField> Trim =>
@@ -64,6 +76,7 @@ public static class Forms
     {
         if (For(capabilityId) is not { } fields || texts.Count != fields.Count) return new(null, "form.invalid");
         var values = new Dictionary<string, double>(StringComparer.Ordinal);
+        var lines = new Dictionary<string, string>(StringComparer.Ordinal);
         for (var i = 0; i < fields.Count; i++)
         {
             var f = fields[i];
@@ -72,6 +85,15 @@ public static class Forms
             {
                 if (f.Optional) continue;
                 return new(null, "form.required", i);
+            }
+            if (f.Kind == FormFieldKind.Text)
+            {
+                // One line of printable text: no control or format characters (which could hide or reorder what is shown).
+                if (text.Any(c => char.IsControl(c) || char.GetUnicodeCategory(c) is UnicodeCategory.Format or UnicodeCategory.Surrogate or UnicodeCategory.PrivateUse or UnicodeCategory.OtherNotAssigned))
+                    return new(null, "form.badText", i);
+                if (text.Length < f.Min || text.Length > f.Max) return new(null, "form.range", i);
+                lines[f.Key] = text;
+                continue;
             }
             var value = f.Kind switch
             {
@@ -93,9 +115,10 @@ public static class Forms
         {
             if (answer.Length > 0) answer.Append(';');
             answer.Append(f.Key).Append('=');
-            if (values.TryGetValue(f.Key, out var v)) answer.Append(v.ToString("0.###", CultureInfo.InvariantCulture));
+            if (lines.TryGetValue(f.Key, out var line)) answer.Append(Uri.EscapeDataString(line)); // ";" and "=" never appear raw
+            else if (values.TryGetValue(f.Key, out var v)) answer.Append(v.ToString("0.###", CultureInfo.InvariantCulture));
         }
-        return new(answer.ToString(), Values: new FormValues(values));
+        return new(answer.ToString(), Values: new FormValues(values, lines));
     }
 
     /// <summary>Whether a text holds only what its kind is written with: digits, ':' and '.' for a time, digits for a count, a sign, digits and '.' for seconds.</summary>
@@ -118,7 +141,7 @@ public static class Forms
     /// <summary>An answer read back: exactly the command's keys, in order, each value valid; anything else is null.</summary>
     public static FormValues? Read(string capabilityId, string? answer)
     {
-        if (answer is not { Length: > 0 and <= 200 } || For(capabilityId) is not { } fields) return null;
+        if (answer is not { Length: > 0 and <= 2000 } || For(capabilityId) is not { } fields) return null;
         var parts = answer.Split(';');
         if (parts.Length != fields.Count) return null;
         var texts = new string?[parts.Length];
@@ -126,7 +149,7 @@ public static class Forms
         {
             var eq = parts[i].IndexOf('=', StringComparison.Ordinal);
             if (eq <= 0 || parts[i][..eq] != fields[i].Key) return null;
-            texts[i] = parts[i][(eq + 1)..];
+            texts[i] = fields[i].Kind == FormFieldKind.Text ? Uri.UnescapeDataString(parts[i][(eq + 1)..]) : parts[i][(eq + 1)..];
         }
         var check = Check(capabilityId, texts);
         return check.Answer == answer ? check.Values : null; // only the canonical form: no second spelling of one answer

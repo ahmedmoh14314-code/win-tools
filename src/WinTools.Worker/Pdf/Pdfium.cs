@@ -65,7 +65,7 @@ internal enum PdfOpenFailure { None, Password, Damaged }
 /// One PDF opened from memory (the bytes are pinned for as long as it is open). Pages are read one at a time and closed
 /// at once, so memory follows one page, not the document.
 /// </summary>
-internal sealed unsafe class PdfDocument : IDisposable
+internal sealed unsafe partial class PdfDocument : IDisposable
 {
     private readonly GCHandle _pin;
     private nint _doc;

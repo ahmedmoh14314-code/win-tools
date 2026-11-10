@@ -338,4 +338,89 @@ public sealed class PdfRenderTests : IDisposable
         Assert.Equal((10058400 - cy) / 2, y);
         Assert.Equal(612.0 / 792, (double)cy / cx, 3);
     }
+
+    // ---- Watermark, page numbers, crop margins ----
+
+    private static JobRequest WithForm(string capability, string pdf, string answer) =>
+        new(Guid.NewGuid().ToString("N"), capability, [pdf], Parameters: new Dictionary<string, string> { [DialogParameters.Name] = answer });
+
+    private static double Darkness(string pdf, int page)
+    {
+        using var doc = PdfDocument.Open(File.ReadAllBytes(pdf), out _)!;
+        var pixels = doc.Render(page, 200, 260)!;
+        double sum = 0;
+        for (var i = 0; i < pixels.Length; i += 4) sum += 255 - pixels[i + 1];
+        return sum / (pixels.Length / 4);
+    }
+
+    [Fact]
+    public void A_watermark_in_any_script_is_drawn_on_every_page_and_the_original_is_untouched()
+    {
+        var pdf = _dir.Write("report.pdf", TextPdf(["one"], ["two"]));
+        var before = Hash(pdf);
+        var r = RunBelieved(WithForm(PdfRenderCapabilities.WatermarkId, pdf, Forms.Check(PdfRenderCapabilities.WatermarkId, ["سري للغاية", "40"]).Answer!));
+        Assert.Equal("report (watermarked).pdf", Path.GetFileName(r.OutputPath));
+        Assert.Equal(before, Hash(pdf));
+        Assert.True(Darkness(r.OutputPath!, 0) > Darkness(pdf, 0) + 2);
+        Assert.True(Darkness(r.OutputPath!, 1) > Darkness(pdf, 1) + 2);
+    }
+
+    [Fact]
+    public void A_watermark_without_its_form_or_with_another_spelling_of_it_is_refused()
+    {
+        var pdf = _dir.Write("report.pdf", TextPdf(["one"]));
+        Assert.Equal(ErrorCode.InvalidRequest, PdfRenderJobs.Run(Request(PdfRenderCapabilities.WatermarkId, pdf)).Error);
+        Assert.Equal(ErrorCode.InvalidRequest, PdfRenderJobs.Run(WithForm(PdfRenderCapabilities.WatermarkId, pdf, "text=draft;opacity=030")).Error);
+        Assert.Equal(["report.pdf"], Names());
+    }
+
+    [Fact]
+    public void Pages_are_numbered_at_the_bottom_and_the_numbers_are_text()
+    {
+        var pdf = _dir.Write("report.pdf", TextPdf(["one"], ["two"], ["three"]));
+        var r = RunBelieved(Request(PdfRenderCapabilities.PageNumbersId, pdf));
+        Assert.Equal("report (numbered).pdf", Path.GetFileName(r.OutputPath));
+        using var doc = PdfDocument.Open(File.ReadAllBytes(r.OutputPath!), out _)!;
+        Assert.Equal(3, doc.PageCount);
+        Assert.Contains("2", doc.Text(1, 1000), StringComparison.Ordinal);
+        Assert.Contains("3", doc.Text(2, 1000), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void White_margins_are_cropped_to_what_is_drawn_and_a_blank_pdf_has_nothing_to_crop()
+    {
+        var pdf = _dir.Write("report.pdf", TextPdf(["Hello page 1"]));
+        var r = RunBelieved(Request(PdfRenderCapabilities.CropMarginsId, pdf));
+        Assert.Equal("report (cropped).pdf", Path.GetFileName(r.OutputPath));
+        using (var doc = PdfDocument.Open(File.ReadAllBytes(r.OutputPath!), out _)!)
+        {
+            var (w, h) = doc.PageSize(0)!.Value;
+            Assert.True(w < 400 && h < 200, $"{w} x {h}");
+            Assert.Contains("Hello page 1", doc.Text(0, 1000), StringComparison.Ordinal);
+        }
+        var blank = _dir.Write("blank.pdf", TextPdf([" "]));
+        Assert.Equal(ErrorCode.NothingToDo, PdfRenderJobs.Run(Request(PdfRenderCapabilities.CropMarginsId, blank)).Error);
+    }
+
+    [Theory]
+    [InlineData(0, 10, 20, 10, 20)]
+    [InlineData(90, 10, 20, 580, 10)] // a page turned right: its shown bottom is the content's right edge
+    [InlineData(180, 10, 20, 590, 780)]
+    [InlineData(270, 10, 20, 20, 790)]
+    public void A_shown_point_is_found_on_a_turned_page(int rotation, double u, double v, double x, double y)
+    {
+        var frame = new PageFrame(0, 0, 600, 800, rotation);
+        Assert.Equal((x, y), frame.FromShown(u, v));
+    }
+
+    [Fact]
+    public void Ink_bounds_find_what_is_not_white()
+    {
+        var px = new byte[10 * 8 * 4];
+        Array.Fill(px, (byte)255);
+        Assert.Null(PdfRenderJobs.InkBounds(px, 10, 8));
+        px[(3 * 10 + 2) * 4] = 0;
+        px[(5 * 10 + 7) * 4 + 1] = 100;
+        Assert.Equal((2, 3, 7, 5), PdfRenderJobs.InkBounds(px, 10, 8));
+    }
 }
