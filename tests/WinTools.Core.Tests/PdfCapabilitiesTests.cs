@@ -35,7 +35,7 @@ public sealed class PdfCapabilitiesTests
         var menu = RadialMenu.Build(Resolver, [@"C:\p\a.pdf"]);
         // Protect since V2 PR 2.2; Tools first and Actions since the wheel PR; Convert, and the rotations in Organize, since PDFium (ADR-0029).
         Assert.Equal(["Convert", "Tools", "Organize", "Optimize", "Protect", "Actions"], menu.Select(g => g.Label));
-        Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD", "To PowerPoint"], menu[0].Commands.Select(c => c.Label));
+        Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD", "To PPTX"], menu[0].Commands.Select(c => c.Label));
         Assert.Equal(["Edit pages…", "Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], menu[2].Commands.Select(c => c.Label));
         Assert.Equal(["Smaller (lossless)", "Fast web view", "Repair"], menu[3].Commands.Select(c => c.Label));
         Assert.Equal(["PDF info", "SHA-256", "Folder path"], menu[1].Commands.Select(c => c.Label));

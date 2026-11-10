@@ -64,7 +64,7 @@ public static class PdfRenderCapabilities
             Feedback: new("Reading the text of", "read the text of", "Text saved", "The PDF has no text (a scan has only pictures)", "PDF", "PDFs")),
         new(ToMarkdownId, "To MD", "convert", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Reading the text of", "read the text of", "Saved as Markdown", "The PDF has no text (a scan has only pictures)", "PDF", "PDFs")),
-        new(ToPowerPointId, "To PowerPoint", "convert", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+        new(ToPowerPointId, "To PPTX", "convert", Module, new InputRule(PdfOnly), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Converting", "convert", "Saved as PowerPoint", "Nothing needed doing", "PDF", "PDFs")),
         new(ImagesToPdfId, "To PDF", "convert", Module, new InputRule(Images, MaxCount: MaxImages), CapabilityShape.Selection, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Making a PDF of", "make a PDF of", "PDF made", "Nothing needed doing", "image", "images")),
