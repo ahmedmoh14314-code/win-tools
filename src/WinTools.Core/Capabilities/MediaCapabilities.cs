@@ -22,7 +22,7 @@ public static class MediaCapabilities
     public const string Module = "media";
 
     public const string VideoInfoId = "media.video-info", AudioInfoId = "media.audio-info";
-    public const string CompressVideoId = "media.compress", CompressVideo720Id = "media.compress-720", CompressAudioId = "media.compress-audio";
+    public const string CompressVideoId = "media.compress", CompressVideo720Id = "media.compress-720", CompressVideoHighId = "media.compress-high", CompressAudioId = "media.compress-audio";
     public const string Speed2xId = "media.speed-2x", SpeedHalfId = "media.speed-half", JoinId = "media.join";
     public const string ExtractAudioId = "media.extract-audio", MuteId = "media.mute", FramesId = "media.frames";
     public const string NormalizeId = "media.normalize", MonoId = "media.mono", StereoId = "media.stereo";
@@ -101,10 +101,14 @@ public static class MediaCapabilities
     [
         .. VideoTargets.Select(t => Convert(t, video: true)),
         .. AudioTargets.Select(t => Convert(t, video: false)),
-        new(CompressVideoId, "Smaller", "compress", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
-            Feedback: new("Compressing", "compress", "Compressed", "Already small: a smaller copy would not save enough", "video", "videos", Savings: true)),
-        new(CompressVideo720Id, "720p, smaller", "compress", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+        // Three presets, smallest first: 720p at about a third of the bit rate, the same size at half, and at 70% (a
+        // copy that still has to save 10% to count, so a video already near that rate is left as it is).
+        new(CompressVideo720Id, "Smaller file", "compress", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Compressing", "compress", "Compressed to 720p", "Already small: a smaller copy would not save enough", "video", "videos", Savings: true)),
+        new(CompressVideoId, "Balanced", "compress", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+            Feedback: new("Compressing", "compress", "Compressed", "Already small: a smaller copy would not save enough", "video", "videos", Savings: true)),
+        new(CompressVideoHighId, "Higher quality", "compress", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
+            Feedback: new("Compressing", "compress", "Compressed", "Already small: a smaller copy would not save enough", "video", "videos", Savings: true)),
         new(CompressAudioId, "Smaller", "compress", Module, new InputRule(Audio), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
             Feedback: new("Compressing", "compress", "Compressed", "Already small: a smaller copy would not save enough", "audio file", "audio files", Savings: true)),
         new(TrimVideoId, "Trim…", "edit", Module, new InputRule(MovingVideo), CapabilityShape.PerFile, CapabilityOutput.File, LongRunning: true,
@@ -157,7 +161,7 @@ public static class MediaCapabilities
             JoinId => ".mp4",
             _ when TargetOf(capabilityId) is { } t => t.Extension,
             // A re-encoded video is H.264 in MP4, which every player opens; WebM stays WebM (VP9).
-            CompressVideoId or CompressVideo720Id or Speed2xId or SpeedHalfId => source == FileKinds.WebM ? ".webm" : ".mp4",
+            CompressVideoId or CompressVideo720Id or CompressVideoHighId or Speed2xId or SpeedHalfId => source == FileKinds.WebM ? ".webm" : ".mp4",
             // A smaller copy of a lossless file is AAC in M4A; a lossy one keeps its format at a lower rate.
             CompressAudioId when source == FileKinds.Wav || source == FileKinds.Flac || source == FileKinds.Aiff => ".m4a",
             // Otherwise the source's own container, under its usual name: the audio removed, a trimmed, quieter or mono copy.
@@ -182,6 +186,7 @@ public static class MediaCapabilities
     public static string? NameSuffix(string capabilityId) => capabilityId switch
     {
         CompressVideoId or CompressAudioId => "compressed",
+        CompressVideoHighId => "compressed, high quality",
         CompressVideo720Id => "720p",
         Speed2xId => "2x",
         SpeedHalfId => "half speed",

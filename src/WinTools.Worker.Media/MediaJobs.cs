@@ -250,7 +250,7 @@ internal static class MediaJobs
         var target = MediaCapabilities.TargetOf(id);
         var isVideoKind = FileKinds.ByExtensionOf(path) is { Family: FileFamily.Video };
         var videoOut = target is not null ? MediaCapabilities.VideoTargets.Contains(target)
-            : id is MediaCapabilities.CompressVideoId or MediaCapabilities.CompressVideo720Id or MediaCapabilities.Speed2xId or MediaCapabilities.SpeedHalfId or MediaCapabilities.MuteId
+            : id is MediaCapabilities.CompressVideoId or MediaCapabilities.CompressVideo720Id or MediaCapabilities.CompressVideoHighId or MediaCapabilities.Speed2xId or MediaCapabilities.SpeedHalfId or MediaCapabilities.MuteId
                 or MediaCapabilities.TrimVideoId || MediaCapabilities.AspectOf(id) is not null;
         var p = Source(path, needsVideo: videoOut || isVideoKind && id != MediaCapabilities.ExtractAudioId,
             needsAudio: !videoOut && !(isVideoKind && id == MediaCapabilities.MuteId));
@@ -305,10 +305,11 @@ internal static class MediaJobs
                 // AAC already: copied as it is; otherwise encoded to AAC.
                 variants.Add(p.Audio!.Codec == "aac" ? ["-vn", "-map", "0:a:0", "-c:a", "copy"] : ["-vn", "-map", "0:a:0", "-c:a", "aac", "-b:a", "192k"]);
                 break;
-            case MediaCapabilities.CompressVideoId or MediaCapabilities.CompressVideo720Id:
+            case MediaCapabilities.CompressVideoId or MediaCapabilities.CompressVideo720Id or MediaCapabilities.CompressVideoHighId:
             {
                 var to720 = id == MediaCapabilities.CompressVideo720Id && p.Video!.Height > 720;
-                var target2 = (long)Math.Max(250_000, (srcVideoBits > 0 ? srcVideoBits : 4_000_000) * (to720 ? 0.35 : 0.5));
+                var share = id == MediaCapabilities.CompressVideo720Id ? 0.35 : id == MediaCapabilities.CompressVideoHighId ? 0.7 : 0.5;
+                var target2 = (long)Math.Max(250_000, (srcVideoBits > 0 ? srcVideoBits : 4_000_000) * share);
                 if (to720) target2 = Math.Min(target2, 2_500_000);
                 var filter = to720 ? $"scale=-2:720,{EvenSize}" : EvenSize;
                 foreach (var codecs in VideoCodecs(ext, target2))

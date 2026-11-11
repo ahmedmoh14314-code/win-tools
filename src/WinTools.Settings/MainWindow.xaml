@@ -60,7 +60,7 @@
               <Button x:Name="HomeSettings" Content="{l:T home.openSettings}" Padding="18,7" />
             </StackPanel>
             <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T home.worksWith}" Margin="2,30,0,10" />
-            <WrapPanel x:Name="Families" />
+            <StackPanel x:Name="Families" />
           </StackPanel>
         </ScrollViewer>
 

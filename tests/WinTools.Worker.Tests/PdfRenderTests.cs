@@ -271,9 +271,9 @@ public sealed class PdfRenderTests : IDisposable
     {
         var resolver = CapabilityResolver.For(null);
         var menu = RadialMenu.Build(resolver, [@"C:\p\a.pdf"]);
-        Assert.Equal(["Convert", "Tools", "Organize", "Optimize", "Protect", "Actions"], menu.Select(g => g.Label));
-        Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD", "To PPTX", "To XLSX"], menu[0].Commands.Select(c => c.Label));
-        Assert.Equal(["Edit pages…", "Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], menu.Single(g => g.Label == "Organize").Commands.Select(c => c.Label));
+        Assert.Equal(["Convert", "Tools", "Pages", "Optimize", "Protect", "Actions"], menu.Select(g => g.Label));
+        Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD", "PPTX (images)", "To XLSX"], menu[0].Commands.Select(c => c.Label));
+        Assert.Equal(["Edit pages…", "Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], menu.Single(g => g.Label == "Pages").Commands.Select(c => c.Label));
         Assert.Contains("To PDF", RadialMenu.Build(resolver, [@"C:\p\a.jpg", @"C:\p\b.png"])[0].Commands.Select(c => c.Label));
     }
 
@@ -391,6 +391,40 @@ public sealed class PdfRenderTests : IDisposable
         var rows = PdfTables.Rows(glyphs, rules);
         Assert.Equal(["المدينة", "الكمية"], rows[0]);
         Assert.Equal(["عمّان", "150"], rows[1]);
+    }
+
+    [Fact]
+    public void A_table_without_borders_below_a_ruled_one_keeps_its_columns()
+    {
+        // Review, 2026-11-11: on a page with one bordered table, every line outside it became one cell ("Name الاسم Hours").
+        List<Glyph> glyphs =
+        [
+            .. Line(Word("Item", 10, 700), Word("Qty", 100, 700)),
+            .. Line(Word("Name", 10, 640), Word("الاسم", 100, 640, rtl: true), Word("Hours", 200, 640)),
+            .. Line(Word("Omar", 10, 620), Word("عمر", 100, 620, rtl: true), Word("12", 200, 620)),
+        ];
+        List<Rule> rules = [new(5, 690, 715), new(96, 690, 715), new(150, 690, 715)];
+        var rows = PdfTables.Rows(glyphs, rules);
+        Assert.Equal(["Item", "Qty"], rows[0]);
+        Assert.Equal(["Name", "الاسم", "Hours"], rows[1]);
+        Assert.Equal(["Omar", "عمر", "12"], rows[2]);
+    }
+
+    [Fact]
+    public void Each_cell_reads_in_its_own_direction_on_a_mixed_page()
+    {
+        // Found in a real table printed by Excel (review, 2026-11-11): on a mostly English page, "أحمد علي" read "علي أحمد",
+        // and an Arabic sentence read from its last word. An Arabic phrase is drawn with its first word on the right.
+        List<Glyph> glyphs =
+        [
+            .. Line(Word("Name", 10, 700), Word("Staff", 46, 700), Word("Hours", 200, 700)),
+            .. Line(Word("Ahmed", 10, 680), Word("Ali", 46, 680), Word("علي", 120, 680, rtl: true), Word("أحمد", 142, 680, rtl: true), Word("38", 200, 680)),
+            .. Line(Word("Total", 10, 660), Word("hours", 46, 660), Word("for", 82, 660), Word("all", 106, 660), Word("staff", 130, 660), Word("now", 166, 660)),
+            .. Line(Word("2026", 10, 640), Word("الربعي", 40, 640, rtl: true), Word("التقرير", 82, 640, rtl: true)),
+        ];
+        var rows = PdfTables.Rows(glyphs);
+        Assert.Contains(rows, r => r.Contains("Ahmed Ali أحمد علي") || (r.Contains("Ahmed Ali") && r.Contains("أحمد علي")));
+        Assert.Contains(rows, r => r.Any(c => c == "التقرير الربعي 2026"));
     }
 
     [Fact]

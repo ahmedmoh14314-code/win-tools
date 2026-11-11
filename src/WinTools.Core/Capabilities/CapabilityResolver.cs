@@ -25,6 +25,16 @@ public sealed class CapabilityResolver(IReadOnlyList<CapabilityDescriptor> catal
                 .Where(c => c.Requires is null || installed?.Contains(c.Requires) == true)],
             [.. ImageCapabilities.Categories, .. PdfRenderCapabilities.Categories, .. PdfCapabilities.Categories, .. ArchiveCapabilities.Categories, .. SubtitleCapabilities.Categories, .. DocumentCapabilities.Categories, .. OfficeCapabilities.Categories, .. MediaCapabilities.Categories, .. FilesCapabilities.Categories]);
 
+    /// <summary>
+    /// What the public release offers (<see cref="PublicRelease"/>): images, PDF and Office, and video. The wheel, Home and
+    /// Features use this one; <see cref="For"/> keeps every command for tests and later versions.
+    /// </summary>
+    public static CapabilityResolver Public(string? customResizeId, IReadOnlySet<string>? installed = null)
+    {
+        var all = For(customResizeId, installed);
+        return new([.. all.Catalog.Where(c => PublicRelease.Offers(c, customResizeId))], all.Categories);
+    }
+
     /// <summary>The image module alone (V1's menu, which MenuGoldenTests pins).</summary>
     public static CapabilityResolver Images(string? customResizeId) => new(ImageCapabilities.Catalog(customResizeId), ImageCapabilities.Categories);
 
