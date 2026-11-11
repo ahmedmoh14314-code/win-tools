@@ -18,10 +18,15 @@ public sealed partial class UiSurfaceTests
 {
     public static TheoryData<uint> Dpis => [96, 120, 144, 192];
 
-    private static IReadOnlyList<MenuGroup> MenuFor(params string[] names)
+    private static IReadOnlyList<MenuGroup> MenuFor(CapabilityResolver resolver, params string[] names) =>
+        RadialMenu.Build(resolver, names.Select(n => $@"C:\images\{n}").ToArray());
+
+    /// <summary>Every command there is, and the public release's wheel with every program it can use found.</summary>
+    private static IEnumerable<CapabilityResolver> Resolvers()
     {
-        var resolver = CapabilityResolver.For(new AppSettings().CustomResizeId());
-        return RadialMenu.Build(resolver, names.Select(n => $@"C:\images\{n}").ToArray());
+        yield return CapabilityResolver.For(new AppSettings().CustomResizeId());
+        yield return CapabilityResolver.Public(new AppSettings().CustomResizeId(),
+            ExternalPrograms.Set("soffice", [ExternalPrograms.Word, ExternalPrograms.Excel, ExternalPrograms.PowerPoint, ExternalPrograms.Edge]));
     }
 
     /// <summary>Every ring the menu can show, for single files of each format and mixed selections.</summary>
@@ -30,9 +35,10 @@ public sealed partial class UiSurfaceTests
         // With General Files (V2 PR 1.4): a file no module reads (one category) and a folder.
         // Every module since V2: PDF, archives, subtitles, documents, video and audio, and mixed video.
         foreach (var names in new[] { new[] { "a.png" }, ["a.jpg"], ["a.webp"], ["a.bmp"], ["a.tif"], ["a.heic"], ["a.avif"], ["a.heic", "b.jpg"], ["a.png", "b.jpg"], ["a.png", "b.jpg", "c.webp"], ["notes.txt"], ["holiday\\"],
-            ["a.pdf"], ["a.pdf", "b.pdf"], ["a.zip"], ["a.tar.gz"], ["a.gz"], ["a.srt"], ["a.docx"], ["a.mp4"], ["a.gif"], ["a.mp3"], ["a.wav"], ["a.mp4", "b.mov"] })
+            ["a.pdf"], ["a.pdf", "b.pdf"], ["a.zip"], ["a.tar.gz"], ["a.gz"], ["a.srt"], ["a.docx"], ["a.pptx"], ["a.xlsx"], ["a.mp4"], ["a.wmv"], ["a.mkv"], ["a.gif"], ["a.mp3"], ["a.wav"], ["a.mp4", "b.mov"] })
+        foreach (var resolver in Resolvers())
         {
-            var menu = MenuFor(names);
+            var menu = MenuFor(resolver, names);
             var nav = new MenuNavigator(menu, 96);
             yield return nav.View(TimeSpan.Zero);
             for (var g = 0; g < menu.Count; g++)

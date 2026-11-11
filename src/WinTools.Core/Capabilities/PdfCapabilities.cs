@@ -29,7 +29,7 @@ public static class PdfCapabilities
     /// <summary>Organize is the PDF module's own; Rotate and Tools are shared with the image module (the first declaration wins).</summary>
     public static IReadOnlyList<CapabilityCategory> Categories { get; } =
     [
-        new("organize", "Organize", "pages", 15),
+        new("organize", "Pages", "pages", 15),
         new("optimize", "Optimize", "compress", 25),
         new("protect", "Protect", "protect", 60),
         new("tools", "Tools", "tools", 11), // Convert, then Tools, then the module's own groups, Actions last (Tangerine's order)

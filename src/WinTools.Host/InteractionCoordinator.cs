@@ -58,7 +58,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
         _sounds = sounds;
         _settings = settings;
         _navigationSounds = new NavigationSounds(settings.UiSounds);
-        _resolver = CapabilityResolver.For(settings.CustomResizeId(), Programs());
+        _resolver = CapabilityResolver.Public(settings.CustomResizeId(), Programs());
         _sessionResolver = _resolver;
         _window = window;
         _overlay = new RadialOverlay(this);
@@ -79,7 +79,7 @@ internal sealed class InteractionCoordinator : IOverlayEvents, IDisposable
     {
         _settings = settings;
         _hooks.SetTriggerKey(settings.TriggerVirtualKey);
-        _resolver = CapabilityResolver.For(settings.CustomResizeId(), Programs());
+        _resolver = CapabilityResolver.Public(settings.CustomResizeId(), Programs());
         _navigationSounds.Enabled = settings.UiSounds;
     }
 

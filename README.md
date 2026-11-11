@@ -4,17 +4,20 @@ A lightweight, local-first Windows desktop utility: drag a file, press a trigger
 a radial menu appears around the cursor, drop the file on an action, and the
 operation runs safely (e.g. `photo.png` → Convert → WebP → `photo.webp`).
 
-**Status: 0.2.0 Beta. Everything runs locally, with no account and no cloud, in English and Arabic.**
+**Status: Beta. Everything runs locally, with no account and no cloud, in English and Arabic.**
+
+This release is a converter for three kinds of files. Other tools in the code are hidden from it
+(`docs/release/public-scope.md` lists them and why).
 
 | Family | What it does |
 |---|---|
-| Images | JPG, PNG, WebP, BMP, TIFF, plus HEIC and AVIF input: convert, compress, resize, rotate, flip, crop presets, one-click adjustments, collage, remove metadata, to AVIF, to PDF |
-| PDF | Merge, split, rotate, optimize, repair, protect, unlock, info, to PNG, JPG, TXT and MD, and Edit pages (reorder, turn, repeat, delete, extract) |
-| Video and audio | Convert, compress, trim, split, crop, join, speed, extract or remove audio, frames, normalize, mono and stereo, info |
-| Documents | Text, info and clean for Office files; CSV and TSV to Excel; Excel to CSV; Markdown to HTML; Office to PDF when LibreOffice is installed |
-| Archives | ZIP (encrypted too), TAR, TAR.GZ, GZIP, and 7z and RAR extraction; Add to ZIP |
-| Subtitles | SRT and VTT conversion, timing shifts, clean encoding, info |
-| Files | Copy path, name or folder, move to, copy to, show in folder, open in Terminal, batch rename, SHA-256 |
+| Images | JPG, PNG, WebP, BMP, TIFF, and HEIC and AVIF input: convert, compress (high quality, balanced, smallest, lossless), resize, put in a PDF |
+| PDF & Office | Word, PowerPoint and Excel to PDF; PDF to Word; PDF to PowerPoint (one picture per slide: not editable); PDF to Excel (tables read from the PDF's text; not scans); PDF to JPG or PNG; images to PDF; merge, split, rotate; make smaller (lossless) |
+| Video | MP4, WebM, MKV, MOV (and AVI, WMV, GIF input): convert, compress (smaller file, balanced, higher quality) |
+
+**What needs another program.** Word, PowerPoint and Excel to PDF, and PDF to Word, need Microsoft Office or
+LibreOffice (free) on the PC. WinTools never installs or downloads them; without them these commands are not on the
+wheel, and the Features page says what is missing. Everything else works on a clean Windows PC.
 
 The trigger is Space by default; F7, F9, F12 or a letter A to Z can be chosen in Settings. A letter works only while dragging files.
 
