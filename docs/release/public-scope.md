@@ -109,8 +109,8 @@ original.
   became "الريا ض"). It also **turns a number around in an Arabic sentence: "12.5%" became "5.12%"**. WinTools cannot
   correct Word's output.
 - Verdict: reliable for English and other left-to-right text. For Arabic, the user must check the result. The Features
-  page says the layout may move; whether to add a stronger Arabic warning, or to hold the command back for Arabic, is the
-  first blocker below.
+  page says so in both languages ("With Arabic, Word can split words and turn numbers around: check the result").
+  Whether that warning is enough, or the command should be held back for Arabic PDFs, is the first blocker below.
 
 **PDF to PowerPoint.** Each page becomes one slide holding a picture of the page. The slides look identical to the PDF,
 but their text cannot be edited. The command is labelled "PPTX (images)" on the wheel, and Features says so. A truly
