@@ -117,6 +117,8 @@ public sealed class PublicReleaseTests
                 Assert.False(string.IsNullOrWhiteSpace(Localization.UiText.Get(lang, "pubfamily." + family)), lang + " " + family);
                 Assert.False(string.IsNullOrWhiteSpace(Localization.UiText.Get(lang, "pubfamily." + family + ".text")), lang + " " + family);
             }
+            foreach (var id in PublicRelease.Families.Single(f => f.Family == PublicRelease.PdfOffice).Ids)
+                Assert.False(string.IsNullOrWhiteSpace(Localization.UiText.Get(lang, "features.cmd." + id)), lang + " " + id);
             foreach (var key in new[] { "cmd.media.compress-high", "features.note.pptx", "features.note.xlsx", "features.note.word", "features.note.optimize", "features.needsOffice" })
                 Assert.False(string.IsNullOrWhiteSpace(Localization.UiText.Get(lang, key)), lang + " " + key);
         }

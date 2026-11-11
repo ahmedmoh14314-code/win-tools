@@ -232,7 +232,7 @@ public partial class MainWindow : Window
                     Background = (System.Windows.Media.Brush)FindResource("Surface"), BorderBrush = (System.Windows.Media.Brush)FindResource("Edge"),
                     BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(10, 5, 10, 5), Margin = new Thickness(0, 0, 6, 6),
                     Opacity = here ? 1 : 0.45, ToolTip = here ? null : UiText.T("features.missing"),
-                    Child = new TextBlock { Text = family == PublicRelease.PdfOffice ? PdfOfficeLabel(c, name) : label },
+                    Child = new TextBlock { Text = family == PublicRelease.PdfOffice ? PdfOfficeLabel(c, label) : label },
                 });
             }
             FeatureList.Children.Add(wrap);
@@ -244,13 +244,8 @@ public partial class MainWindow : Window
         TextBlock Note(string key) => new() { Text = UiText.T(key), Style = (Style)FindResource("Hint"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) };
     }
 
-    /// <summary>"PDF: To Word", "Office: To PDF": the wheel's short names say what they start from on a page that mixes them.</summary>
-    private static string PdfOfficeLabel(CapabilityDescriptor c, string name) => c.Id switch
-    {
-        OfficeCapabilities.ToPdfId => UiText.T("features.from.office") + " " + name,
-        PdfRenderCapabilities.ImagesToPdfId => UiText.T("features.from.images") + " " + name,
-        _ => "PDF " + name,
-    };
+    /// <summary>The PDF and Office commands under names that say what they start from ("Word, PowerPoint, Excel to PDF"); the wheel's short ones need the file in hand to make sense.</summary>
+    private static string PdfOfficeLabel(CapabilityDescriptor c, string name) => UiText.TOr("features.cmd." + c.Id, name);
 
     private void StartTour()
     {
