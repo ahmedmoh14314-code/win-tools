@@ -131,20 +131,8 @@ internal static class PdfTables
         // A ruled table: its vertical borders are the columns; each word goes between the borders around its middle.
         if (rules is { Count: >= 2 } && RuledRows(lines, rules, rtlPage) is { } ruled) return ruled;
         // Cells: a line split where the gap between two words is wider than about two letters.
-        var cellLines = new List<List<(string Text, double Left, double Right)>>();
-        foreach (var line in lines)
-        {
-            var ordered = line.OrderBy(w => w.Left).ToList();
-            var cells = new List<(string Text, double Left, double Right)>();
-            var current = new List<Word> { ordered[0] };
-            for (var i = 1; i < ordered.Count; i++)
-            {
-                if (ordered[i].Left - current[^1].Right > Math.Max(ordered[i].Height, current[^1].Height) * 1.2) { cells.Add(Cell(current, rtlPage)); current = []; }
-                current.Add(ordered[i]);
-            }
-            cells.Add(Cell(current, rtlPage));
-            cellLines.Add(cells);
-        }
+        var cellLines = new List<List<(string Text, double Left, double Right, bool Rtl)>>();
+        foreach (var line in lines) cellLines.Add([.. SplitByGaps(line).Select(Cell)]);
         // Columns: the bands of the page that cells of table lines (two cells or more) cover, separated by the empty
         // channels between them, so left-, right- and centre-aligned columns are all found.
         var spans = cellLines.Where(l => l.Count > 1).SelectMany(l => l.Select(c => (c.Left, c.Right))).OrderBy(c => c.Left).ToList();
@@ -160,11 +148,13 @@ internal static class PdfTables
         foreach (var cells in cellLines)
         {
             var row = new string?[bands.Count];
-            foreach (var (text, left, right) in rtlPage ? cells.AsEnumerable().Reverse() : cells)
+            foreach (var (text, left, right, rtl) in rtlPage ? cells.AsEnumerable().Reverse() : cells)
             {
                 // A cell goes in the band holding its middle; a line that is not a table (one cell) starts in its first band.
+                // Two cells in one band read in the direction of the one added (taken left to right, or right to left on a
+                // right-to-left page): a right-to-left cell goes before what is to its right.
                 var column = cells.Count == 1 ? Band(bands, rtlPage ? right : left) : Band(bands, (left + right) / 2);
-                row[column] = row[column] is null ? text : rtlPage ? text + " " + row[column] : row[column] + " " + text;
+                row[column] = row[column] is null ? text : rtl == rtlPage ? row[column] + " " + text : text + " " + row[column];
             }
             rows.Add([.. row.Select(c => c ?? "")]);
         }
@@ -173,7 +163,7 @@ internal static class PdfTables
 
     /// <summary>
     /// Rows of a page whose lines cross vertical borders: the borders' places (within 2 points) cut the page into columns;
-    /// a word in a line no border crosses (a title, a paragraph) stays in the first column. Null when no line is ruled.
+    /// a line no border crosses (a title, a paragraph, a table without borders) is cut into cells by its gaps instead. Null when no line is ruled.
     /// </summary>
     private static List<string[]>? RuledRows(List<List<Word>> lines, IReadOnlyList<Rule> rules, bool rtlPage)
     {
@@ -182,26 +172,35 @@ internal static class PdfTables
         if (xs.Count < 2) return null;
         var columns = xs.Count + 1; // left of the first border, between borders, right of the last
         var rows = new List<string[]>();
+        var unruled = new HashSet<int>();
         var anyRuled = false;
         foreach (var line in lines)
         {
             var middle = line.Average(w => w.Middle);
             var ruled = rules.Any(r => r.Bottom - 1 <= middle && middle <= r.Top + 1);
             anyRuled |= ruled;
-            var row = new string?[columns];
-            foreach (var w in rtlPage ? line.OrderByDescending(w => w.Right) : line.OrderBy(w => w.Left))
+            if (!ruled)
+            {
+                // Outside the ruled table (a title, a paragraph, a table without borders): cells by gaps, from the first column.
+                var cells = SplitByGaps(line).Select(Logical);
+                unruled.Add(rows.Count);
+                rows.Add([.. rtlPage ? cells.Reverse() : cells]);
+                continue;
+            }
+            var words = new List<Word>?[columns];
+            foreach (var w in line.OrderBy(w => w.Left))
             {
                 var center = (w.Left + w.Right) / 2;
                 var k = ruled ? xs.Count(x => x < center) : 0;
                 if (rtlPage && ruled) k = columns - 1 - k;
-                row[k] = row[k] is null ? w.Text : row[k] + " " + w.Text;
+                (words[k] ??= []).Add(w);
             }
-            rows.Add([.. row.Select(c => c ?? "")]);
+            rows.Add([.. words.Select(c => c is null ? "" : Logical(c))]);
         }
         if (!anyRuled) return null;
-        // Columns no line uses (outside the table's outer borders) are dropped.
-        var used = Enumerable.Range(0, columns).Where(k => rows.Any(r => r[k].Length > 0)).ToArray();
-        return [.. rows.Select(r => used.Select(k => r[k]).ToArray())];
+        // Columns no ruled line uses (outside the table's outer borders) are dropped.
+        var used = Enumerable.Range(0, columns).Where(k => rows.Where((_, i) => !unruled.Contains(i)).Any(r => r[k].Length > 0)).ToArray();
+        return [.. rows.Select((r, i) => unruled.Contains(i) ? r : used.Select(k => r[k]).ToArray())];
     }
 
     private static int Band(List<(double Left, double Right)> bands, double x)
@@ -216,8 +215,57 @@ internal static class PdfTables
         return best;
     }
 
-    private static (string Text, double Left, double Right) Cell(List<Word> words, bool rtlPage) =>
-        (string.Join(" ", (rtlPage ? words.AsEnumerable().Reverse() : words).Select(w => w.Text)), words.Min(w => w.Left), words.Max(w => w.Right));
+    /// <summary>A line's words, left to right, cut into cells where the gap between two words is wider than about two letters.</summary>
+    private static List<List<Word>> SplitByGaps(List<Word> line)
+    {
+        var ordered = line.OrderBy(w => w.Left).ToList();
+        var cells = new List<List<Word>> { new() { ordered[0] } };
+        for (var i = 1; i < ordered.Count; i++)
+        {
+            if (ordered[i].Left - cells[^1][^1].Right > Math.Max(ordered[i].Height, cells[^1][^1].Height) * 1.2) cells.Add([]);
+            cells[^1].Add(ordered[i]);
+        }
+        return cells;
+    }
+
+    private static (string Text, double Left, double Right, bool Rtl) Cell(List<Word> words) =>
+        (Logical(words), words.Min(w => w.Left), words.Max(w => w.Right), MostlyRtl(words));
+
+    /// <summary>
+    /// The words of one cell or line, given left to right as drawn, in reading order. The cell's own direction decides,
+    /// not the page's: an Arabic name in an English table, or an English word in an Arabic sentence, is read in its own
+    /// direction (PDF to Excel review, 2026-11-11: "أحمد علي" came out as "علي أحمد" on a mostly English page). A
+    /// right-to-left cell is read from its right end, and a run of left-to-right words inside it (a product name, two
+    /// numbers) keeps its own order; a left-to-right cell turns only its right-to-left runs around. A word with no letter
+    /// (a number) goes with the words around it when both sides agree, else with the cell.
+    /// </summary>
+    private static string Logical(List<Word> visual)
+    {
+        if (!visual.Any(w => w.Rtl)) return string.Join(" ", visual.Select(w => w.Text));
+        var baseRtl = MostlyRtl(visual);
+        var strong = visual.Select(w => w.Rtl ? 1 : w.Text.Any(char.IsLetter) ? -1 : 0).ToArray();
+        var rtl = new bool[visual.Count];
+        for (var i = 0; i < visual.Count; i++)
+        {
+            if (strong[i] != 0) { rtl[i] = strong[i] > 0; continue; }
+            var before = strong.Take(i).Reverse().FirstOrDefault(k => k != 0);
+            var after = strong.Skip(i + 1).FirstOrDefault(k => k != 0);
+            rtl[i] = before != 0 && before == after ? before > 0 : baseRtl;
+        }
+        // Runs of one direction, in drawn order; each run in its own reading order; the runs in the cell's order.
+        var runs = new List<List<string>>();
+        for (var i = 0; i < visual.Count; i++)
+        {
+            if (i == 0 || rtl[i] != rtl[i - 1]) runs.Add([]);
+            runs[^1].Add(visual[i].Text);
+            if (i == visual.Count - 1 || rtl[i + 1] != rtl[i]) { if (rtl[i]) runs[^1].Reverse(); }
+        }
+        if (baseRtl) runs.Reverse();
+        return string.Join(" ", runs.SelectMany(r => r));
+    }
+
+    private static bool MostlyRtl(IEnumerable<Word> words) =>
+        words.Count(w => w.Rtl) > words.Count(w => !w.Rtl && w.Text.Any(char.IsLetter));
 
     /// <summary>
     /// Words drawn as separate pieces that touch (a writer may draw one word in two runs) become one word: on one line,

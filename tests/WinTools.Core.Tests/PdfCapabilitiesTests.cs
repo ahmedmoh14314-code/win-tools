@@ -34,8 +34,8 @@ public sealed class PdfCapabilitiesTests
             "archive.zip"], Ids(@"C:\p\a.pdf"));
         var menu = RadialMenu.Build(Resolver, [@"C:\p\a.pdf"]);
         // Protect since V2 PR 2.2; Tools first and Actions since the wheel PR; Convert, and the rotations in Organize, since PDFium (ADR-0029).
-        Assert.Equal(["Convert", "Tools", "Organize", "Optimize", "Protect", "Actions"], menu.Select(g => g.Label));
-        Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD", "To PPTX", "To XLSX"], menu[0].Commands.Select(c => c.Label));
+        Assert.Equal(["Convert", "Tools", "Pages", "Optimize", "Protect", "Actions"], menu.Select(g => g.Label));
+        Assert.Equal(["To PNG", "To JPG", "To TXT", "To MD", "PPTX (images)", "To XLSX"], menu[0].Commands.Select(c => c.Label));
         Assert.Equal(["Edit pages…", "Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], menu[2].Commands.Select(c => c.Label));
         Assert.Equal(["Smaller (lossless)", "Fast web view", "Repair"], menu[3].Commands.Select(c => c.Label));
         Assert.Equal(["PDF info", "SHA-256", "Folder path"], menu[1].Commands.Select(c => c.Label));
@@ -67,7 +67,7 @@ public sealed class PdfCapabilitiesTests
         Assert.Contains("pdf.merge", Ids(@"C:\p\a.pdf", @"C:\p\b.pdf"));
         Assert.Contains("pdf.merge", Ids([.. Enumerable.Range(0, PdfCapabilities.MaxMergeInputs).Select(i => $@"C:\p\{i}.pdf")]));
         Assert.DoesNotContain("pdf.merge", Ids([.. Enumerable.Range(0, PdfCapabilities.MaxMergeInputs + 1).Select(i => $@"C:\p\{i}.pdf")]));
-        var organize = RadialMenu.Build(Resolver, [@"C:\p\a.pdf", @"C:\p\b.pdf"]).Single(g => g.Label == "Organize");
+        var organize = RadialMenu.Build(Resolver, [@"C:\p\a.pdf", @"C:\p\b.pdf"]).Single(g => g.Label == "Pages");
         Assert.Equal(["Merge", "Split into pages", "Rotate right", "Rotate left", "Rotate 180°"], organize.Commands.Select(c => c.Label));
     }
 

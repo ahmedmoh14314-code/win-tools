@@ -185,49 +185,67 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception) { }
     }
 
-    /// <summary>The families WinTools works with, shown on Home: only those it really has commands for.</summary>
+    /// <summary>The three things this release converts (<see cref="PublicRelease.Families"/>), shown on Home with a line each.</summary>
     private void BuildFamilies()
     {
-        var modules = CapabilityResolver.For(null).Catalog.Select(c => c.Module).ToHashSet(StringComparer.Ordinal);
-        var families = new (string Module, string Key)[]
-        {
-            ("images", "family.images"), ("pdf", "family.pdf"), ("documents", "family.documents"), ("archive", "family.archives"),
-            ("subtitles", "family.subtitles"), ("media", "family.video"), ("media", "family.audio"), ("files", "family.files"),
-        };
-        foreach (var (module, key) in families.Where(f => modules.Contains(f.Module)))
+        foreach (var (family, _) in PublicRelease.Families)
             Families.Children.Add(new Border
             {
-                Style = (Style)FindResource("Card"), Padding = new Thickness(14, 8, 14, 8), Margin = new Thickness(0, 0, 8, 8),
-                Child = new TextBlock { Text = UiText.T(key), FontWeight = FontWeights.SemiBold },
+                Style = (Style)FindResource("Card"), Padding = new Thickness(16, 10, 16, 10), Margin = new Thickness(0, 0, 0, 8),
+                Child = new StackPanel
+                {
+                    Children =
+                    {
+                        new TextBlock { Text = UiText.T("pubfamily." + family), FontWeight = FontWeights.SemiBold, FontSize = 15 },
+                        new TextBlock { Text = UiText.T("pubfamily." + family + ".text"), Style = (Style)FindResource("Hint"), TextWrapping = TextWrapping.Wrap },
+                    },
+                },
             });
     }
 
     /// <summary>
-    /// Every command, grouped by what it works on, in the language in use: what is listed is what the wheel offers. A
-    /// command that needs a program the user installs is listed only when it was found; otherwise the page says what it
-    /// needs (ADR-0033: "Office to PDF needs LibreOffice (free), which was not found on this PC").
+    /// Every command of this release, under its family, in the language in use. A command that needs a program the user
+    /// installs and that was not found is still listed, dimmed, with what it needs (ADR-0033): a user learns it here, not
+    /// after looking for it on the wheel. The limits of the PDF conversions are said here too.
     /// </summary>
     private void BuildFeatures()
     {
-        var libreOffice = WinTools.Windows.Shell.InstalledPrograms.LibreOffice();
-        var programs = ExternalPrograms.Set(libreOffice, WinTools.Windows.Shell.InstalledPrograms.MicrosoftOffice());
-        var catalog = CapabilityResolver.For(null, programs).Catalog;
-        foreach (var group in catalog.GroupBy(c => c.Module))
+        var programs = ExternalPrograms.Set(WinTools.Windows.Shell.InstalledPrograms.LibreOffice(), WinTools.Windows.Shell.InstalledPrograms.MicrosoftOffice());
+        var available = CapabilityResolver.Public(null, programs).Catalog.Select(c => c.Id).ToHashSet(StringComparer.Ordinal);
+        var everything = CapabilityResolver.Public(null, ExternalPrograms.Set("soffice", [ExternalPrograms.Word, ExternalPrograms.Excel, ExternalPrograms.PowerPoint, ExternalPrograms.Edge])).Catalog
+            .ToDictionary(c => c.Id, StringComparer.Ordinal);
+        foreach (var (family, ids) in PublicRelease.Families)
         {
-            FeatureList.Children.Add(new TextBlock { Text = UiText.TOr("module." + group.Key, group.Key), Style = (Style)FindResource("SectionTitle") });
-            if (group.Key == DocumentCapabilities.Module && !programs.Contains(ExternalPrograms.AnyOffice))
-                FeatureList.Children.Add(new TextBlock { Text = UiText.T("features.libreOfficeMissing"), Style = (Style)FindResource("Hint"), Margin = new Thickness(0, 0, 0, 6) });
+            FeatureList.Children.Add(new TextBlock { Text = UiText.T("pubfamily." + family), Style = (Style)FindResource("SectionTitle") });
+            var missing = ids.Where(id => everything.ContainsKey(id) && !available.Contains(id)).Select(id => everything[id].Requires).ToHashSet();
+            if (missing.Contains(ExternalPrograms.AnyOffice) || missing.Contains(ExternalPrograms.PdfImporter)) FeatureList.Children.Add(Note("features.needsOffice"));
+            if (missing.Contains(ExternalPrograms.Edge)) FeatureList.Children.Add(Note("features.needsEdge"));
             var wrap = new WrapPanel();
-            foreach (var c in group)
+            foreach (var id in ids.Where(everything.ContainsKey))
+            {
+                var c = everything[id];
+                var here = available.Contains(id);
+                var name = UiText.TOr("cmd." + c.Id, c.Label);
+                var label = c.Category == "resize" || c.Category == "compress" ? UiText.TOr("cat." + c.Category, c.Category) + ": " + name : name;
                 wrap.Children.Add(new Border
                 {
                     Background = (System.Windows.Media.Brush)FindResource("Surface"), BorderBrush = (System.Windows.Media.Brush)FindResource("Edge"),
                     BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(10, 5, 10, 5), Margin = new Thickness(0, 0, 6, 6),
-                    Child = new TextBlock { Text = UiText.TOr("cmd." + c.Id, c.Label) },
+                    Opacity = here ? 1 : 0.45, ToolTip = here ? null : UiText.T("features.missing"),
+                    Child = new TextBlock { Text = family == PublicRelease.PdfOffice ? PdfOfficeLabel(c, label) : label },
                 });
+            }
             FeatureList.Children.Add(wrap);
+            if (family == PublicRelease.PdfOffice)
+                foreach (var key in new[] { "features.note.word", "features.note.pptx", "features.note.xlsx", "features.note.optimize" })
+                    FeatureList.Children.Add(Note(key));
         }
+
+        TextBlock Note(string key) => new() { Text = UiText.T(key), Style = (Style)FindResource("Hint"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) };
     }
+
+    /// <summary>The PDF and Office commands under names that say what they start from ("Word, PowerPoint, Excel to PDF"); the wheel's short ones need the file in hand to make sense.</summary>
+    private static string PdfOfficeLabel(CapabilityDescriptor c, string name) => UiText.TOr("features.cmd." + c.Id, name);
 
     private void StartTour()
     {
