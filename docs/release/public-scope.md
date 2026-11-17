@@ -110,7 +110,7 @@ original.
   correct Word's output.
 - Verdict: reliable for English and other left-to-right text. For Arabic, the user must check the result. The Features
   page says so in both languages ("With Arabic, Word can split words and turn numbers around: check the result").
-  Whether that warning is enough, or the command should be held back for Arabic PDFs, is the first blocker below.
+  Owner decision, 2026-11-17: PDF to Word stays for every PDF, with this warning.
 
 **PDF to PowerPoint.** Each page becomes one slide holding a picture of the page. The slides look identical to the PDF,
 but their text cannot be edited. The command is labelled "PPTX (images)" on the wheel, and Features says so. A truly
@@ -155,8 +155,8 @@ Known limits, listed in Features:
 
 ## 7. Remaining blockers
 
-1. **PDF to Word with Arabic** changes some text (split words, and one reversed number) through Word's engine. The owner
-   decides: ship it with a warning, or hold PDF to Word back for Arabic PDFs.
+1. **PDF to Word with Arabic** changes some text (split words, and one reversed number) through Word's engine. Decided
+   (owner, 2026-11-17): it ships with the warning on Features; no longer a blocker.
 2. **The installer is unsigned**, so SmartScreen warns on first run. It needs a code-signing certificate, which only the
    owner can obtain.
 3. **No run on a clean PC yet.** Install, first launch and uninstall have not been tried on a Windows PC without Office
